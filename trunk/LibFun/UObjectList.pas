@@ -12,7 +12,7 @@ unit UObjectList;
 interface
 
 uses
-  Classes, SysUtils;
+  Windows, Classes, SysUtils, SyncObjs;
 
 type
   PObjectDataItem = ^TObjectDataItem;
@@ -95,8 +95,64 @@ type
     //属性相关
   end;
 
+  //----------------------------------------------------------------------------
+  TObjectPoolNew = function (const nClass: TClass): TObject;
+  TObjectPoolFree = procedure (const nObject: TObject);
+  //创建释放回调函数
+
+  PObjectPoolItem = ^TObjectPoolItem;
+  TObjectPoolItem = record
+    FObject: TObject;             //对象
+    FUsed: Boolean;               //使用中
+  end;
+
+  PObjectPoolDataItem = ^TObjectPoolDataItem;
+  TObjectPoolDataItem = record
+    FClass: TClass;               //类型
+    FNew: TObjectPoolNew;         //创建
+    FFree: TObjectPoolFree;       //释放
+    FObjectList: TList;           //对象列表
+  end;
+
+  TObjectPoolManager = class(TObject)
+  private
+    FPool: TList;
+    //对象池
+    FNumLocked: Integer;
+    //锁定对象
+    FSrvClosed: Integer;
+    //服务关闭 
+    FSyncLock: TCriticalSection;
+    //同步锁定
+  protected
+    procedure ClearPool(const nFree: Boolean);
+    procedure ClearList(const nList: TList; const nFree: TObjectPoolFree);
+    //清理资源
+    function FindPoolData(const nClass: TClass): Integer;
+    //检索内容
+  public
+    constructor Create;
+    destructor Destroy; override;
+    //创建释放
+    procedure RegClass(const nClass: TClass; const nNew: TObjectPoolNew = nil;
+      const nFree: TObjectPoolFree = nil);
+    procedure UnregClass(const nClass: TClass);
+    //注册新类
+    function LockObject(const nClass: TClass): PObjectPoolItem;
+    procedure ReleaseObject(const nItem: PObjectPoolItem);
+    //锁定释放
+  end;
+
+var
+  gObjectPoolManager: TObjectPoolManager = nil;
+  //全局使用
+  
 implementation
 
+const
+  cYes  = $0002;
+  cNo   = $0005;
+  
 constructor TObjectDataList.Create(const nType: TObjectDataType);
 begin
   FDelAction := daFree;
@@ -359,4 +415,216 @@ begin
   FDataList.Clear;
 end;
 
+//------------------------------------------------------------------------------
+constructor TObjectPoolManager.Create;
+begin
+  FNumLocked := 0;
+  FSrvClosed := cNo;
+  
+  FPool := TList.Create;
+  FSyncLock := TCriticalSection.Create;
+end;
+
+destructor TObjectPoolManager.Destroy;
+begin
+  InterlockedExchange(FSrvClosed, cYes);
+  //set close float
+
+  FSyncLock.Enter;
+  try
+    if FNumLocked > 0 then
+    try
+      FSyncLock.Leave;
+      while FNumLocked > 0 do
+        Sleep(1);
+      //wait for relese
+    finally
+      FSyncLock.Enter;
+    end;
+  finally
+    FSyncLock.Leave;
+  end;
+
+  ClearPool(True);
+  FSyncLock.Free;
+  inherited;
+end;
+
+//Desc: 清理对象池
+procedure TObjectPoolManager.ClearPool(const nFree: Boolean);
+var nIdx: Integer;
+    nItem: PObjectPoolDataItem;
+begin
+  for nIdx:=FPool.Count - 1 downto 0 do
+  begin
+    nItem := FPool[nIdx];
+    ClearList(nItem.FObjectList, nItem.FFree);
+
+    Dispose(nItem);
+    FPool.Delete(nIdx);
+  end;
+
+  if nFree then
+    FreeAndNil(FPool);
+  //xxxxx
+end;
+
+//Desc: 清理对象列表
+procedure TObjectPoolManager.ClearList(const nList: TList; const nFree: TObjectPoolFree);
+var nIdx: Integer;
+    nItem: PObjectPoolItem;
+begin
+  if Assigned(nList) then
+  begin
+    for nIdx:=nList.Count - 1 downto 0 do
+    begin
+      nItem := nList[nIdx];
+      if Assigned(nFree) then
+           nFree(nItem.FObject)
+      else nItem.FObject.Free;
+      
+      Dispose(nItem);
+      nList.Delete(nIdx);
+    end;
+
+    nList.Free;
+  end;
+end;
+
+//Date: 2015-03-02
+//Parm: 类型
+//Desc: 检索nClass的类型数据
+function TObjectPoolManager.FindPoolData(const nClass: TClass): Integer;
+var nIdx: Integer;
+    nItem: PObjectPoolDataItem;
+begin
+  Result := -1;
+
+  for nIdx:=FPool.Count - 1 downto 0 do
+  begin
+    nItem := FPool[nIdx];
+    if nItem.FClass = nClass then
+    begin
+      Result := nIdx;
+      Break;
+    end;
+  end;
+end;
+
+//Date: 2015-03-02
+//Parm: 类型;创建;释放
+//Desc: 注册新类型
+procedure TObjectPoolManager.RegClass(const nClass: TClass;
+  const nNew: TObjectPoolNew; const nFree: TObjectPoolFree);
+var nIdx: Integer;
+    nItem: PObjectPoolDataItem;
+begin
+  FSyncLock.Enter;
+  try
+    nIdx := FindPoolData(nClass);
+    if nIdx < 0 then
+    begin
+      New(nItem);
+      FPool.Add(nItem);
+
+      FillChar(nItem^, SizeOf(TObjectPoolDataItem), #0);
+      nItem.FClass := nClass;
+    end else nItem := FPool[nIdx];
+
+    nItem.FNew := nNew;
+    nItem.FFree := nFree;
+  finally
+    FSyncLock.Leave;
+  end;   
+end;
+
+//Date: 2015-03-02
+//Parm: 类型
+//Desc: 反注册类型
+procedure TObjectPoolManager.UnregClass(const nClass: TClass);
+var nIdx: Integer;
+    nItem: PObjectPoolDataItem;
+begin
+  FSyncLock.Enter;
+  try
+    nIdx := FindPoolData(nClass);
+    if nIdx >= 0 then
+    begin
+      nItem := FPool[nIdx];
+      ClearList(nItem.FObjectList, nItem.FFree);
+
+      Dispose(nItem);
+      FPool.Delete(nIdx);
+    end;
+  finally
+    FSyncLock.Leave;
+  end;   
+end;
+
+//Date: 2015-03-02
+//Parm: 对象类型
+//Desc: 返回nClass的对象指针
+function TObjectPoolManager.LockObject(const nClass: TClass): PObjectPoolItem;
+var nIdx: Integer;
+    nItem: PObjectPoolDataItem;
+begin
+  Result := nil;
+  if FSrvClosed = cYes then Exit;
+
+  FSyncLock.Enter;
+  try
+    if FSrvClosed = cYes then Exit;
+    nIdx := FindPoolData(nClass);
+    if nIdx < 0 then Exit;
+
+    nItem := FPool[nIdx];
+    if not Assigned(nItem.FObjectList) then
+      nItem.FObjectList := TList.Create;
+    //xxxxx
+
+    for nIdx:=nItem.FObjectList.Count - 1 downto 0 do
+    begin
+      Result := nItem.FObjectList[nIdx];
+      if not Result.FUsed then
+           Break
+      else Result := nil;
+    end;
+
+    if not Assigned(Result) then
+    begin
+      New(Result);
+      nItem.FObjectList.Add(Result);
+
+      if Assigned(nItem.FNew) then
+           Result.FObject := nItem.FNew(nItem.FClass)
+      else Result.FObject := nItem.FClass.Create;
+    end;
+
+    Result.FUsed := True;
+  finally
+    if Assigned(Result) then
+      InterlockedIncrement(FNumLocked);
+    FSyncLock.Leave;
+  end;
+end;
+
+//Date: 2015-03-02
+//Parm: 对象指针
+//Desc: 释放对象
+procedure TObjectPoolManager.ReleaseObject(const nItem: PObjectPoolItem);
+begin
+  if Assigned(nItem) then
+  try
+    FSyncLock.Enter;
+    nItem.FUsed := False;
+    InterlockedDecrement(FNumLocked);
+  finally
+    FSyncLock.Leave;
+  end;
+end;
+
+initialization
+  gObjectPoolManager := nil;
+finalization
+  FreeAndNil(gObjectPoolManager);
 end.
