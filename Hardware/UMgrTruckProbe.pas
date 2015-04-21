@@ -108,7 +108,8 @@ type
     //待发送数据
     FWaiter: TWaitObject;
     //等待对象
-    FClient: TIdTCPClient;
+    FNowClient: TIdTCPClient;
+    FClients: array of TIdTCPClient;
     //客户端
     FQueryFrame: TProberFrameControl;
     //状态查询
@@ -116,6 +117,7 @@ type
     procedure DoExecute(const nHost: PProberHost);
     procedure Execute; override;
     //执行线程
+    function GetClient(const nHost: PProberHost): TIdTCPClient;
     procedure DisconnectClient;
     function SendData(const nHost: PProberHost; var nData: TIdBytes;
       const nRecvLen: Integer): string;
@@ -357,7 +359,7 @@ procedure TProberManager.LoadConfig(const nFile: string);
 var nXML: TNativeXml;
     nHost: PProberHost;
     nNode,nTmp: TXmlNode;
-    i,nIdx,nNum: Integer;
+    i,nIdx,nNum,nHostI: Integer;
 begin
   SetLength(FHosts, 0);
   SetLength(FTunnels, 0);
@@ -367,13 +369,15 @@ begin
     nXML.LoadFromFile(nFile);
     //load config
 
-    for nIdx:=0 to nXML.Root.NodeCount - 1 do
-    begin
-      nNode := nXML.Root.Nodes[nIdx];
-      nNum := Length(FHosts);
-      SetLength(FHosts, nNum + 1);
+    SetLength(FHosts, nXML.Root.NodeCount);
+    nHostI := 0;
 
-      with FHosts[nNum],nNode do
+    for nIdx:=0 to nXML.Root.NodeCount - 1 do
+    try
+      nNode := nXML.Root.Nodes[nIdx];
+      //prober node
+
+      with FHosts[nHostI],nNode do
       begin
         FID    := AttributeByName['id'];
         FName  := AttributeByName['name'];
@@ -409,7 +413,7 @@ begin
 
       nTmp := nNode.FindNode('tunnels');
       if not Assigned(nTmp) then Continue;
-      nHost := @FHosts[nNum];
+      nHost := @FHosts[nHostI];
 
       for i:=0 to nTmp.NodeCount - 1 do
       begin
@@ -429,7 +433,9 @@ begin
           nNode := nNode.FindNode('enable');
           FEnable := (not Assigned(nNode)) or (nNode.ValueAsString <> '0');
         end;
-      end;
+      end
+    finally
+      Inc(nHostI);
     end;
   finally
     nXML.Free;
@@ -517,8 +523,7 @@ begin
 
     FReader.Wakeup;
     //xxxxx
-  finally
-
+  finally  
     FSyncLock.Leave;
   end;
 end;
@@ -652,19 +657,18 @@ begin
   FreeOnTerminate := False;
 
   FOwner := AOwner;
+  SetLength(FClients, 0);
   FBuffer := TList.Create;
   
   FWaiter := TWaitObject.Create;
   FWaiter.Interval := cProber_Query_Interval;
-
-  FClient := TIdTCPClient.Create(nil);
-  FClient.ReadTimeout := 3 * 1000;
-  FClient.ConnectTimeout := 3 * 1000;
 end;
 
 destructor TProberThread.Destroy;
+var nIdx: Integer;
 begin
-  FClient.Free;
+  for nIdx:=Low(FClients) to High(FClients) do
+    FClients[nIdx].Free;
   FWaiter.Free;
 
   FOwner.ClearList(FBuffer);
@@ -686,36 +690,73 @@ begin
   Free;
 end;
 
+//Date: 2015-04-15
+//Parm: 主机
+//Desc: 检索nHost主机的链路
+function TProberThread.GetClient(const nHost: PProberHost): TIdTCPClient;
+var nIdx,nInt: Integer;
+begin
+  for nIdx:=Low(FClients) to High(FClients) do
+  if CompareText(FClients[nIdx].Host, nHost.FHost) = 0 then
+  begin
+    Result := FClients[nIdx];
+    Exit;
+  end;
+
+  nInt := Length(FClients);
+  SetLength(FClients, nInt + 1);
+
+  FClients[nInt] := TIdTCPClient.Create(nil);
+  Result := FClients[nInt];
+
+  with Result do
+  begin
+    Host := nHost.FHost;
+    Port := nHost.FPort;
+    
+    ReadTimeout := 3 * 1000;
+    ConnectTimeout := 3 * 1000;
+  end;
+end;
+
 procedure TProberThread.Execute;
 var nIdx: Integer;
 begin
   while not Terminated do
-  try
-    FWaiter.EnterWait;
-    if Terminated then Exit;
+  begin
+    FNowClient := nil;
+    //init
 
-    with FOwner do
-    begin
-      FSyncLock.Enter;
-      try
-        ClearList(FBuffer);
-        for nIdx:=0 to FCommand.Count - 1 do
-          FBuffer.Add(FCommand[nIdx]);
-        FCommand.Clear;
-      finally
-        FSyncLock.Leave;
-      end;
+    try
+      FWaiter.EnterWait;
+      if Terminated then Exit;
 
-      for nIdx:=Low(FOwner.FHosts) to High(FOwner.FHosts) do
+      with FOwner do
       begin
-        DoExecute(@FOwner.FHosts[nIdx]);
-        if Terminated then Exit;
+        FSyncLock.Enter;
+        try
+          ClearList(FBuffer);
+          for nIdx:=0 to FCommand.Count - 1 do
+            FBuffer.Add(FCommand[nIdx]);
+          FCommand.Clear;
+        finally
+          FSyncLock.Leave;
+        end;
+
+        for nIdx:=Low(FOwner.FHosts) to High(FOwner.FHosts) do
+        begin
+          if Terminated then Exit;
+          FNowClient := GetClient(@FOwner.FHosts[nIdx]);
+          DoExecute(@FOwner.FHosts[nIdx]);
+        end;
       end;
-    end;
-  except
-    on E:Exception do
-    begin
-      WriteLog(Format('Host:[ %s ] %s', [FClient.Host, E.Message]));
+    except
+      on E:Exception do
+      begin
+        if Assigned(FNowClient) then
+          WriteLog(Format('Host:[ %s ] %s', [FNowClient.Host, E.Message]));
+        //xxxxx
+      end;
     end;
   end;
 end;
@@ -727,51 +768,47 @@ var nStr: string;
     nCmd: PProberTunnelCommand;
 begin
   try
-    if FClient.Host <> nHost.FHost then
-      DisconnectClient;
+    if not FNowClient.Connected then
+      FNowClient.Connect;
     //xxxxx
-
-    if not FClient.Connected then
-    begin
-      FClient.Host := nHost.FHost;
-      FClient.Port := nHost.FPort;
-      FClient.Connect;
-    end;
   except
-    WriteLog(Format('连接[ %s.%d ]失败.', [FClient.Host, FClient.Port]));
-    FClient.Disconnect;
+    WriteLog(Format('连接[ %s.%d ]失败.', [FNowClient.Host, FNowClient.Port]));
+    DisconnectClient;
     Exit;
   end;
 
-  FillChar(FQueryFrame, cSize_Prober_Control, cProber_NullASCII);
-  //init
-  with FQueryFrame.FHeader do
+  if GetTickCount - nHost.FStatusL >= cProber_Query_Interval - 500 then
   begin
-    FBegin  := cProber_Flag_Begin;
-    FLength := cProber_Len_Frame;
-    FType   := cProber_Frame_QueryIO;
-    FExtend := cProber_Query_All;
-  end;
+    FillChar(FQueryFrame, cSize_Prober_Control, cProber_NullASCII);
+    //init
 
-  nBuf := RawToBytes(FQueryFrame, cSize_Prober_Control);
-  nStr := SendData(nHost, nBuf, cSize_Prober_Control);
-  //查询状态
+    with FQueryFrame.FHeader do
+    begin
+      FBegin  := cProber_Flag_Begin;
+      FLength := cProber_Len_Frame;
+      FType   := cProber_Frame_QueryIO;
+      FExtend := cProber_Query_All;
+    end;
 
-  if nStr <> '' then
-  begin
-    WriteLog(nStr);
-    Exit;
-  end;
+    nBuf := RawToBytes(FQueryFrame, cSize_Prober_Control);
+    nStr := SendData(nHost, nBuf, cSize_Prober_Control);
+    //查询状态
 
-  with FQueryFrame do
-  begin
-    BytesToRaw(nBuf, FQueryFrame, cSize_Prober_Control);
-    Move(FData[0], nHost.FStatusI[0], cSize_Prober_IOAddr);
-    Move(FData[cSize_Prober_IOAddr], nHost.FStatusO[0], cSize_Prober_IOAddr);
+    if nStr <> '' then
+    begin
+      WriteLog(nStr);
+      Exit;
+    end;
 
-    nHost.FStatusL := GetTickCount;
-    //更新时间
-    Sleep(100);
+    with FQueryFrame do
+    begin
+      BytesToRaw(nBuf, FQueryFrame, cSize_Prober_Control);
+      Move(FData[0], nHost.FStatusI[0], cSize_Prober_IOAddr);
+      Move(FData[cSize_Prober_IOAddr], nHost.FStatusO[0], cSize_Prober_IOAddr);
+
+      nHost.FStatusL := GetTickCount;
+      //更新时间
+    end;
   end;
 
   for nIdx:=FBuffer.Count - 1 downto 0 do
@@ -792,16 +829,16 @@ begin
     nStr := SendData(nHost, nBuf, cSize_Prober_Control);
     if nStr <> '' then
       WriteLog(nStr);
-    Sleep(100);
+    //xxxxx
   end;
 end;
 
 //Desc: 断开客户端套接字
 procedure TProberThread.DisconnectClient;
 begin
-  FClient.Disconnect;
-  if Assigned(FClient.IOHandler) then
-    FClient.IOHandler.InputBuffer.Clear;
+  FNowClient.Disconnect;
+  if Assigned(FNowClient.IOHandler) then
+    FNowClient.IOHandler.InputBuffer.Clear;
   //try to swtich connection
 end;
 
@@ -830,21 +867,17 @@ begin
       LogHex(nBuf);
       {$ENDIF}
 
-      if not FClient.Connected then
-      begin
-        FClient.Host := nHost.FHost;
-        FClient.Port := nHost.FPort;
-        FClient.Connect;
-      end;
-
       Inc(nIdx);
-      FClient.IOHandler.Write(nBuf);
+      FNowClient.IOHandler.Write(nBuf);
       //send data
+
+      Sleep(120);
+      //wait for
 
       if nRecvLen < 1 then Exit;
       //no data to receive
 
-      FClient.IOHandler.ReadBytes(nData, nRecvLen, False);
+      FNowClient.IOHandler.ReadBytes(nData, nRecvLen, False);
       //read respond
       
       {$IFDEF DEBUG}
@@ -868,9 +901,9 @@ begin
         //断开重连
 
         Inc(nIdx);
-        if nIdx < FOwner.FRetry then
-             Sleep(100)
-        else raise;
+        if nIdx >= FOwner.FRetry then
+          raise;
+        //xxxxx
       end;
     end;
   except

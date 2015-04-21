@@ -11,7 +11,7 @@ uses
   USysLoger;
 
 const
-  cHYReader_Wait_Short     = 50;
+  cHYReader_Wait_Short     = 200;
   cHYReader_Wait_Long      = 2 * 1000;
 
 type
