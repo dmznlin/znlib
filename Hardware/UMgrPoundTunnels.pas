@@ -15,7 +15,7 @@ const
   cPTMaxCameraTunnel = 5;
   //支持的摄像机通道数
 
-  cPTWait_Short = 50;
+  cPTWait_Short = 320;
   cPTWait_Long  = 2 * 1000; //网络通讯时刷新频度
 
 type
@@ -47,10 +47,6 @@ type
                                      //摄像通道                                     
     FOnData: TOnTunnelDataEvent;     //接收事件
     FOldEventTunnel: PPTTunnelItem;  //原接收通道
-
-    FEnable: Boolean;                //是否启用
-    FLocked : Boolean;               //是否锁定
-    FLastActive: Int64;              //上次活动
   end;
 
   TPTCameraItem = record
@@ -89,6 +85,8 @@ type
 
     FHostIP: string;
     FHostPort: Integer;              //网络链路
+    FClient: TIdTCPClient;           //套接字
+    FClientActive: Boolean;          //链路启用
 
     FCOMPort: TComPort;              //读写对象
     FCOMBuff: string;                //通讯缓冲
@@ -100,18 +98,19 @@ type
   private
     FOwner: TPoundTunnelManager;
     //拥有者
+    FActiveClient: TIdTCPClient;
+    FActivePort: PPTPortItem;
     FActiveTunnel: PPTTunnelItem;
     //当前通道
     FWaiter: TWaitObject;
     //等待对象
-    FClient: TIdTCPClient;
-    //网络对象
   protected
-    procedure DoExecute;
     procedure Execute; override;
     //执行线程
-    function ReadPound(const nTunnel: PPTTunnelItem): Boolean;
+    function ReadPound: Boolean;
     //读取数据
+    procedure DoSyncEvent;
+    //处理事件
   public
     constructor Create(AOwner: TPoundTunnelManager);
     destructor Destroy; override;
@@ -128,13 +127,14 @@ type
     //端口列表
     FCameras: TList;
     //摄像机
-    FTunnelIndex: Integer;
     FTunnels: TList;
     //通道列表
     FStrList: TStrings;
     //字符列表
     FSyncLock: TCriticalSection;
     //同步锁定
+    FConnector: TPoundTunnelConnector;
+    //套接字链路
   protected
     procedure ClearList(const nFree: Boolean);
     //清理资源
@@ -172,19 +172,23 @@ end;
 
 constructor TPoundTunnelManager.Create;
 begin
+  FConnector := nil;
   FPorts := TList.Create;
   FCameras := TList.Create;
-  FTunnels := TList.Create;
 
+  FTunnels := TList.Create;
   FStrList := TStringList.Create;
   FSyncLock := TCriticalSection.Create;
 end;
 
 destructor TPoundTunnelManager.Destroy;
 begin
+  if Assigned(FConnector) then
+    FConnector.StopMe;
+  //xxxxx
+  
   ClearList(True);
   FStrList.Free;
-  
   FSyncLock.Free;
   inherited;
 end;
@@ -203,6 +207,12 @@ begin
     begin
       nPort.FCOMPort.Close;
       nPort.FCOMPort.Free;
+    end;
+
+    if Assigned(nPort.FClient) then
+    begin
+      nPort.FClient.Disconnect;
+      nPort.FClient.Free;
     end;
 
     Dispose(nPort);
@@ -329,6 +339,10 @@ begin
       nTmp := FindNode('hostport');
       if Assigned(nTmp) then nPort.FHostPort := nTmp.ValueAsInteger;
 
+      nPort.FClient := nil;
+      nPort.FClientActive := False;
+      //默认无链路
+      
       nPort.FCOMPort := nil;
       //默认不启用
       nPort.FEventTunnel := nil;
@@ -390,10 +404,6 @@ begin
         nTunnel.FCamera := nil;
         //no camera
       end;
-
-      nTunnel.FEnable := False;
-      nTunnel.FLocked := False;
-      nTunnel.FLastActive := GetTickCount;
     end;
   finally
     nXML.Free;
@@ -448,12 +458,55 @@ end;
 //Desc: 开启nTunnel通道读写端口
 procedure TPoundTunnelManager.ActivePort(const nTunnel: string;
   nEvent: TOnTunnelDataEvent; const nOpenPort: Boolean);
-var nPT: PPTTunnelItem;
+var nStr: string;
+    nPT: PPTTunnelItem;
 begin
   FSyncLock.Enter;
   try
     nPT := GetTunnel(nTunnel);
     if not Assigned(nPT) then Exit;
+
+    nPT.FOnData := nEvent;
+    nPT.FOldEventTunnel := nPT.FPort.FEventTunnel;
+    nPT.FPort.FEventTunnel := nPT;
+    
+    if nPT.FPort.FConn = ctTCP then
+    begin
+      if not Assigned(nPT.FPort.FClient) then
+      begin
+        nPT.FPort.FClient := TIdTCPClient.Create;
+        //new socket
+        
+        with nPT.FPort.FClient do
+        begin
+          Host := nPT.FPort.FHostIP;
+          Port := nPT.fPort.FHostPort;
+          
+          ReadTimeout := 5 * 1000;
+          ConnectTimeout := 5 * 1000;
+        end;
+      end;
+
+      with nPT.FPort.FClient do
+      try
+        if not Connected then
+          Connect;
+        //尝试连接
+      except
+        nStr := '连接地磅[ %s:%d ]失败';
+        nStr := Format(nStr, [nPT.FPort.FHostIP, nPT.FPort.FHostPort]);
+
+        raise Exception.Create(nStr);
+        Exit;
+      end;
+
+      if not Assigned(FConnector) then
+        FConnector := TPoundTunnelConnector.Create(Self);
+      FConnector.WakupMe; //启动链接器
+                                  
+      nPT.FPort.FClientActive := True;
+      Exit;
+    end; //套接字链路
 
     if not Assigned(nPT.FPort.FCOMPort) then
     begin
@@ -481,10 +534,6 @@ begin
         StopBits := nPT.FPort.FStopbit;
       end;
     end;
-  
-    nPT.FOnData := nEvent;
-    nPT.FOldEventTunnel := nPT.FPort.FEventTunnel;
-    nPT.FPort.FEventTunnel := nPT;
 
     try
       if nOpenPort then
@@ -511,6 +560,8 @@ begin
   try
     nPT := GetTunnel(nTunnel);
     if not Assigned(nPT) then Exit;
+
+    nPT.FPort.FClientActive := False;
     nPT.FOnData := nil;
 
     if nPT.FPort.FEventTunnel = nPT then
@@ -546,8 +597,7 @@ begin
     //无接收事件
 
     nPort.FCOMData := nPort.FCOMData + nPort.FCOMBuff;
-    if Length(nPort.FCOMData) < nPort.FPackLen then Exit;
-    //数据不够整包长度
+    //合并数据
 
     try
       if ParseWeight(nPort) then
@@ -580,8 +630,10 @@ function TPoundTunnelManager.ParseWeight(const nPort: PPTPortItem): Boolean;
 var nIdx,nPos,nEnd: Integer;
 begin
   Result := False;
-  nEnd := -1;
+  if Length(nPort.FCOMData) < nPort.FPackLen then Exit;
+  //数据不够整包长度
 
+  nEnd := -1;
   for nIdx:=Length(nPort.FCOMData) downto 1 do
   begin
     if nPort.FCOMData[nIdx] = nPort.FCharEnd then
@@ -645,17 +697,10 @@ begin
   FOwner := AOwner;
   FWaiter := TWaitObject.Create;
   FWaiter.Interval := cPTWait_Short;
-
-  FClient := TIdTCPClient.Create;
-  FClient.ReadTimeout := 5 * 1000;
-  FClient.ConnectTimeout := 5 * 1000;
 end;
 
 destructor TPoundTunnelConnector.Destroy;
 begin
-  FClient.Disconnect;
-  FClient.Free;
-
   FWaiter.Free;
   inherited;
 end;
@@ -675,14 +720,38 @@ begin
 end;
 
 procedure TPoundTunnelConnector.Execute;
+var nIdx: Integer;
+    nTunnel: PPTTunnelItem;
 begin
   while not Terminated do
   try
     FWaiter.EnterWait;
     if Terminated then Exit;
 
-    DoExecute;
-    //读磅
+    with FOwner do
+    begin
+      FSyncLock.Enter;
+      try
+        for nIdx:=FTunnels.Count - 1 downto 0 do
+        begin
+          nTunnel := FTunnels[nIdx];
+          if not nTunnel.FPort.FClientActive then Continue;
+
+          FActiveTunnel := nTunnel;
+          FActivePort   := nTunnel.FPort;
+          FActiveClient := nTunnel.FPort.FClient;
+
+          FSyncLock.Leave; //外部处理事件          
+          try
+            ReadPound;
+          finally
+            FSyncLock.Enter;
+          end;
+        end;
+      finally
+        FSyncLock.Leave;
+      end;
+    end;
   except
     on E: Exception do
     begin
@@ -692,90 +761,61 @@ begin
   end; 
 end;
 
-procedure TPoundTunnelConnector.DoExecute;
-var nIdx: Integer;
-    nTunnel: PPTTunnelItem;
+//Desc: 读取磅重
+function TPoundTunnelConnector.ReadPound: Boolean;
+var nBuf: TIdBytes;
 begin
-  FActiveTunnel := nil;
-  //init
-
-  with FOwner do
+  Result := False;
   try
-    FSyncLock.Enter;
-    try
-      for nIdx:=FTunnels.Count - 1 downto 0 do
-      begin
-        nTunnel := FTunnels[nIdx];
-        if nTunnel.FEnable and (not nTunnel.FLocked) and
-           (GetTickCount - nTunnel.FLastActive < cPTWait_Long) then
-        //有数据的优先处理
-        begin
-          FActiveTunnel := nTunnel;
-          FActiveTunnel.FLocked := True;
-          Break;
-        end;
-      end;
-
-      if not Assigned(FActiveTunnel) then
-      begin
-        nIdx := 0;
-        //init
-
-        while True do
-        begin
-          if FTunnelIndex >= FTunnels.Count then
-          begin
-            FTunnelIndex := 0;
-            Inc(nIdx);
-
-            if nIdx > 1 then Break;
-            //扫描一轮,无效退出
-          end;
-
-          nTunnel := FTunnels[FTunnelIndex];
-          Inc(FTunnelIndex);
-          if nTunnel.FLocked or (not nTunnel.FEnable) then Continue;
-
-          FActiveTunnel := nTunnel;
-          FActiveTunnel.FLocked := True;
-          Break;
-        end;
-      end;
-    finally
-      FSyncLock.Leave;
+    if not FActiveClient.Connected then
+      FActiveClient.Connect;
+    //xxxxx
+    
+    with FActiveClient do
+    begin
+      if IOHandler.InputBuffer.Size < 1 then Exit;
+      IOHandler.ReadBytes(nBuf, IOHandler.InputBuffer.Size, False);
+      //套接字数据
+                         
+      FActivePort.FCOMBuff := BytesToString(nBuf);
+      FActivePort.FCOMData := FActivePort.FCOMData + FActivePort.FCOMBuff;
+      //数据合并
     end;
 
-    if Assigned(FActiveTunnel) and (not Terminated) then
-    try
-      if ReadPound(FActiveTunnel) then
+    if not FOwner.ParseWeight(FActiveTunnel.FPort) then
+    begin
+      if Length(FActivePort.FCOMData) >= 5 * FActivePort.FPackLen then
       begin
-        FWaiter.Interval := cPTWait_Short;
-        FActiveTunnel.FLastActive := GetTickCount;
-      end else
-      begin
-        if (FActiveTunnel.FLastActive > 0) and
-           (GetTickCount - FActiveTunnel.FLastActive >= 3 * 1000) then
-        begin
-          FActiveTunnel.FLastActive := 0;
-          FWaiter.Interval := cPTWait_Long;
-        end;
+        System.Delete(FActivePort.FCOMData, 1, 4 * FActivePort.FPackLen);
+        WriteLog('无效数据过多,已裁剪.')
       end;
-    except
-      FClient.Disconnect;      
-      if Assigned(FClient.IOHandler) then
-        FClient.IOHandler.InputBuffer.Clear;
-      raise;
+
+      Exit;
     end;
-  finally
-    if Assigned(FActiveTunnel) then
-      FActiveTunnel.FLocked := False;
-    //unlock
+
+    Synchronize(DoSyncEvent);
+    Result := True;
+  except
+    FActiveClient.Disconnect;
+    if Assigned(FActiveClient.IOHandler) then
+      FActiveClient.IOHandler.InputBuffer.Clear;
+    raise;
   end;
 end;
 
-function TPoundTunnelConnector.ReadPound(const nTunnel: PPTTunnelItem): Boolean;
+//Desc: 处理主进程事件
+procedure TPoundTunnelConnector.DoSyncEvent;
+var nVal: Double;
 begin
+  if Assigned(FActivePort.FEventTunnel) and
+     Assigned(FActivePort.FEventTunnel.FOnData) then
+  begin
+    nVal := StrToFloat(FActivePort.FCOMData) * FActivePort.FDataEnlarge;
+    //pound data
 
+    FActiveTunnel.FOnData(nVal);
+    FActiveTunnel.FPort.FCOMData := '';
+  end;
 end;
 
 initialization
