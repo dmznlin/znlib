@@ -41,6 +41,7 @@ type
     FCardInterval: Integer;          //读卡间隔
     FSampleNum: Integer;             //采样个数
     FSampleFloat: Integer;           //采样浮动
+    FAdditional: string;             //附加参数
 
     FCamera: PPTCameraItem;          //摄像机
     FCameraTunnels: array[0..cPTMaxCameraTunnel-1] of Byte;
@@ -392,6 +393,11 @@ begin
       nTunnel.FCardInterval := NodeByName('cardInterval').ValueAsInteger;
       nTunnel.FSampleNum := NodeByName('sampleNum').ValueAsInteger;
       nTunnel.FSampleFloat := NodeByName('sampleFloat').ValueAsInteger;
+
+      nTmp := FindNode('additional');
+      if Assigned(nTmp) then
+           nTunnel.FAdditional := nTmp.ValueAsString
+      else nTunnel.FAdditional := '';
 
       nTmp := FindNode('camera');
       if Assigned(nTmp) then

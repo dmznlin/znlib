@@ -38,6 +38,7 @@
 *.cardInterval: 两次读卡的间隔,单位秒.
 *.sampleNum: 读磅采样个数
 *.sampleFloat: 采样平均值和单值的浮动,单位公斤
+*.additional: 附加参数,Key=Value;Key=Value形式.
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-->
 <pounds>
   <ports>
@@ -84,6 +85,7 @@
 		<cardInterval>300</cardInterval>
 		<sampleNum>10</sampleNum>
 		<sampleFloat>20</sampleFloat>
+        <additional>voice=local</additional>
 	</item>
   </tunnels>
 </pounds>
