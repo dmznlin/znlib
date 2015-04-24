@@ -42,10 +42,10 @@
             <repeat>2</repeat>
             <reinterval>1200</reinterval>
         </content>
-        <resource>
+    </contents>
+    <resource>
             <res key="²Ø" value="²Ø[=zang4]" />
             <res key="ÆÓ" value="ÆÓ[=piao2]" />
-        </resource>
-    </contents>
+    </resource>
   </card>
 </netvoice>
