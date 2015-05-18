@@ -33,6 +33,8 @@ type
     FELast  : Int64;             //上次触发
     FETimeOut: Boolean;          //电子签超时
     FRealLabel: string;          //实际业务的电子标签
+
+    FPrepare: Boolean;           //预装读卡器
   end;
 
   PReaderCard = ^TReaderCard;
@@ -318,6 +320,11 @@ begin
           if Assigned(nTP) then
                FPrinter := nTP.ValueAsString
           else FPrinter := '';
+
+          nTP := nNode.NodeByName('prepare');
+          if Assigned(nTP) then
+               FPrepare := UpperCase(nTP.ValueAsString) = 'Y'
+          else FPrepare := False;
         end;
       end;
     end;
@@ -343,6 +350,11 @@ begin
           if Assigned(nTP) then
                FLEDText := nTP.ValueAsString
           else FLEDText := '  精品水泥  ' + '  值得信赖  ';
+
+          nTP := nNode.NodeByName('prepare');
+          if Assigned(nTP) then
+               FPrepare := UpperCase(nTP.ValueAsString) = 'Y'
+          else FPrepare := False;
 
           nNode := nNode.FindNode('uselabel');
           //使用电子签

@@ -91,12 +91,15 @@ type
     //待发送数据
     FWaiter: TWaitObject;
     //等待对象
+    FLastSend: Int64;
     FClient: TIdTCPClient;
     //客户端
   protected
     procedure DoExecute;
     procedure Execute; override;
     //执行线程
+    procedure DisconnectClient;
+    //断开链路
   public
     constructor Create(AOwner: TERelayControler);
     destructor Destroy; override;
@@ -584,10 +587,21 @@ begin
   Free;
 end;
 
+procedure TERelayControlChannel.DisconnectClient;
+begin
+  FClient.Disconnect;
+  if Assigned(FClient.IOHandler) then
+    FClient.IOHandler.InputBuffer.Clear;
+  //xxxxx
+end;
+
 procedure TERelayControlChannel.Execute;
 var nList: TList;
     nIdx,nNum: Integer;
 begin
+  FLastSend := 0;
+  //init
+  
   nNum := 0;
   //init counter
   
@@ -605,7 +619,7 @@ begin
       end;
     except
       WriteLog(Format('连接[ %s ]失败.', [FClient.Host]));
-      FClient.Disconnect;
+      DisconnectClient;
       Continue;
     end;
 
@@ -627,13 +641,11 @@ begin
       FOwner.ClearList(FBuffer);
       nNum := 0;
     except
-      FClient.Disconnect;
-      if Assigned(FClient.IOHandler) then
-        FClient.IOHandler.InputBuffer.Clear;
-      //xxxxx
+      DisconnectClient;
+      //try re-conn
 
       Inc(nNum);
-      if nNum >= 3 then
+      if nNum >= 2 then
       begin
         FOwner.ClearList(FBuffer);
         nNum := 0;
@@ -651,7 +663,8 @@ begin
 end;
 
 procedure TERelayControlChannel.DoExecute;
-var nIdx: Integer;
+var nInt: Int64;
+    nIdx: Integer;
     nBuf: TIdBytes;
     nHead: PERelayFrameHeader;
     nCtrl: PERelayFrameControl;
@@ -683,10 +696,17 @@ begin
     nCtrl.FVerify := VerifyData(nCtrl, nCtrl.FHeader.FLength);
   end; //心跳帧
 
-  nCtrl := nil;
+  //nCtrl := nil;
   for nIdx:=0 to FBuffer.Count - 1 do
   with FClient.Socket do
   begin
+    nInt := GetTickCount - FLastSend;
+    if nInt < 420 then
+    begin
+      nInt := 420 - nInt;
+      Sleep(nInt);
+    end;
+
     nHead := FBuffer[nIdx];
     nBuf := RawToBytes(nHead^, nHead.FLength);
 
@@ -696,9 +716,16 @@ begin
         AppendByte(nBuf, PERelayFrameControl(nHead).FVerify);
         Write(nBuf);
 
-        Sleep(500);
         ReadBytes(nBuf, cSize_ERelay_Control, False);
+        FLastSend := GetTickCount;
 
+        {$IFDEF DEBUG}
+        case nHead.FType of
+         cERelay_Frame_OC: WriteLog(Format('向[ %s ]发送控制指令.', [FClient.Host]));
+         cERelay_Frame_SH: WriteLog(Format('向[ %s ]发送心跳指令.', [FClient.Host]));
+        end;
+        {$ENDIF}
+{
         if Assigned(nCtrl) then Continue;
         if Length(nBuf) < cSize_ERelay_Control then Continue;
 
@@ -706,6 +733,7 @@ begin
         if nCtrl.FVerify = VerifyData(nCtrl, cSize_ERelay_Control - 1) then
              FOwner.FStatus := nCtrl.FData
         else nCtrl := nil;
+}
       end;
       cERelay_Frame_DS:
       begin
@@ -716,7 +744,7 @@ begin
 
         AppendByte(nBuf, PERelayFrameDisplay(nHead).FVerify);
         Write(nBuf);
-        Sleep(500);
+        FLastSend := GetTickCount;
       end;
     end;
   end;

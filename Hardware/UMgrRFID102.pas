@@ -69,6 +69,9 @@ type
     FOnProc: THYReaderProc;
     FOnEvent: THYReaderEvent;
     //事件定义
+
+    FThreadCount: Int64;
+    //读卡线程数
   protected
     procedure ClearReaders(const nFree: Boolean);
     //清理资源
@@ -150,6 +153,8 @@ begin
   begin
     if (nNum > 0) and (FReaders.Count < 2) then Exit;
     //一个读头单线程
+    if nNum >= FThreadCount then Exit;
+    //线程不能超过预定值
 
     if not Assigned(FThreads[nIdx]) then
     begin
@@ -213,9 +218,16 @@ begin
     if not Assigned(nNode) then Exit;
     ClearReaders(False);
 
+    nTmp := nNode.FindNode('threadcount');
+    if Assigned(nTmp) then
+         FThreadCount := nTmp.ValueAsInteger
+    else FThreadCount := 1;
+
     for nIdx:=0 to nNode.NodeCount - 1 do
     begin
       nTmp := nNode.Nodes[nIdx];
+      if CompareText(nTmp.Name, 'reader') <> 0 then Continue;
+
       New(nReader);
       FReaders.Add(nReader);
 
@@ -300,6 +312,7 @@ begin
   try
     FSyncLock.Enter;
     try
+      if FThreadCount>1 then  //启动多个线程时，有卡号的读头优先
       for nIdx:=FReaders.Count - 1 downto 0 do
       begin
         nReader := FReaders[nIdx];
@@ -354,7 +367,10 @@ begin
            (GetTickCount - FActiveReader.FLastActive >= 3 * 1000) then
         begin
           FActiveReader.FLastActive := 0;
-          FWaiter.Interval := cHYReader_Wait_Long;
+
+          if FThreadCount>1 then
+            FWaiter.Interval := cHYReader_Wait_Long;
+          //多个读卡线程时，读卡超时后，延长时间
         end;
       end;
     except

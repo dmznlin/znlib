@@ -578,6 +578,15 @@ begin
       if Assigned(nPT.FPort.FCOMPort) then
         nPT.FPort.FCOMPort.Close;
       //通道空闲则关闭
+
+      if Assigned(nPT.FPort.FClient) then
+      with nPT.FPort.FClient do
+      begin
+        Disconnect;
+        if Assigned(IOHandler) then
+          IOHandler.InputBuffer.Clear;
+        //关闭链路
+      end;
     end;
   finally
     FSyncLock.Leave;
@@ -642,7 +651,7 @@ begin
   nEnd := -1;
   for nIdx:=Length(nPort.FCOMData) downto 1 do
   begin
-    if nPort.FCOMData[nIdx] = nPort.FCharEnd then
+    if (nEnd < 1) and (nPort.FCOMData[nIdx] = nPort.FCharEnd) then
     begin
       nEnd := nIdx;
       Continue;

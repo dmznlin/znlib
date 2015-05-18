@@ -157,6 +157,8 @@ type
     FHeight: Integer;       //高度
     FDataOE: Integer;       //OE设定
 
+    FDataTunnels: string;        //数据组成
+
     FHeadRect: TRect;
     FHeadText: string;
     FHeadFont: TCardFont;   //表头
@@ -175,6 +177,7 @@ type
     FFootRect: TRect;
     FFootText: string;
     FFootDefault: string;
+    FFootDefaultOnly: Boolean;
     FFootFormat: string;
     FFootFont: TCardFont;   //表尾
   end;
@@ -479,12 +482,18 @@ end;
 procedure TCardSendThread.BuildFootFormatText;
 var nStr: string;
 begin
-  nStr := gTruckQueueManager.GetVoiceTruck('、', False);
   with FNowItem^ do
   begin
-    if nStr = '' then
-         FFootFormat := FFootDefault
-    else FFootFormat := FFootText;
+    if FFootDefaultOnly then
+    begin
+      FFootFormat := FFootDefault;
+    end else
+    begin
+      nStr := gTruckQueueManager.GetVoiceTruck('、', False);
+      if nStr = '' then
+           FFootFormat := FFootDefault
+      else FFootFormat := FFootText;
+    end;
 
     FFootFormat := StringReplace(FFootFormat, 'dt', Date2Str(Now),
                    [rfReplaceAll, rfIgnoreCase]);
@@ -572,7 +581,9 @@ begin
     while nIdx < Lines.Count do
     begin
       nLine := Lines[nIdx];
-      if not nLine.FIsValid then
+
+      if (not nLine.FIsValid) or
+        ((Length(FDataTunnels)>0) and (Pos(nLine.FLineID, FDataTunnels)<1)) then
       begin
         Inc(nIdx); Continue;
       end;
@@ -1239,6 +1250,11 @@ begin
       FHeight := nNode.NodeByName('height').ValueAsInteger;
       FDataOE := nNode.NodeByName('data_oe').ValueAsInteger;
 
+      nTmp := nNode.FindNode('data_tunnels');
+      if Assigned(nTmp) then
+           FDataTunnels := nTmp.ValueAsString
+      else FDataTunnels := '';
+
       nTmp := nNode.FindNode('double_paint');
       if Assigned(nTmp) then
            FDoublePaint := nTmp.ValueAsString = '1'
@@ -1319,8 +1335,11 @@ begin
           Bottom := Top + StrToInt(AttributeByName['H']);
         end;
 
+        nTmp := nNode.NodeByName('default');
+        FFootDefault := nTmp.ValueAsString;
+        FFootDefaultOnly := nTmp.AttributeByName['useonly'] = 'Y'; 
+
         FFootText := nNode.NodeByName('text').ValueAsString;
-        FFootDefault := nNode.NodeByName('default').ValueAsString;
         ReadCardFont(FFootFont, nNode);
       end;
 
