@@ -52,6 +52,7 @@ type
 
   TPTCameraItem = record
     FID: string;                     //标识
+    FType: string;                   //类型
     FHost: string;                   //主机地址
     FPort: Integer;                  //端口
     FUser: string;                   //用户名
@@ -366,6 +367,11 @@ begin
         nCamera.FPwd := NodeByName('password').ValueAsString;
         nCamera.FPicSize := NodeByName('picsize').ValueAsInteger;
         nCamera.FPicQuality := NodeByName('picquality').ValueAsInteger;
+
+        nTmp := FindNode('type');
+        if Assigned(nTmp) then
+             nCamera.FType := nTmp.ValueAsString
+        else nCamera.FType := 'HKV';
       end;
     end;
 
