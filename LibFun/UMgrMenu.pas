@@ -48,6 +48,7 @@ type
     FFilter: string;                //过滤条件
     FNewOrder: Single;              //创建序列
     FPopedom: string;               //权限项
+    FLangID: string;                //语言标识
     FSubMenu: TList;                //子菜单列表
   end;
 
@@ -60,6 +61,8 @@ type
     {*顶级菜单列表*}
     FProList: TList;
     {*程序标识列表*}
+    FLangID: string;
+    {*语言标识*}
     FHintMsg: THintMsg;
     {事件}
   protected
@@ -105,6 +108,7 @@ type
     function GetMenuItem(const nEntity,nMenuID: string): PMenuItemData;
     {*检索菜单项*}
     property TopMenus: TList read FItemList;
+    property LangID: string read FLangID write FLangID;
     property OnHintMsg: THintMsg read FHintMsg write FHintMsg;
     {属性,事件}
   end;
@@ -136,16 +140,17 @@ ResourceString
                 'M_Action varchar(100),' +                    //菜单动作
                 'M_Filter varchar(100),' +                    //过滤条件
                 'M_Popedom varchar(36),' +                    //权限项
+                'M_LangID varchar(12),' +                     //语言标识
                 'M_NewOrder float Default -1)';               //创建序列
   //Menu Create SQL
 
   sInsertMenu = 'Insert $Table Values(''$MenuID'', ''$ProgID'', ''$Entity'',' +
                 '''$PMenu'', ''$Title'', $ImgIndex, ''$Flag'', ''$Action'',' +
-                '''$Filter'', ''$Popedom'', $NewOrder)';
+                '''$Filter'', ''$Popedom'', $LangID, $NewOrder)';
   //Menu Insert SQL
 
-  sSelectMenu = 'Select * from $Table where M_ProgID=''$ID'' and M_NewOrder > -1 ' +
-                'Order by M_NewOrder';
+  sSelectMenu = 'Select * from $Table where M_ProgID=''$ID'' and ' +
+                'M_NewOrder > -1 $Lang Order by M_NewOrder';
   //Select a Program's Menu's Items
 
   sSelectProID = 'Select * from $Table Where (M_Entity='''') or (M_Entity Is Null)';
@@ -154,6 +159,7 @@ ResourceString
 //------------------------------------------------------------------------------
 constructor TBaseMenuManager.Create;
 begin
+  FLangID := '';
   FProList := nil;
   FItemList := TList.Create;  
 end;
@@ -222,9 +228,13 @@ end;
 //------------------------------------------------------------------------------
 //Desc: 向数据添加新nMenu菜单,若存在则覆盖
 function TBaseMenuManager.AddMenuToDB(const nMenu: TMenuItemData): Boolean;
-var nSQL: string;
+var nSQL,nLang: string;
 begin
   DelMenuFromDB(nMenu.FProgID, nMenu.FEntity, nMenu.FMenuID);
+  if nMenu.FLangID = '' then
+       nLang := 'Null'
+  else nLang := Format('''%s''', [nMenu.FLangID]);
+
   nSQL := MacroValue(sInsertMenu, [MI('$Table', GetItemValue(cMenuTable_Menu)),
                                    MI('$MenuID', nMenu.FMenuID),
                                    MI('$ProgID', nMenu.FProgID),
@@ -236,6 +246,7 @@ begin
                                    MI('$Action', nMenu.FAction),
                                    MI('$Filter', nMenu.FFilter),
                                    MI('$Popedom', nMenu.FPopedom),
+                                   MI('$LangID', nLang),
                                    MI('$NewOrder', FloatToStr(nMenu.FNewOrder))]);
   Result := ExecSQL(nSQL) > 0;
 end;
@@ -342,7 +353,7 @@ end;
 //Parm: 程序标识
 //Desc: 载入nProID程序的所有实体的菜单项
 function TBaseMenuManager.LoadMenuFromDB(const nProgID: string): Boolean;
-var nStr: string;
+var nStr,nLang: string;
     nDS: TDataSet;
     nFree: Boolean;
     nItem: PMenuItemData;
@@ -351,8 +362,16 @@ begin
   ClearItemList(FItemList);
   //清空原有内容
 
+  nLang := 'and (M_LangID=''%s'' Or M_LangID='''' or M_LangID Is Null)';
+  //语言过滤
+
+  if FLangID = '' then
+       nLang := ''
+  else nLang := Format(nLang, [FLangID]);
+
   nStr := GetItemValue(cMenuTable_Menu);
-  nStr := MacroValue(sSelectMenu, [MI('$Table', nStr), MI('$ID', nProgID)]);
+  nStr := MacroValue(sSelectMenu, [MI('$Table', nStr),
+          MI('$ID', nProgID), MI('$Lang', nLang)]);
   if not SafeQuery(nStr, nDS, nFree) then Exit;
 
   nDS.First;

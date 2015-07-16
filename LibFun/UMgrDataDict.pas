@@ -65,6 +65,7 @@ type
     FWidth: integer;                //宽度
     FIndex: integer;                //顺序
     FVisible: Boolean;              //可见
+    FLangID: string;                //语言
     FDBItem: TDictDBItem;           //数据库
     FFormat: TDictFormatItem;       //格式化
     FFooter: TDictGroupFooter;      //页脚合计
@@ -89,6 +90,8 @@ type
     {*程序列表*}
     FProgID: string;
     {*程序标记*}
+    FLangID: string;
+    {*语言标识*}
     FActiveIndex: integer;
     {*实体索引*}
     FHintMsg: THintMsg;
@@ -146,6 +149,7 @@ type
     property ActiveEntity: PEntityItemData read GetActiveEntity;
     property ProgList: TList read FProgList;
     property ProgID: string read FProgID write FProgID;
+    property LangID: string read FLangID write FLangID;
     property OnHintMsg: THintMsg read FHintMsg write FHintMsg;
     {属性,事件}
   end;   
@@ -176,6 +180,7 @@ ResourceString
                 'D_Width integer,' +                        //标题宽度
                 'D_Index integer,' +                        //标题顺序
                 'D_Visible smallint,' +                     //是否可见
+                'D_LangID varchar(12),' +                   //语言标识
 
                 'D_DBTable varchar(32),' +                  //表名称
                 'D_DBField varchar(32),' +                  //字段名
@@ -196,7 +201,7 @@ ResourceString
   //datadict create sql
 
   sInsertDict = 'Insert Into $Dict Values ($ItemID, ''$Entity'', ''$Title'',' +
-                '$Align, $Width, $Index, $Visible, ''$DBTable'', ''$DBField'',' +
+                '$Align, $Width, $Index, $Visible, $LangID, ''$DBTable'', ''$DBField'',' +
                 '$DBIsKey, $DBType, $DBWidth, $DBDecima, $FmtStyle, ''$FmtData'',' +
                 '''$FmtFormat'', ''$FmtExtMemo'', ''$FteDisplay'', ''$FteFormat'',' +
                 '$FteKind, $FtePosition)';
@@ -217,13 +222,15 @@ ResourceString
   sSelectEntity = 'Select * From $Table Where E_ProgID=''$ID'' And E_Entity=''$Entity''';
   //select a progrma's fix entity
 
-  sSelectDict = 'Select * From $Table Where D_Entity=''$Entity'' Order By D_Index';
+  sSelectDict = 'Select * From $Table Where D_Entity=''$Entity'' ' +
+                '$Lang Order By D_Index';
   //select a entity's data dict items
 
 //------------------------------------------------------------------------------  
 constructor TBaseEntityManager.Create;
 begin
   FProgID := '';
+  FLangID := '';
   FActiveIndex := -1;
 
   FProgList := TList.Create;
@@ -440,7 +447,7 @@ end;
 //Desc: 向数据库添加nEntity实体的字典项
 function TBaseEntityManager.AddDictItemToDB(const nEntity: string;
   const nDict: TDictItemData): Boolean;
-var nStr: string;
+var nStr,nLang: string;
     nIdx: integer;
     nDS: TDataSet;
     nFree: Boolean;
@@ -466,12 +473,17 @@ begin
     DelDictItemFromDB(nEntity, nDict.FItemID);
   end;
 
+  if nDict.FLangID = '' then
+       nLang := 'Null'
+  else nLang := Format('''%s''', [nDict.FLangID]);
+
   nStr := MacroValue(sInsertDict, [MI('$Dict', nTable), MI('$ItemID', nItemID),
             MI('$Entity', MakeDictEntity(nEntity)), MI('$Title', nDict.FTitle),
             MI('$Align', IntToStr(Ord(nDict.FAlign))),
             MI('$Width', IntToStr(nDict.FWidth)),
             MI('$Index', IntToStr(nDict.FIndex)),
             MI('$Visible', BoolToStr(nDict.FVisible)),
+            MI('$LangID', nLang),
             MI('$DBTable', nDict.FDBItem.FTable),
             MI('$DBField', nDict.FDBItem.FField),
             MI('$DBIsKey', BoolToStr(nDict.FDBItem.FIsKey)),
@@ -502,6 +514,7 @@ begin
     nDictItem.FWidth := nDict.FWidth;
     nDictItem.FIndex := nDict.FIndex;
     nDictItem.FVisible := nDict.FVisible;
+    nDictItem.FLangID := nDict.FLangID;
 
     nDictItem.FDBItem.FTable := nDict.FDBItem.FTable;
     nDictItem.FDBItem.FField := nDict.FDBItem.FField;
@@ -680,7 +693,7 @@ end;
 
 //Desc: 从数据库读取nEntity的字典项
 function TBaseEntityManager.LoadDictItemFromDB(const nEntity: string): Boolean;
-var nStr: string;
+var nStr,nLang: string;
     nDS: TDataSet;
     nFree: Boolean;
     nTable: string;
@@ -693,9 +706,16 @@ begin
   nIdx := EntityItemIndex(nEntity);
   if nIdx < 0 then Exit;
 
+  nLang := 'and (D_LangID=''%s'' Or D_LangID='''' or D_LangID Is Null)';
+  //语言过滤
+
+  if FLangID = '' then
+       nLang := ''
+  else nLang := Format(nLang, [FLangID]);
+
   nTable := GetItemValue(cDictTable_DataDict);
   nStr := MacroValue(sSelectDict, [MI('$Table', nTable),
-                                   MI('$Entity', MakeDictEntity(nEntity))]);
+          MI('$Entity', MakeDictEntity(nEntity)), MI('$Lang', nLang)]);
   if not SafeQuery(nStr, nTable, nDS, nFree) then Exit;
 
   nItem := FEntityList[nIdx];
@@ -715,6 +735,8 @@ begin
     nDict.FWidth := nDS.FieldByName('D_Width').AsInteger;
     nDict.FIndex := nDS.FieldByName('D_Index').AsInteger;
     nDict.FVisible := StrToBool(nDS.FieldByName('D_Visible').AsString);
+    nDict.FLangID := nDS.FieldByName('D_LangID').AsString;
+
     nDict.FDBItem.FTable := nDS.FieldByName('D_DBTable').AsString;
     nDict.FDBItem.FField := nDS.FieldByName('D_DBField').AsString;
     nDict.FDBItem.FIsKey := StrToBool(nDS.FieldByName('D_DBIsKey').AsString);

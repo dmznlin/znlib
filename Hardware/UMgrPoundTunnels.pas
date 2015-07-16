@@ -84,6 +84,8 @@ type
     FInvalidEnd: Integer;            //截尾长度
     FDataMirror: Boolean;            //镜像数据
     FDataEnlarge: Single;            //放大倍数
+    FMaxValue: Double;               //磅站上限
+    FMaxValid: Double;               //上限取值
 
     FHostIP: string;
     FHostPort: Integer;              //网络链路
@@ -335,6 +337,20 @@ begin
       nPort.FSplitPos := NodeByName('splitpos').ValueAsInteger;
       nPort.FDataMirror := NodeByName('datamirror').ValueAsInteger = 1;
       nPort.FDataEnlarge := NodeByName('dataenlarge').ValueAsFloat;
+
+      nTmp := FindNode('maxval');
+      if Assigned(nTmp) and (nTmp.AttributeByName['enable'] = 'y') then
+      begin
+        nPort.FMaxValue := nTmp.ValueAsFloat;
+        nPort.FMaxValid := StrToFloat(nTmp.AttributeByName['valid']);
+
+        nPort.FMaxValue := Float2Float(nPort.FMaxValue, 100, False);
+        nPort.FMaxValid := Float2Float(nPort.FMaxValid, 100, False);
+      end else
+      begin
+        nPort.FMaxValue := 0;
+        nPort.FMaxValid := 0;
+      end;
 
       nTmp := FindNode('hostip');
       if Assigned(nTmp) then nPort.FHostIP := nTmp.ValueAsString;
@@ -649,6 +665,7 @@ end;
 //Desc: 解析nPort上的称重数据
 function TPoundTunnelManager.ParseWeight(const nPort: PPTPortItem): Boolean;
 var nIdx,nPos,nEnd: Integer;
+    nVal: Double;
 begin
   Result := False;
   if Length(nPort.FCOMData) < nPort.FPackLen then Exit;
@@ -705,7 +722,17 @@ begin
 
     nPort.FCOMData := Trim(nPort.FCOMData);
     Result := IsNumber(nPort.FCOMData, False);
+
+    if Result and (nPort.FMaxValue > 0) then
+    begin
+      nVal := StrToFloat(nPort.FCOMData);
+      if FloatRelation(nVal, nPort.FMaxValue, rtGE, 1000) then
+        nPort.FCOMData := FloatToStr(nPort.FMaxValid);
+      //超重取有效值
+    end;
+
     Exit;
+    //end loop
   end;
 end;
 
