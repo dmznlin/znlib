@@ -40,7 +40,9 @@ type
     FReceiverIDBase: Integer;
     FReceivers: TList;
     //事件接收者
-    FEvent: TSysLogEvent;
+    FSyncEvent: TSysLogEvent;
+    FAsyncEvent: TWriteLogEvent;
+    FAsyncProc: TWriteLogProcedure;
     //事件相关
   protected
     procedure ClearReceivers(const nFree: Boolean);
@@ -52,9 +54,11 @@ type
     constructor Create(const nPath: string; const nSyncLock: string = '');
     destructor Destroy; override;
     //创建释放
-    procedure AddLog(const nEvent: string); overload;
+    procedure AddLog(const nEvent: string;
+     const nType: TLogType = ltNull); overload;
+    procedure AddLog(const nObj: TObjectClass; const nDesc,nEvent: string;
+     const nType: TLogType = ltNull); overload;
     procedure AddLog(const nLogItem: PLogItem); overload;
-    procedure AddLog(const nObj: TObjectClass; nDesc,nEvent: string); overload;
     //添加日志
     function HasItem: Boolean;
     //有未写入
@@ -62,7 +66,9 @@ type
     procedure DelReceiver(const nReceiverID: Integer);
     //日志接收者
     property LogSync: Boolean read FSyncLog write FSyncLog;
-    property LogEvent: TSysLogEvent read FEvent write FEvent;
+    property LogEvent: TSysLogEvent read FSyncEvent write FSyncEvent;
+    property AsyncEvent: TWriteLogEvent read FAsyncEvent write FAsyncEvent;
+    property AsyncProc: TWriteLogProcedure read FAsyncProc write FAsyncProc;
     //属性相关
   end;
 
@@ -132,17 +138,18 @@ end;
 
 procedure TSysLoger.AddLog(const nLogItem: PLogItem);
 begin
-  FLoger.AddNewLog(@nLogItem);
+  FLoger.AddNewLog(nLogItem);
 end;
 
 //Desc: 默认日志
-procedure TSysLoger.AddLog(const nEvent: string);
+procedure TSysLoger.AddLog(const nEvent: string; const nType: TLogType);
 begin
-  AddLog(TSysLoger, '默认日志对象', nEvent);
+  AddLog(TSysLoger, '默认日志对象', nEvent, nType);
 end;
 
 //Desc: 添加一个nObj的nEvent事件
-procedure TSysLoger.AddLog(const nObj: TObjectClass; nDesc, nEvent: string);
+procedure TSysLoger.AddLog(const nObj: TObjectClass; const nDesc, nEvent: string;
+ const nType: TLogType);
 var nItem: PLogItem;
 begin
   New(nItem);
@@ -152,6 +159,7 @@ begin
     FWriter.FOjbect := nObj;
     FWriter.FDesc := nDesc;
 
+    FType := nType;
     FLogTag := [ltWriteFile];
     FTime := Now();
     FEvent := nEvent;
@@ -188,7 +196,9 @@ begin
       nItem := nLogs[i];
 
       nStr := Copy(nItem.FWriter.FOjbect.ClassName, 1, 15);
-      nStr := DateTime2Str(nItem.FTime) + sLogField + nStr + sLogField;
+      nStr := DateTime2Str(nItem.FTime) + ' ' +
+              TLogManager.Type2Str(nItem.FType, False) + sLogField +
+              nStr + sLogField;
       //时间,类名
 
       if nItem.FWriter.FDesc <> '' then
@@ -214,6 +224,14 @@ begin
     CloseFile(nFile);
     FSyncLock.SyncLockLeave(True);
   end;
+
+  if Assigned(FAsyncEvent) then
+    FAsyncEvent(nThread, nLogs);
+  //xxxxx
+
+  if Assigned(FAsyncProc) then
+    FAsyncProc(nThread, nLogs);
+  //xxxxx
 end;
 
 //------------------------------------------------------------------------------
@@ -263,8 +281,8 @@ end;
 procedure TSysLoger.OnSync(const nData: Pointer; const nSize: Cardinal);
 var nIdx: Integer;
 begin
-  if Assigned(FEvent) then
-    FEvent(PChar(nData));
+  if Assigned(FSyncEvent) then
+    FSyncEvent(PChar(nData));
   //xxxxx
 
   FSyncSection.Enter;

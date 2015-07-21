@@ -25,6 +25,8 @@ type
   TObjectClass = class of TObject;
   TLogTag = set of (ltWriteFile, ltWriteDB, ltWriteCMD);
   //日志标记
+  TLogType = (ltNull, ltInfo, ltWarn, ltError);
+  //日志类型:无,信息,警告,错误
 
   TLogWriter = record
     FOjbect: TObjectClass;         //组件类型
@@ -35,6 +37,7 @@ type
   TLogItem = record
     FWriter: TLogWriter;           //日志作者
     FLogTag: TLogTag;              //日志标记
+    FType: TLogType;               //日志类型
     FTime: TDateTime;              //日志时间
     FEvent: string;                //日志内容
   end;
@@ -90,6 +93,9 @@ type
     {*新日志*}
     function HasItem: Boolean;
     {*有未写入*}
+    class function Type2Str(nType: TLogType; nLong: Boolean = True): string;
+    class function Str2Type(const nStr: string; nLong: Boolean = True): TLogType;
+    {*日志类型*}
     property OnNewLog: TLogEvent read FOnNewLog write FOnNewLog;
     property WriteEvent: TWriteLogEvent read FEvent write FEvent;
     property WriteProcedure: TWriteLogProcedure read FProcedure write FProcedure;
@@ -136,7 +142,9 @@ begin
 
   FOwner := AOwner;
   FBufferList := TList.Create;
+
   FWaiter := TWaitObject.Create;
+  FWaiter.Interval := 500;
 end;
 
 destructor TLogThread.Destroy;
@@ -156,7 +164,11 @@ end;
 
 //Desc: 写日志线程
 procedure TLogThread.Execute;
+var nInt: Integer;
 begin
+  nInt := 0;
+  //init status
+
   while True do
   try
     if Terminated then
@@ -169,17 +181,30 @@ begin
       if (not FOwner.HasItem) and Terminated then Break;
     end;
 
-    if FBufferList.Count > 0 then
+    if nInt > 1 then
     begin
+      nInt := 0;
+      FreeLogList(FBufferList);
+    end;
+
+    if FBufferList.Count > 0 then
+    try
       if Assigned(FOwner.FEvent) then
          FOwner.FEvent(Self, FBufferList);
       if Assigned(FOwner.FProcedure) then
          FOwner.FProcedure(Self, FBufferList);
+      //xxxxx
+
+      nInt := 0;
       FreeLogList(FBufferList);
+    except
+      if nInt = 0 then
+        WriteErrorLog(FBufferList);
+      Inc(nInt);
     end;
   except
-    WriteErrorLog(FBufferList);
-    FreeLogList(FBufferList);
+    Inc(nInt);
+    //ignor any error
   end;
 end;
 
@@ -191,10 +216,12 @@ var nItem: PLogItem;
 begin
   nItem := FOwner.NewLogItem;
   nItem.FLogTag := [ltWriteFile];
+  nItem.FType := ltError;
+  
   nItem.FWriter.FOjbect := TLogThread;
   nItem.FWriter.FDesc := '日志线程';
-  nItem.FEvent := '有' + IntToStr(nList.Count) + '笔日志写入失败,已丢弃';
-  FOwner.AddNewLog(nItem);
+  nItem.FEvent := Format('有%d笔日志写入失败,再次尝试.', [nList.Count]);
+  nList.Insert(0, nItem);
 end;
 
 //******************************************************************************
@@ -216,6 +243,46 @@ begin
   FreeLogList(FBuffer);
   FBuffer.Free;
   inherited;
+end;
+
+//Desc: 类型转描述
+class function TLogManager.Type2Str(nType: TLogType; nLong: Boolean = True): string;
+begin
+  if nLong then
+  begin
+    case nType of
+     ltInfo: Result := 'INFO';
+     ltWarn: Result := 'WARN';
+     ltError: Result := 'ERROR' else Result := '';
+    end;
+  end else
+  begin
+    case nType of
+     ltInfo: Result := 'I';
+     ltWarn: Result := 'W';
+     ltError: Result := 'E' else Result := '';
+    end;
+  end;
+end;
+
+//Desc: 描述转类型
+class function TLogManager.Str2Type(const nStr: string; nLong: Boolean = True): TLogType;
+var nL: string;
+begin
+  nL := UpperCase(Trim(nStr));
+  //格式化
+
+  if nLong then
+  begin
+    if nL = 'INFO' then Result := ltInfo else
+    if nL = 'WARN' then Result := ltWarn else
+    if nL = 'ERROR' then Result := ltError else Result := ltNull;
+  end else
+  begin
+    if nL = 'I' then Result := ltInfo else
+    if nL = 'W' then Result := ltWarn else
+    if nL = 'E' then Result := ltError else Result := ltNull;
+  end;
 end;
 
 //Desc: 是否有未写入日志项

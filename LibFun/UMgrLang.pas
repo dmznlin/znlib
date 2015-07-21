@@ -103,6 +103,7 @@ type
     function TranslateStatusBar(const nBar: TComponent): Boolean;
     function TranslateLableEdit(const nEdit: TComponent): Boolean;
     function TranslateCommCtrl(const nCtrl: TComponent): Boolean;
+    function TranslateCollectionCtrl(const nCtrl: TComponent): Boolean;
     //翻译相关
   public
     constructor Create;
@@ -147,11 +148,12 @@ const
   cHasTitle: array[0..0] of string = ('TZnTitleBar');
   //has title property
 
-  cHasCaption: array[0..15] of string = ('TButton', 'TBitBtn', 'TSpeedButton',
-               'TLabel', 'TStaticText', 'TPanel', 'TGroupbox', 'TRadioGroup',
-               'TCheckbox', 'TRadioButton', 'TTabSheet',
-               'TcxLabel', 'TcxRadioGroup', 'TcxCheckBox', 'TcxRadioButton',
-               'TcxGroupBox');
+  cHasCaption: array[0..21] of string = ('TButton', 'TBitBtn', 'TSpeedButton',
+    'TLabel', 'TStaticText', 'TPanel', 'TGroupbox', 'TRadioGroup',
+    'TCheckbox', 'TRadioButton', 'TTabSheet',
+    'TcxLabel', 'TcxRadioGroup', 'TcxCheckBox', 'TcxRadioButton',
+    'TcxGroupBox', 'TdxNavBarGroup', 'TdxNavBarItem', 'TcxTabSheet',
+    'TdxLayoutGroup', 'TdxLayoutItem', 'TcxButton');
   //has caption property
 
 //------------------------------------------------------------------------------
@@ -520,7 +522,10 @@ begin
       if TranslateToolBar(nTemp) then Continue;
       if TranslateLableEdit(nTemp) then Continue;
       if TranslateStatusBar(nTemp) then Continue;
-      if TranslateCommCtrl(nTemp) then Continue;
+
+      TranslateCommCtrl(nTemp);
+      TranslateCollectionCtrl(nTemp);
+      //通用多属性翻译
     end;
   finally
     nList.Free;
@@ -682,9 +687,10 @@ end;
 
 //------------------------------------------------------------------------------
 //Date: 2010-9-1
-//Parm: 对象;属性(Ex:a.b.c)
+//Parm: 对象;属性(Ex:a.b.c);最后一级属性有效
 //Desc: 查找nProp属性所在的对象,支持连级属性(Ex:c在b对象上,返回b)
-function FindPropObj(const nCtrl: TObject; var nProp: string): TObject;
+function FindPropObj(const nCtrl: TObject; var nProp: string;
+ const nLastValid: Boolean = True): TObject;
 var nObj: TObject;
     nList: TStrings;
 begin
@@ -703,11 +709,21 @@ begin
        (PropType(nCtrl, nList[0]) = tkClass) then
     begin
       nObj := GetObjectProp(nCtrl, nList[0]);
-      if Assigned(nObj) then
+      //property is object
+
+      if not Assigned(nObj) then Exit;
+      nList.Delete(0);
+
+      if (nList.Count > 1) or nLastValid then
       begin
-        nList.Delete(0);
-        nProp := CombinStr(nList, '.');
-        Result := FindPropObj(nObj, nProp);
+        nProp := CombinStr(nList, '.', False);
+        Result := FindPropObj(nObj, nProp, nLastValid);
+      end else
+
+      if nList.Count = 1 then
+      begin
+        nProp := nList[0];
+        Result := nObj;
       end;
     end;
   finally
@@ -793,6 +809,54 @@ begin
     if nStr = '' then
          NewLangItem(nID, nVal)
     else DoCtrlProg(nObj, nProp, nStr, False);
+
+    Result := True;
+    //同组件多属性,不予退出
+  end;
+end;
+
+//Desc: 翻译a.collection[0].text类型的组件
+function TMultiLangManager.TranslateCollectionCtrl(
+  const nCtrl: TComponent): Boolean;
+var nObj: TObject;
+    nCln: TCollection;
+    nIdx,i,nCount: Integer;
+    nStr,nVal,nID,nProp: string;
+begin
+  Result := False;
+  nCount := High(FPropItems);
+
+  for i:=Low(FPropItems) to nCount do
+  if CompareText(nCtrl.ClassName, FPropItems[i].FClassName) = 0 then
+  begin
+    nProp := FPropItems[i].FProperty;
+    nObj := FindPropObj(nCtrl, nProp, False);
+    if not Assigned(nObj) then Continue;
+    
+    if not (nObj is TCollection) then Continue;
+    nCln := nObj as TCollection;
+
+    for nIdx:=0 to nCln.Count - 1 do
+    begin
+      nID := StringReplace(FPropItems[i].FProperty, '.', '_', [rfReplaceAll]);
+      nID := MakeID(nCtrl.Name, nID, IntToStr(nIdx));
+      nStr := GetTextByID(nID);
+
+      if nStr = '' then
+      begin
+        DoCtrlProg(nCln.Items[nIdx], nProp, nVal, True);
+        if FHasItemID then
+        begin
+          NewLangItem(nID, nVal); Continue;
+        end;
+
+        nStr := GetTextByText(nVal, FNowLang);
+      end;
+
+      if nStr = '' then
+           NewLangItem(nID, nVal)
+      else DoCtrlProg(nCln.Items[nIdx], nProp, nStr, False);
+    end;
 
     Result := True;
     //同组件多属性,不予退出
