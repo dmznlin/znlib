@@ -44,7 +44,7 @@ interface
 
 uses
   Windows, Classes, Controls, ComCtrls, SysUtils, Menus, NativeXml, ULibFun,
-  UAdjustForm, TypInfo;
+  UAdjustForm, TypInfo, ZnMD5;
 
 type
   TMultiLangItem = record
@@ -110,19 +110,20 @@ type
     destructor Destroy; override;
     //创建释放
     function LoadLangFile(const nFile: string): Boolean;
-    function SaveLangFile(const nFile: string): Boolean;
+    function SaveLangFile(const nFile: string = ''): Boolean;
     //载入保存
     procedure RegItem(const nClassName,nProp: string);
     //注册对象
     procedure TranslateAllCtrl(const nItem: TComponent);
     //翻译组件
-    function GetTextByID(const nID: string): string;
-    function GetTextByText(const nStr,nLang: string): string;
+    function GetTextByText(const nText: string; nFrom: string = '';
+     nTarget: string = ''): string;
+    function GetTextByID(const nID: string; nTarget: string = ''): string;
     //特定翻译
     property XMLObj: TNativeXml read FXML;
     property LangFile: string read FLangFile;
     property LangItems: TDynamicLangItem read FLangItems;
-    property LangID: string read FLang write FLang;
+    property LangID: string read FLang write SetLangID;
     property NowLang: string read FNowLang write FNowLang;
     property AutoNewNode: Boolean read FNewNode write FNewNode;
     property HasItemID: Boolean read FHasItemID write FHasItemID;
@@ -242,7 +243,11 @@ end;
 destructor TMultiLangManager.Destroy;
 begin
   if Assigned(FXML) then
+  begin
+    SaveLangFile;
     FXML.Free;
+  end;  
+
   inherited;
 end;
 
@@ -291,6 +296,18 @@ end;
 function TMultiLangManager.SaveLangFile(const nFile: string): Boolean;
 begin
   Result := True;
+  if nFile = '' then
+  begin
+    if not FHasChanged then Exit;
+    if not FileExists(FLangFile) then Exit;
+    
+    FXML.XmlFormat := xfReadable;
+    FXML.SaveToFile(FLangFile);
+
+    FHasChanged := False;
+    Exit;
+  end;
+
   if Assigned(FXML) then
   try
     FHasChanged := False;
@@ -398,21 +415,24 @@ begin
   end;
 end;
 
-//Desc: 获取nID对应的
-function TMultiLangManager.GetTextByID(const nID: string): string;
+//Desc: 获取nID对应的nTarget语言
+function TMultiLangManager.GetTextByID(const nID: string; nTarget: string): string;
 var nNode: TXmlNode;
     i,nCount: integer;
 begin
   Result := '';
   if not Assigned(FNowNode) then Exit;
 
+  if nTarget = '' then
+    nTarget := FLang;
   nCount := FNowNode.NodeCount - 1;
+
   for i:=0 to nCount do
   begin
     nNode := FNowNode.Nodes[i];
     if CompareText(nID, nNode.AttributeByName['ID']) = 0 then
     begin
-      nNode := nNode.FindNode(FLang);
+      nNode := nNode.FindNode(nTarget);
       if Assigned(nNode) then
         Result := RegularValue(nNode.ValueAsString, False);
       Exit;
@@ -421,9 +441,10 @@ begin
 end;
 
 //Date: 2010-4-22
-//Parm: 内容,语言标识
-//Desc: 获取nLang时内容为nStr的内容对应的当前语言内容
-function TMultiLangManager.GetTextByText(const nStr,nLang: string): string;
+//Parm: 内容;当前;翻译为
+//Desc: 将nForm.nText翻译为指定的nTarget.nText
+function TMultiLangManager.GetTextByText(const nText: string;
+ nFrom,nTarget: string): string;
 var nTrim: string;
     i,nCount: integer;
     nNode,nTmp: TXmlNode;
@@ -431,23 +452,36 @@ begin
   Result := '';
   if not Assigned(FNowNode) then Exit;
 
-  nTrim := RegularValue(nStr, True);
-  nCount := FNowNode.NodeCount - 1;
+  nTrim := RegularValue(nText, True);
+  if nTrim = '' then Exit;
 
+  if nFrom = '' then
+    nFrom := FNowLang;
+  //当前语言
+
+  if nTarget = '' then
+    nTarget := FLang;
+  //当前待翻译语言
+
+  nCount := FNowNode.NodeCount - 1;
   for i:=0 to nCount do
   begin
     nNode := FNowNode.Nodes[i];
-    nTmp := nNode.FindNode(nLang);
+    nTmp := nNode.FindNode(nFrom);
     if not Assigned(nTmp) then Continue;
 
     if CompareText(nTrim, nTmp.ValueAsString) = 0 then
     begin
-      nNode := nNode.FindNode(FLang);
+      nNode := nNode.FindNode(nTarget);
       if Assigned(nNode) then
         Result := RegularValue(nNode.ValueAsString, False);
       Exit;
     end;
   end;
+
+  Result := nText;
+  nTrim := MD5Print(MD5String(nText));
+  NewLangItem(nTrim, nText);
 end;
 
 //Date: 2010-4-28
