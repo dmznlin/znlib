@@ -15,7 +15,7 @@ interface
 
 uses
   ActiveX, ADODB, Classes, DB, Windows, SysUtils, SyncObjs, UMgrHashDict,
-  UWaitItem, USysLoger;
+  UWaitItem, USysLoger, UObjectStatus;
 
 const
   cErr_GetConn_NoParam     = $0001;            //无连接参数
@@ -81,7 +81,7 @@ type
     const nData: Pointer): Boolean of object;
   //回调函数
 
-  TDBConnManager = class(TObject)
+  TDBConnManager = class(TStatusObjectBase)
   private
     FWorkers: TList;
     //工作对象
@@ -149,6 +149,8 @@ type
     function DBAction(const nAction: TDBActionCallbackObj;
       const nData: Pointer = nil; nID: string = ''): Boolean; overload;
     //读写回调模式
+    procedure GetStatus(const nList: TStrings); override;
+    //对象状态
     property Status: TDBConnStatus read GetRunStatus;
     property MaxConn: Integer read GetMaxConn write SetMaxConn;
     property DefaultConnection: string read FConnDef write FConnDef;
@@ -194,6 +196,10 @@ begin
   
   FParams := THashDictionary.Create(3);
   FParams.OnDataFree := DoFreeDict;
+
+  if Assigned(gObjectStatusManager) then
+    gObjectStatusManager.AddObject(Self);
+  //xxxxx
 end;
 
 destructor TDBConnManager.Destroy;
@@ -201,6 +207,10 @@ begin
   ClearConnItems(True);
   ClearWorkers(True);
 
+  if Assigned(gObjectStatusManager) then
+    gObjectStatusManager.DelObject(Self);
+  //xxxxx
+  
   FParams.Free;
   FSyncLock.Free;
   inherited;
@@ -1061,6 +1071,23 @@ begin
     //do action
   finally
     ReleaseConnection(nDBConn);
+  end;
+end;
+
+procedure TDBConnManager.GetStatus(const nList: TStrings);
+begin
+  with GetRunStatus do
+  begin
+    nList.Add('NumConnParam: ' + #9 + IntToStr(FNumConnParam));
+    nList.Add('NumConnItem: ' + #9 + IntToStr(FNumConnItem));
+    nList.Add('NumConnObj: ' + #9 + IntToStr(FNumConnObj));
+    nList.Add('NumObjConned: ' + #9 + IntToStr(FNumObjConned));
+    nList.Add('NumObjReUsed: ' + #9 + IntToStr(FNumObjReUsed));
+    nList.Add('NumObjRequest: ' + #9 + IntToStr(FNumObjRequest));
+    nList.Add('NumObjReqErr: ' + #9 + IntToStr(FNumObjRequestErr));
+    nList.Add('NumObjWait: ' + #9 + IntToStr(FNumObjWait));
+    nList.Add('NumWaitMax: ' + #9 + IntToStr(FNumWaitMax));
+    nList.Add('NumMaxTime: ' + #9 + DateTimeToStr(FNumMaxTime));
   end;
 end;
 

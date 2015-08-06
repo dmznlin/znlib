@@ -8,7 +8,7 @@ interface
 
 uses
   Windows, Classes, SysUtils, SyncObjs, uROClient, uROWinInetHttpChannel,
-  uROBinMessage;
+  uROBinMessage, UObjectStatus;
 
 type
   PChannelItem = ^TChannelItem;
@@ -21,7 +21,7 @@ type
     FHttp: TROWinInetHTTPChannel;  //通道对象
   end;
 
-  TChannelManager = class(TObject)
+  TChannelManager = class(TStatusObjectBase)
   private
     FChannels: TList;
     //通道列表
@@ -47,6 +47,8 @@ type
     //通道处理
     procedure ClearChannel;
     //清理通道
+    procedure GetStatus(const nList: TStrings); override;
+    //对象状态
     property ChannelCount: Integer read GetCount;
     property ChannelMax: Integer read FMaxCount write SetChannelMax;
     //属性相关
@@ -72,6 +74,10 @@ begin
   
   FChannels := TList.Create;
   FLock := TCriticalSection.Create;
+
+  if Assigned(gObjectStatusManager) then
+    gObjectStatusManager.AddObject(Self);
+  //xxxxx
 end;
 
 destructor TChannelManager.Destroy;
@@ -80,6 +86,10 @@ begin
   ClearChannel;
   FChannels.Free;
 
+  if Assigned(gObjectStatusManager) then
+    gObjectStatusManager.DelObject(Self);
+  //xxxxx
+  
   FLock.Free;
   inherited;
 end;
@@ -224,6 +234,18 @@ begin
     finally
       FLock.Leave;
     end;
+  end;
+end;
+
+procedure TChannelManager.GetStatus(const nList: TStrings);
+begin
+  FLock.Enter;
+  try
+    nList.Add('MaxCount: ' + #9 + IntToStr(FMaxCount));
+    nList.Add('ChannelCount: ' + #9 + IntToStr(FChannels.Count));
+    nList.Add('ChannelLocked: ' + #9 + IntToStr(FNumLocked));
+  finally
+    FLock.Leave;
   end;
 end;
 
