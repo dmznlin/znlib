@@ -735,7 +735,10 @@ begin
     nDict.FWidth := nDS.FieldByName('D_Width').AsInteger;
     nDict.FIndex := nDS.FieldByName('D_Index').AsInteger;
     nDict.FVisible := StrToBool(nDS.FieldByName('D_Visible').AsString);
-    nDict.FLangID := nDS.FieldByName('D_LangID').AsString;
+
+    if Assigned(nDS.FindField('D_LangID')) then
+      nDict.FLangID := nDS.FieldByName('D_LangID').AsString;
+    //for multi lanuage
 
     nDict.FDBItem.FTable := nDS.FieldByName('D_DBTable').AsString;
     nDict.FDBItem.FField := nDS.FieldByName('D_DBField').AsString;
