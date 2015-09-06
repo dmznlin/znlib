@@ -157,8 +157,6 @@ type
     FHeight: Integer;       //高度
     FDataOE: Integer;       //OE设定
 
-    FDataTunnels: string;        //数据组成
-
     FHeadRect: TRect;
     FHeadText: string;
     FHeadFont: TCardFont;   //表头
@@ -169,6 +167,8 @@ type
     FPicNum: Integer;
     FDataRect: TRect;
     FDataFont: TCardFont;
+    FDataTunnels: string;   //有效通道
+    FDataItemNum: Integer;  //明细数量
     FFontHeadSAdjust: Integer;
     FFontHeadLAdjust: Integer;
     FFontDataLAdjust: Integer; //数据
@@ -661,10 +661,12 @@ begin
           nTruck := nLine.FTrucks[i];
           MidDrawText(nTruck.FTruck, 0, FFontDataLAdjust);
 
-          if i = nLine.FTrucks.Count - 1 then
+          if (i = nLine.FTrucks.Count - 1) or
+             ((FDataItemNum > 0) and (FDataItemNum <= i+1)) then
           begin
             Inc(nIdx);
             nCur := 0;
+            Break;
           end; //next line
         end;
 
@@ -1305,6 +1307,11 @@ begin
 
       ReadCardFont(FDataFont, nNode);
       //font node
+
+      nTmp := nNode.FindNode('itemnum');
+      if Assigned(nTmp) then
+           FDataItemNum := nTmp.ValueAsInteger
+      else FDataItemNum := 0;
 
       nTmp := nNode.FindNode('font_head_size_adjust');
       if Assigned(nTmp) then
