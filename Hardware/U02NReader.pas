@@ -215,7 +215,8 @@ begin
       nHost := FReaders[nIdx];
       if CompareText(nTunnel, nHost.FTunnel) = 0 then
       begin
-        if (nHost.FRealLabel = '') or (nHost.FRealLabel = nELabel) then
+        if (nHost.FRealLabel = '') or
+          (Pos(nHost.FRealLabel, nELabel)>0) then
         begin
           nHost.FELabel := nELabel;
           nHost.FELast := GetTickCount;

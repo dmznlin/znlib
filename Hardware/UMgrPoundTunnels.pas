@@ -36,6 +36,7 @@ type
     FProber: string;                 //控制器
     FReader: string;                 //磁卡读头
     FUserInput: Boolean;             //手工输入
+    FAutoWeight: Boolean;            //自动称重
 
     FFactoryID: string;              //工厂标识
     FCardInterval: Integer;          //读卡间隔
@@ -420,6 +421,11 @@ begin
       if Assigned(nTmp) then
            nTunnel.FAdditional := nTmp.ValueAsString
       else nTunnel.FAdditional := '';
+
+      nTmp := FindNode('AutoWeight');
+      if Assigned(nTmp) then
+           nTunnel.FAutoWeight := nTmp.ValueAsString = 'Y'
+      else nTunnel.FAutoWeight := False;
 
       nTmp := FindNode('camera');
       if Assigned(nTmp) then
