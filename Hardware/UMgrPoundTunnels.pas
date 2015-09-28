@@ -87,6 +87,7 @@ type
     FDataEnlarge: Single;            //放大倍数
     FMaxValue: Double;               //磅站上限
     FMaxValid: Double;               //上限取值
+    FMinValue: Double;               //磅站下限
 
     FHostIP: string;
     FHostPort: Integer;              //网络链路
@@ -352,6 +353,11 @@ begin
         nPort.FMaxValue := 0;
         nPort.FMaxValid := 0;
       end;
+
+      nTmp := FindNode('minval');
+      if Assigned(nTmp) and (nTmp.AttributeByName['enable'] = 'y') then
+           nPort.FMinValue := Float2Float(nTmp.ValueAsFloat, 100, False)
+      else nPort.FMinValue :=0;
 
       nTmp := FindNode('hostip');
       if Assigned(nTmp) then nPort.FHostIP := nTmp.ValueAsString;

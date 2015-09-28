@@ -20,7 +20,8 @@
 *.dataenlarge: 数据放大倍数,用于吨-公斤互换
 *.hostip: 网络通讯时主机
 *.hostport: 网络通讯时端口
-*.maxval: 地磅上限;valid为有限值;enable为是否启用(y/n)
+*.minval: 地磅下限;enable为是否启用(y/n)
+*.maxval: 地磅上限;valid为超上线时取值;enable为是否启用(y/n)
 
 节点: cameras->item
 *.host: 摄像机IP
@@ -63,7 +64,8 @@
 		<dataenlarge>0.001</dataenlarge>
         <hostip>127.0.0.1</hostip>
         <hostport>8000</hostport>
-        <maxval valid="80" enable="n">80</maxval>
+        <minval enable="n">80</minval>
+        <maxval enable="n" valid="80">80</maxval>
 	</item>
   </ports>
   <cameras>
