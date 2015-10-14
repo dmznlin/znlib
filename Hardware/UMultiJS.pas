@@ -39,6 +39,8 @@ type
     //车道编号
     FDelay: Word;
     //延迟时间
+    FGroup: string;
+    //通道分组
     FReader: string;
     //读头地址
     FTruck: array[0..cMultiJS_Truck - 1] of Char;
@@ -591,7 +593,7 @@ end;
 //Desc: 读取计数配置
 procedure TMultiJSManager.LoadFile(const nFile: string);
 var i,nIdx: Integer;
-    nNode,nTmp: TXmlNode;
+    nNode,nTmp,nTN: TXmlNode;
     nXML: TNativeXml;
     nHost: PMultiJSHost;
     nTunnel: PMultiJSTunnel;
@@ -659,6 +661,11 @@ begin
           FName := nNode.NodeByName('name').ValueAsString;
           FTunnel := nNode.NodeByName('tunnel').ValueAsInteger;
           FDelay := nNode.NodeByName('delay').ValueAsInteger;
+
+          nTN := nNode.FindNode('group');
+          if Assigned(nTN) then
+               FGroup := nTN.ValueAsString
+          else FGroup := '';
         end;
       end;
     end;
@@ -678,6 +685,8 @@ var i,nIdx: Integer;
     nPTunnel: PMultiJSTunnel;
 begin
   Result := False;
+  nHost := nil;
+  nTunnel := nil; 
 
   for i:=0 to FHosts.Count - 1 do
   begin
@@ -815,7 +824,9 @@ end;
 //Parm: 通道号
 //Desc: 停止nTunnel计数
 function TMultiJSManager.DelJS(const nTunnel: string; const nBuf: TList): Boolean;
-var nList: TList;
+var nStr: string;
+    i,nIdx: Integer;
+    nList: TList;
     nPH: PMultiJSHost;
     nPT: PMultiJSTunnel;
     nSend: PMultiJSDataSend;
@@ -857,16 +868,34 @@ begin
     end;
 
     Result := True;
+    if nPT.FGroup = '' then Exit;
+    nStr := nPT.FGroup;
+
+    for i:=0 to FHosts.Count - 1 do
+    begin
+      nPH := FHosts[i];
+      for nIdx:=0 to nPH.FTunnel.Count - 1 do
+      begin
+        nPT := nPH.FTunnel[nIdx];
+        //xxxxx
+
+        if (CompareText(nStr, nPT.FGroup) = 0) and Assigned(nPH.FReader) then
+          nPT.FIsRun := False;
+        //撤销同一分组的运行标记
+      end;
+    end;
   finally
     FSyncLock.Leave;
   end;
 end;
 
 //Date: 2013-07-17
-//Parm: 通道标识
+//Parm: 通道标识;锁定为查询;值
 //Desc: 判断nTunnel是否计数完毕
 function TMultiJSManager.IsJSRun(const nTunnel: string): Boolean;
-var nPH: PMultiJSHost;
+var nStr: string;
+    i,nIdx: Integer;
+    nPH: PMultiJSHost;
     nPT: PMultiJSTunnel;
 begin
   if not FEnableChain then
@@ -880,6 +909,29 @@ begin
     if GetTunnel(nTunnel, nPH, nPT) and Assigned(nPH.FReader) then
          Result := nPT.FIsRun
     else Result := False;
+
+    if Result or (not Assigned(nPT)) then Exit;
+    //run,or no tunnel
+
+    if nPT.FGroup = '' then
+      Exit; //no group    
+    nStr := nPT.FGroup;
+
+    for i:=0 to FHosts.Count - 1 do
+    begin
+      nPH := FHosts[i];
+      for nIdx:=0 to nPH.FTunnel.Count - 1 do
+      begin
+        nPT := nPH.FTunnel[nIdx];
+        if (CompareText(nStr, nPT.FGroup) = 0) and Assigned(nPH.FReader) then
+        begin
+          Result := nPT.FIsRun;
+          if Result then
+            Exit;
+          //run tunnel exists
+        end;
+      end;
+    end;
   finally
     FSyncLock.Leave;
   end;
