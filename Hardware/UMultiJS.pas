@@ -766,7 +766,8 @@ begin
           nPT.FLastBill := nBill;
 
           nPT.FDaiNum := nDaiNum;
-          nPT.FIsRun := False;
+          nPT.FIsRun := nPT.FGroup <> '';
+          //分组时立即更新运行标记
         //end; //同交货单可能为暂停
 
         nStr := IntToStr(nDaiNum);
