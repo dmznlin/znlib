@@ -105,6 +105,8 @@ type
     function TranslateCommCtrl(const nCtrl: TComponent): Boolean;
     function TranslateCollectionCtrl(const nCtrl: TComponent): Boolean;
     //翻译相关
+    function FixFormatText(const nNormal,nFixed,nTarget: string): string;
+    //混合内容
   public
     constructor Create;
     destructor Destroy; override;
@@ -117,7 +119,7 @@ type
     procedure TranslateAllCtrl(const nItem: TComponent);
     //翻译组件
     function GetTextByText(const nText: string; nFrom: string = '';
-     nTarget: string = ''): string;
+      nTarget: string = ''; const nStrict: Boolean = True): string;
     function GetTextByID(const nID: string; nTarget: string = ''): string;
     //特定翻译
     property XMLObj: TNativeXml read FXML;
@@ -415,6 +417,128 @@ begin
   end;
 end;
 
+//Date: 2015-11-09
+//Parm: 源字符串;格式化后;填充字符
+//Desc: 判断nFixed是否为nNormal执行Format函数后的内容
+function IsFormatText(var nNormal,nFixed: string; const nFill: Byte=0): Boolean;
+var nWNor,nWFix: WideString;
+    n,f,nInt,nLenN,nLenF,nKeep: Integer;
+begin
+  Result := False;
+  nWNor := nNormal;
+  nWFix := nFixed;
+
+  nLenN := Length(nWNor);
+  if nLenN < 1 then Exit;
+  nLenF := Length(nWFix);
+
+  nInt := 0;
+  //未匹配计数
+  nKeep := 0;
+  //连续匹配计数
+
+  n := 1;
+  f := 1;
+            
+  while n <= nLenN do //匹配源和目标串
+  begin
+    if f > nLenF then
+      f := 1;
+    //circle
+
+    while f <= nLenF do
+    begin
+      if (nWFix[f] = nWNor[n]) and ((nKeep > 0) or          
+         ((f=nLenF) and (n=nLenN)) or
+         ((f<nLenF) and (n<nLenN) and (nWFix[f+1] = nWNor[n+1]))) then
+      begin
+        Break;
+        {tip:
+         1.当前字符一致.
+         2.前面字符已一致(nKeep > 0)
+         3.最后一个字符.
+         4.后面字符一致.
+        }
+      end else
+      begin
+        Inc(f);
+        nKeep := 0;
+      end;
+    end;
+
+    if f > nLenF then
+    begin
+      Inc(n);
+      Inc(nInt);
+      
+      nKeep := 0;
+      Continue;
+    end; //源没有匹配成功
+
+    if nWFix[f] = nWNor[n] then
+    begin
+      nWFix[f] := WideChar(nFill);
+      nWNor[n] := WideChar(nFill);
+
+      Inc(f);
+      Inc(n);
+      Inc(nKeep);
+    end;
+  end;
+
+  Result := nInt / nLenN < 0.5;
+  //匹配不成功小于50%
+
+  if Result then
+  begin
+    nNormal := nWNor;
+    nFixed := nWFix;
+  end;
+end;
+
+//Date: 2015-11-09
+//Parm: 源字符串;格式化后;目标字符串
+//Desc: 替换nTarget中nNormal的内容为nFixed
+function TMultiLangManager.FixFormatText(const nNormal,nFixed,nTarget: string): string;
+var nIdx: Integer;
+    nListA,nListB: TStrings;
+begin
+  nListA := TStringList.Create;
+  nListB := TStringList.Create;
+  try
+    Result := nTarget;
+    nListA.Text := nNormal;
+    nListB.Text := nFixed;
+
+    for nIdx:=nListA.Count - 1 downto 0 do
+    begin
+      if Trim(nListA[nIdx]) = '' then
+      begin
+        nListA.Delete(nIdx);
+        Continue;
+      end;
+    end;
+
+    for nIdx:=nListB.Count - 1 downto 0 do
+    begin
+      if Trim(nListB[nIdx]) = '' then
+      begin
+        nListB.Delete(nIdx);
+        Continue;
+      end;
+    end;
+
+    for nIdx:=0 to nListA.Count - 1 do
+    begin
+      if nIdx >= nListB.Count then Break;
+      Result := StringReplace(Result, nListA[nIdx], nListB[nIdx], [rfIgnoreCase]);
+    end;
+  finally
+    nListA.Free;
+    nListB.Free;
+  end;
+end;
+
 //Desc: 获取nID对应的nTarget语言
 function TMultiLangManager.GetTextByID(const nID: string; nTarget: string): string;
 var nNode: TXmlNode;
@@ -441,11 +565,11 @@ begin
 end;
 
 //Date: 2010-4-22
-//Parm: 内容;当前;翻译为
+//Parm: 内容;当前;翻译为;严格匹配
 //Desc: 将nForm.nText翻译为指定的nTarget.nText
 function TMultiLangManager.GetTextByText(const nText: string;
- nFrom,nTarget: string): string;
-var nTrim: string;
+ nFrom,nTarget: string; const nStrict: Boolean): string;
+var nTrim,nS,nT: string;
     i,nCount: integer;
     nNode,nTmp: TXmlNode;
 begin
@@ -475,6 +599,30 @@ begin
       nNode := nNode.FindNode(nTarget);
       if Assigned(nNode) then
         Result := RegularValue(nNode.ValueAsString, False);
+      Exit;
+    end;
+  end;
+
+  if not nStrict then //非严格匹配: AAA%sBBB 和 AAA..BBB
+  begin
+    for i:=0 to nCount do
+    begin
+      nNode := FNowNode.Nodes[i];
+      nTmp := nNode.FindNode(nFrom);
+      if not Assigned(nTmp) then Continue;
+      
+      nT := nTrim;
+      nS := nTmp.ValueAsString;
+      if not IsFormatText(nS, nT, 10) then Continue;
+      //模糊匹配不成功
+
+      nNode := nNode.FindNode(nTarget);
+      if Assigned(nNode) then
+      begin
+        Result := FixFormatText(nS, nT, nNode.ValueAsString);
+        Result := RegularValue(Result, False);
+      end;
+
       Exit;
     end;
   end;
@@ -898,7 +1046,7 @@ begin
 end;
 
 initialization
-  gMultiLangManager := TMultiLangManager.Create;
+  gMultiLangManager := nil;
 finalization
   FreeAndNil(gMultiLangManager);
 end.
