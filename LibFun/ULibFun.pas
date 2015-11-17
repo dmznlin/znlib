@@ -694,21 +694,30 @@ end;
 function Float2PInt(const nValue: Double; const nPrecision: Integer;
  const nRound: Boolean): Int64;
 var nStr: string;
-    nPos: integer;
+    nInt: Integer;
 begin
-  nStr := FloatToStr(nValue * nPrecision);
-  nPos := Pos('.', nStr);
+  nInt := Length(IntToStr(nPrecision)) - 1;
+  //放大倍数(10,100)包含0的个数
 
-  if nPos > 1 then
+  nStr := '#.' + StringOfChar('0', nInt + 2);
+  //多补两位,防止函数自动四舍五入
+
+  nStr := FormatFloat(nStr, StrToFloat(FloatToStr(nValue)));
+  //防止浮点运算的误差
+
+  if nStr = '' then
+    nStr := '0';
+  Result := Trunc(StrToFloat(nStr) * nPrecision);
+
+  if nRound then
   begin
-    Result := StrToInt64(Copy(nStr, 1, nPos - 1));
-    if nRound then
-    begin
-      System.Delete(nStr, 1, nPos);
-      nStr := Copy(nStr, 1, 1);
-      if StrToInt(nStr) >= 5 then Inc(Result);
-    end;
-  end else Result := StrToInt64(nStr);
+    nStr := Copy(nStr, Length(nStr)-1, 2);
+    if StrToInt(nStr) < 50 then Exit;
+
+    if Result >= 0 then
+         Inc(Result)
+    else Dec(Result);
+  end;
 end;
 
 //Date: 2010-4-21

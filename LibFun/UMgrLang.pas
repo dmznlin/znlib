@@ -105,8 +105,6 @@ type
     function TranslateCommCtrl(const nCtrl: TComponent): Boolean;
     function TranslateCollectionCtrl(const nCtrl: TComponent): Boolean;
     //翻译相关
-    function FixFormatText(const nNormal,nFixed,nTarget: string): string;
-    //混合内容
   public
     constructor Create;
     destructor Destroy; override;
@@ -122,6 +120,9 @@ type
       nTarget: string = ''; const nStrict: Boolean = True): string;
     function GetTextByID(const nID: string; nTarget: string = ''): string;
     //特定翻译
+    class function EncodeText(const nValue: string;
+      const nEncode: Boolean): string;
+    //字符编码
     property XMLObj: TNativeXml read FXML;
     property LangFile: string read FLangFile;
     property LangItems: TDynamicLangItem read FLangItems;
@@ -391,6 +392,8 @@ begin
   end;
 end;
 
+//Date: 2015-11-11
+//Parm: 字符串;编码/解码
 //Desc: 对nValue进行编码处理,过滤回车符或其它特殊字符
 function RegularValue(const nValue: string; const nEncode: Boolean): string;
 begin
@@ -499,7 +502,7 @@ end;
 //Date: 2015-11-09
 //Parm: 源字符串;格式化后;目标字符串
 //Desc: 替换nTarget中nNormal的内容为nFixed
-function TMultiLangManager.FixFormatText(const nNormal,nFixed,nTarget: string): string;
+function FixFormatText(const nNormal,nFixed,nTarget: string): string;
 var nIdx: Integer;
     nListA,nListB: TStrings;
 begin
@@ -650,6 +653,13 @@ begin
       nNode.NodeNew(FLangItems[nIdx].FLangID).ValueAsString := RegularValue(nLang, True);
     FHasChanged := True;
   end;
+end;
+
+//Desc: 格式化字符串
+class function TMultiLangManager.EncodeText(const nValue: string;
+  const nEncode: Boolean): string;
+begin
+  Result := RegularValue(nValue, nEncode);
 end;
 
 //------------------------------------------------------------------------------
@@ -1014,7 +1024,7 @@ begin
     nProp := FPropItems[i].FProperty;
     nObj := FindPropObj(nCtrl, nProp, False);
     if not Assigned(nObj) then Continue;
-    
+
     if not (nObj is TCollection) then Continue;
     nCln := nObj as TCollection;
 
