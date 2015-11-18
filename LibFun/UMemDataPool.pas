@@ -16,7 +16,7 @@ unit UMemDataPool;
 interface
 
 uses
-  Windows, Classes, SysUtils, SyncObjs, UObjectStatus;
+  Windows, Classes, SysUtils, SyncObjs, UBaseObject;
 
 type
   TMPDataNew = procedure (const nFlag: string; const nType: Word;
@@ -56,7 +56,7 @@ type
 
   TMPDataUsedItems = array of TMPDataUsed;
 
-  TMemDataManager = class(TStatusObjectBase)
+  TMemDataManager = class(TCommonObjectBase)
   private
     FLockCounter: Int64;
     //Ëø¶¨¼ÆÊý
@@ -103,24 +103,17 @@ implementation
 
 constructor TMemDataManager.Create;
 begin
+  inherited;
   FLockCounter := 0;
   FSerialBase := 0;
-  SetLength(FDataUsed, 0);
-  
+
+  SetLength(FDataUsed, 0);  
   FDataList := TList.Create;
   FSyncLock := TCriticalSection.Create;
-
-  if Assigned(gObjectStatusManager) then
-    gObjectStatusManager.AddObject(Self);
-  //xxxxx
 end;
 
 destructor TMemDataManager.Destroy;
 begin
-  if Assigned(gObjectStatusManager) then
-    gObjectStatusManager.DelObject(Self);
-  //xxxxx
-
   ClearList(True);
   FSyncLock.Free;
   inherited;

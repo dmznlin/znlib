@@ -15,7 +15,7 @@ interface
 
 uses
   ActiveX, ADODB, Classes, DB, Windows, SysUtils, SyncObjs, UMgrHashDict,
-  UWaitItem, USysLoger, UObjectStatus;
+  UWaitItem, USysLoger, UBaseObject;
 
 const
   cErr_GetConn_NoParam     = $0001;            //无连接参数
@@ -81,7 +81,7 @@ type
     const nData: Pointer): Boolean of object;
   //回调函数
 
-  TDBConnManager = class(TStatusObjectBase)
+  TDBConnManager = class(TCommonObjectBase)
   private
     FWorkers: TList;
     //工作对象
@@ -185,6 +185,7 @@ end;
 
 constructor TDBConnManager.Create;
 begin
+  inherited;
   FConnClosing := cFalse;
   FAllowedRequest := cTrue;
 
@@ -196,10 +197,6 @@ begin
   
   FParams := THashDictionary.Create(3);
   FParams.OnDataFree := DoFreeDict;
-
-  if Assigned(gObjectStatusManager) then
-    gObjectStatusManager.AddObject(Self);
-  //xxxxx
 end;
 
 destructor TDBConnManager.Destroy;
@@ -207,10 +204,6 @@ begin
   ClearConnItems(True);
   ClearWorkers(True);
 
-  if Assigned(gObjectStatusManager) then
-    gObjectStatusManager.DelObject(Self);
-  //xxxxx
-  
   FParams.Free;
   FSyncLock.Free;
   inherited;

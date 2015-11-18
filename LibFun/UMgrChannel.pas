@@ -8,7 +8,7 @@ interface
 
 uses
   Windows, Classes, SysUtils, SyncObjs, uROClient, uROWinInetHttpChannel,
-  uROBinMessage, UObjectStatus;
+  uROBinMessage, UBaseObject;
 
 type
   PChannelItem = ^TChannelItem;
@@ -21,7 +21,7 @@ type
     FHttp: TROWinInetHTTPChannel;  //通道对象
   end;
 
-  TChannelManager = class(TStatusObjectBase)
+  TChannelManager = class(TCommonObjectBase)
   private
     FChannels: TList;
     //通道列表
@@ -66,6 +66,7 @@ const
 
 constructor TChannelManager.Create;
 begin
+  inherited;
   FMaxCount := 5;
   FNumLocked := 0;
 
@@ -74,10 +75,6 @@ begin
   
   FChannels := TList.Create;
   FLock := TCriticalSection.Create;
-
-  if Assigned(gObjectStatusManager) then
-    gObjectStatusManager.AddObject(Self);
-  //xxxxx
 end;
 
 destructor TChannelManager.Destroy;
@@ -86,10 +83,6 @@ begin
   ClearChannel;
   FChannels.Free;
 
-  if Assigned(gObjectStatusManager) then
-    gObjectStatusManager.DelObject(Self);
-  //xxxxx
-  
   FLock.Free;
   inherited;
 end;
