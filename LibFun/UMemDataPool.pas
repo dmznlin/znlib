@@ -25,6 +25,8 @@ type
   TMPDataDispose = procedure (const nFlag: string; const nType: Word;
     const nData: Pointer);
   //释放内存回调
+  TMPDataEnumCallback = function (const nData: Pointer; const nResult: TList): Boolean;
+  //数据枚举回调
 
   PMPDataMain = ^TMPDataMain;
   TMPDataMain = record
@@ -91,6 +93,9 @@ type
     function LockData(const nFlag: string): Pointer; overload;
     procedure UnLockData(const nData: Pointer);
     //锁定释放
+    procedure EnumData(const nType: Word; const nFlag: string;
+      const nCallback: TMPDataEnumCallback; const nResult: TList = nil);
+    //枚举数据
     procedure GetStatus(const nList: TStrings); override;
     //获取状态
   end;
@@ -390,8 +395,11 @@ end;
 procedure TMemDataManager.UnLockData(const nData: Pointer);
 var nIdx: Integer;
 begin
-  FSyncLock.Enter;
+  if Assigned(nData) then
   try
+    FSyncLock.Enter;
+    //locked
+    
     for nIdx:=Low(FDataUsed) to High(FDataUsed) do
      with FDataUsed[nIdx] do
       if FUsed and (FItem.FData = nData) then
@@ -402,6 +410,35 @@ begin
         Inc(FMain.FNumFree);
         Exit;
       end;
+  finally
+    FSyncLock.Leave;
+  end;
+end;
+
+//Date: 2015-11-19
+//Parm: 类型编号;类型标识;回调;结果集
+//Desc: 枚举编号为nType,或标识为nFlag的列表
+procedure TMemDataManager.EnumData(const nType: Word; const nFlag: string; 
+  const nCallback: TMPDataEnumCallback; const nResult: TList);
+var nIdx: Integer;
+    nItem: PMPDataItem;
+begin
+  FSyncLock.Enter;
+  try
+    if nType > 0 then
+      nIdx := FindDataMain(nType) else
+    if nFlag <> '' then
+         nIdx := FindDataMain(0, nFlag)
+    else nIdx := -1;
+    if nIdx < 0 then Exit;
+
+    nItem := PMPDataMain(FDataList[nIdx]).FDataFirst;
+    while Assigned(nItem) do
+    begin
+      if nItem.FUsed and (not nCallback(nItem.FData, nResult)) then
+        Break;
+      nItem := nItem.FNext;
+    end;
   finally
     FSyncLock.Leave;
   end;

@@ -207,8 +207,8 @@ var nTask: PTaskItem;
 begin
   FSyncLock.Enter;
   try
-    Result := FIDBase;
     Inc(FIDBase);
+    Result := FIDBase;
     nTask := GetTask;
     
     if not Assigned(nTask) then

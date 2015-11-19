@@ -1,6 +1,10 @@
 {*******************************************************************************
   作者: dmzn@163.com 2015-08-06
   描述: 注册管理系统对象的运行状态
+
+  备注:
+  *.TCommonObjectBase.DataS,DataP属性,调用时需要用LockPropertyData锁定,避免多
+    线程读写时有脏数据.
 *******************************************************************************}
 unit UBaseObject;
 
@@ -10,24 +14,25 @@ uses
   Windows, Classes, SysUtils, SyncObjs;
 
 type
+  TCommonObjectDataS = array [0..2] of string;
+  TCommonObjectDataP = array [0..2] of Pointer;
+
   TCommonObjectBase = class(TObject)
-  private
-    FStatusA: array [0..2] of string;
-    FStatusB: array [0..2] of Pointer;
-    //状态数据
   protected
+    FDataS: TCommonObjectDataS;
+    FDataP: TCommonObjectDataP;
+    //状态数据
     procedure GetStatus(const nList: TStrings); virtual; abstract;
     //对象状态
   public
     constructor Create;
     destructor Destroy; override;
     //创建释放
-    property StatusA0: string read FStatusA[0] write FStatusA[0];
-    property StatusA1: string read FStatusA[1] write FStatusA[1];
-    property StatusA2: string read FStatusA[2] write FStatusA[2];
-    property StatusB0: Pointer read FStatusB[0] write FStatusB[0];
-    property StatusB1: Pointer read FStatusB[1] write FStatusB[1];
-    property StatusB2: Pointer read FStatusB[2] write FStatusB[2];
+    procedure LockPropertyData; virtual;
+    procedure UnlockProperty; virtual;
+    //同步锁定
+    property DataS: TCommonObjectDataS read FDataS;
+    property DataP: TCommonObjectDataP read FDataP;
     //属性相关
   end;
 
@@ -66,6 +71,16 @@ begin
   if Assigned(gCommonObjectManager) then
     gCommonObjectManager.DelObject(Self);
   inherited;
+end;
+
+procedure TCommonObjectBase.LockPropertyData;
+begin
+
+end;
+
+procedure TCommonObjectBase.UnlockProperty;
+begin
+
 end;
 
 //------------------------------------------------------------------------------
