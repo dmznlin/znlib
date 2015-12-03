@@ -166,6 +166,8 @@ type
     //主机列表
     FFileName: string;
     //配置文件
+    FLogCtrlFrame: Boolean;
+    //记录控制帧
     FSyncLock: TCriticalSection;
     //同步锁定
     FChangeThread: TMultiJSEvent;
@@ -213,6 +215,7 @@ type
     property SaveDataProc: TMultiJSProc read FSaveDataProc write FSaveDataProc;
     property SaveDataEvent: TMultiJSEvent read FSaveDataEvent write FSaveDataEvent;
     property GetTruckProc: TMultiJSGetTruck read FGetTruck write FGetTruck;
+    property LogControlFrame: Boolean read FLogCtrlFrame write FLogCtrlFrame;
     //属性相关
   end;
 
@@ -408,6 +411,9 @@ var nBuf: TIdBytes;
 begin
   nBuf := RawToBytes(nData^, cSizeDataSend);
   FClient.Socket.Write(nBuf);
+
+  if (nData.FType = cFrame_Control) and FOwner.FLogCtrlFrame then
+    WriteLog(ToHex(nBuf));
   if nData.FType <> cFrame_Query then Exit;
 
   nSize := cSizeDataRecv - (cMultiJS_Tunnel - FHost.FTunnelNum) * cSizePeerRecv;
@@ -513,6 +519,7 @@ begin
   FEnableQuery := False;
   FEnableCount := False;
   FEnableChain := True;
+  FLogCtrlFrame := False;
 
   FHosts := TList.Create;
   FSyncLock := TCriticalSection.Create;
