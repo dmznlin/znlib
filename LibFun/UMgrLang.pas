@@ -170,9 +170,7 @@ var nRID: string;
 begin
   with gMultiLangManager do
   try
-    FHasChanged := False;
-    nRID := SectionID;
-
+    nRID := SectionID; 
     if nSecton <> '' then
       SectionID := nSecton;
     //xxxxx
@@ -193,10 +191,6 @@ begin
 
       NewLangItem(nID, nStr);
     end;
-
-    if FHasChanged then
-      SaveLangFile(FLangFile);
-    //xxxxx
   finally
     if nRestore and (nRID <> '') then SectionID := nRID;
   end;

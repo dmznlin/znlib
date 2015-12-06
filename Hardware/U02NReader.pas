@@ -8,8 +8,7 @@ interface
 
 uses
   Windows, Classes, SysUtils, SyncObjs, UWaitItem, IdComponent, IdUDPBase,
-  IdGlobal, IdUDPServer, IdSocketHandle,NativeXml, ULibFun, USmallFunc,
-  USysLoger;
+  IdGlobal, IdUDPServer, IdSocketHandle, NativeXml, ULibFun, USysLoger;
 
 type
   TReaderType = (rtOnce, rtKeep);
@@ -92,6 +91,8 @@ type
     procedure StopReader;
     procedure StopMe(const nFree: Boolean = True);
     //启停读头
+    procedure SetReaderCard(const nReader,nCard: string);
+    //发送卡号
     procedure SetRealELabel(const nTunnel,nELabel: string);
     procedure ActiveELabel(const nTunnel,nELabel: string);
     //激活电子签
@@ -198,6 +199,14 @@ procedure T02NReader.StopReader;
 begin
   FServer.Active := False;
   FWaiter.Interval := INFINITE;
+end;
+
+//Date: 2015-12-05
+//Parm: 读头地址;磁卡号
+//Desc: 向nReader发送卡号nCard,触发刷卡业务
+procedure T02NReader.SetReaderCard(const nReader, nCard: string);
+begin
+  GetACard(nReader, nCard);
 end;
 
 //Date: 2015-01-11
@@ -560,6 +569,26 @@ begin
   finally
     FSyncLock.Leave;
   end;
+end;
+
+//Date: 2012-4-22
+//Parm: 16位卡号数据
+//Desc: 格式化nCard为标准卡号
+function ParseCardNO(const nCard: string; const nHex: Boolean): string;
+var nInt: Int64;
+    nIdx: Integer;
+begin
+  if nHex then
+  begin
+    Result := '';
+    for nIdx:=1 to Length(nCard) do
+      Result := Result + IntToHex(Ord(nCard[nIdx]), 2);
+    //xxxxx
+  end else Result := nCard;
+
+  nInt := StrToInt64('$' + Result);
+  Result := IntToStr(nInt);
+  Result := StringOfChar('0', 12 - Length(Result)) + Result;
 end;
 
 procedure T02NReader.OnUDPRead(AThread: TIdUDPListenerThread;

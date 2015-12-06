@@ -68,6 +68,11 @@ type
     FStatusI : TProberIOAddress;     //输入状态
     FStatusO : TProberIOAddress;     //输出状态
     FStatusL : Int64;                //状态时间
+
+    FInSignalOn: Byte;
+    FInSignalOff: Byte;              //输入信号
+    FOutSignalOn: Byte;
+    FOutSignalOff: Byte;             //输出信号
     FEnable  : Boolean;              //是否启用
   end;  
 
@@ -77,7 +82,10 @@ type
     FName    : string;               //名称
     FHost    : PProberHost;          //所在主机
     FIn      : TProberIOAddress;     //输入地址
+
     FOut     : TProberIOAddress;     //输出地址
+    FAutoOFF : Integer;              //自动关闭
+    FLastOn  : Int64;                //上次打开
     FEnable  : Boolean;              //是否启用
   end;
 
@@ -135,11 +143,6 @@ type
   private
     FRetry: Byte;
     //重试次数
-    FInSignalOn: Byte;
-    FInSignalOff: Byte;
-    FOutSignalOn: Byte;
-    FOutSignalOff: Byte;
-    //输入输出信号
     FCommand: TList;
     //命令列表
     FHosts: TProberHosts;
@@ -358,7 +361,7 @@ end;
 procedure TProberManager.LoadConfig(const nFile: string);
 var nXML: TNativeXml;
     nHost: PProberHost;
-    nNode,nTmp: TXmlNode;
+    nRoot,nNode,nTmp: TXmlNode;
     i,nIdx,nNum,nHostI: Integer;
 begin
   SetLength(FHosts, 0);
@@ -374,10 +377,10 @@ begin
 
     for nIdx:=0 to nXML.Root.NodeCount - 1 do
     try
-      nNode := nXML.Root.Nodes[nIdx];
+      nRoot := nXML.Root.Nodes[nIdx];
       //prober node
 
-      with FHosts[nHostI],nNode do
+      with FHosts[nHostI],nRoot do
       begin
         FID    := AttributeByName['id'];
         FName  := AttributeByName['name'];
@@ -387,37 +390,37 @@ begin
 
         FStatusL := 0;
         //最后一次查询状态时间,超时系统会不认可当前状态
+
+        nTmp := nRoot.FindNode('signal_in');
+        if Assigned(nTmp) then
+        begin
+          FInSignalOn := StrToInt(nTmp.AttributeByName['on']);
+          FInSignalOff := StrToInt(nTmp.AttributeByName['off']);
+        end else
+        begin
+          FInSignalOn := $00;
+          FInSignalOff := $01;
+        end;
+
+        nTmp := nRoot.FindNode('signal_out');
+        if Assigned(nTmp) then
+        begin
+          FOutSignalOn := StrToInt(nTmp.AttributeByName['on']);
+          FOutSignalOff := StrToInt(nTmp.AttributeByName['off']);
+        end else
+        begin
+          FOutSignalOn := $01;
+          FOutSignalOff := $02;
+        end;
       end;
 
-      nTmp := nNode.FindNode('signal_in');
-      if Assigned(nTmp) then
-      begin
-        FInSignalOn := StrToInt(nTmp.AttributeByName['on']);
-        FInSignalOff := StrToInt(nTmp.AttributeByName['off']);
-      end else
-      begin
-        FInSignalOn := $00;
-        FInSignalOff := $01;
-      end;
-
-      nTmp := nNode.FindNode('signal_out');
-      if Assigned(nTmp) then
-      begin
-        FOutSignalOn := StrToInt(nTmp.AttributeByName['on']);
-        FOutSignalOff := StrToInt(nTmp.AttributeByName['off']);
-      end else
-      begin
-        FOutSignalOn := $01;
-        FOutSignalOff := $02;
-      end;
-
-      nTmp := nNode.FindNode('tunnels');
-      if not Assigned(nTmp) then Continue;
+      nRoot := nRoot.FindNode('tunnels');
+      if not Assigned(nRoot) then Continue;
       nHost := @FHosts[nHostI];
 
-      for i:=0 to nTmp.NodeCount - 1 do
+      for i:=0 to nRoot.NodeCount - 1 do
       begin
-        nNode := nTmp.Nodes[i];
+        nNode := nRoot.Nodes[i];
         nNum := Length(FTunnels);
         SetLength(FTunnels, nNum + 1);
 
@@ -430,8 +433,14 @@ begin
           SplitAddr(FIn, NodeByName('in').ValueAsString);
           SplitAddr(FOut, NodeByName('out').ValueAsString);
 
-          nNode := nNode.FindNode('enable');
-          FEnable := (not Assigned(nNode)) or (nNode.ValueAsString <> '0');
+          nTmp := nNode.FindNode('enable');
+          FEnable := (not Assigned(nTmp)) or (nTmp.ValueAsString <> '0');
+          FLastOn := 0;
+
+          nTmp := nNode.FindNode('auto_off');           
+          if Assigned(nTmp) then
+               FAutoOFF := nTmp.ValueAsInteger
+          else FAutoOFF := 0;
         end;
       end
     finally
@@ -507,8 +516,8 @@ begin
       FType := cProber_Frame_RelaysOC;
 
       if nOC then
-           FExtend := FOutSignalOn
-      else FExtend := FOutSignalOff;
+           FExtend := nPTunnel.FHost.FOutSignalOn
+      else FExtend := nPTunnel.FHost.FOutSignalOff;
     end;
 
     j := 0;
@@ -578,8 +587,8 @@ var nIdx: Integer;
 begin
   for nIdx:=Low(TProberIOAddress) to High(TProberIOAddress) do
   begin
-    nIn[nIdx]  := FInSignalOn;
-    nOut[nIdx] := FInSignalOn;
+    nIn[nIdx]  := nHost.FInSignalOn;
+    nOut[nIdx] := nHost.FInSignalOn;
   end;
 
   for nIdx:=Low(FHosts) to High(FHosts) do
@@ -643,7 +652,7 @@ begin
     if nPT.FIn[nIdx] = cProber_NullASCII then Continue;
     //invalid addr
 
-    if nPT.FHost.FStatusI[nPT.FIn[nIdx] - 1] = FInSignalOn then Exit;
+    if nPT.FHost.FStatusI[nPT.FIn[nIdx] - 1] = nPT.FHost.FInSignalOn then Exit;
     //某路输入有信号,认为车辆未停妥
   end;
 
@@ -723,40 +732,49 @@ procedure TProberThread.Execute;
 var nIdx: Integer;
 begin
   while not Terminated do
-  begin
+  try
     FNowClient := nil;
     //init
+    
+    FWaiter.EnterWait;
+    if Terminated then Exit;
 
-    try
-      FWaiter.EnterWait;
-      if Terminated then Exit;
-
-      with FOwner do
+    with FOwner do
+    begin
+      for nIdx:=Low(FTunnels) to High(FTunnels) do
       begin
-        FSyncLock.Enter;
-        try
-          ClearList(FBuffer);
-          for nIdx:=0 to FCommand.Count - 1 do
-            FBuffer.Add(FCommand[nIdx]);
-          FCommand.Clear;
-        finally
-          FSyncLock.Leave;
-        end;
-
-        for nIdx:=Low(FOwner.FHosts) to High(FOwner.FHosts) do
+        with FTunnels[nIdx] do
+        if (FAutoOFF > 0) and (FLastOn > 0) and
+           (GetTickCount - FLastOn >= FAutoOFF) then
         begin
-          if Terminated then Exit;
-          FNowClient := GetClient(@FOwner.FHosts[nIdx]);
-          DoExecute(@FOwner.FHosts[nIdx]);
+          FLastOn := 0;
+          TunnelOC(FTunnels[nIdx].FID, False);
         end;
+      end; //auto off tunnel-out
+
+      FSyncLock.Enter;
+      try
+        ClearList(FBuffer);
+        for nIdx:=0 to FCommand.Count - 1 do
+          FBuffer.Add(FCommand[nIdx]);
+        FCommand.Clear;
+      finally
+        FSyncLock.Leave;
       end;
-    except
-      on E:Exception do
+
+      for nIdx:=Low(FHosts) to High(FHosts) do
       begin
-        if Assigned(FNowClient) then
-          WriteLog(Format('Host:[ %s ] %s', [FNowClient.Host, E.Message]));
-        //xxxxx
+        if Terminated then Exit;
+        FNowClient := GetClient(@FOwner.FHosts[nIdx]);
+        DoExecute(@FOwner.FHosts[nIdx]);
       end;
+    end;
+  except
+    on E:Exception do
+    begin
+      if Assigned(FNowClient) then
+           WriteLog(Format('Host:[ %s ] %s', [FNowClient.Host, E.Message]))
+      else WriteLog(E.Message);
     end;
   end;
 end;
@@ -828,8 +846,17 @@ begin
 
     nStr := SendData(nHost, nBuf, cSize_Prober_Control);
     if nStr <> '' then
+    begin
       WriteLog(nStr);
-    //xxxxx
+      Exit;
+    end;
+
+    if nCmd.FCommand = cProber_Frame_RelaysOC then
+    begin
+      if PProberFrameControl(nCmd.FData).FHeader.FExtend = nCmd.FTunnel.FHost.FOutSignalOn then
+        nCmd.FTunnel.FLastOn := GetTickCount;
+      //通道输出端最后打开时间
+    end;
   end;
 end;
 

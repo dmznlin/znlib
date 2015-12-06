@@ -1,18 +1,30 @@
 <?xml version="1.0" encoding="gb2312"?>
 <!--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+节点: config
+*.thread: 线程个数(1-10)
+*.enable: N,关闭;其它开启.
+
 节点: readers.reader
+*.enable: N,关闭;其它开启.
 *.id: 节点标识
 *.ip,port: 读卡器地址
 *.tunnel: 通道号
-*.enable: N,关闭;其它开启.
+*.virtual: Y,虚拟读头;其它不虚拟
+*.reader: 读头标识
+*.type: 900,900m远距离;02n,现场近距离 
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-->
 <HY_RFID102>
+  <config>
+    <thread>3</thread>
+    <enable>Y</enable>
+  </config>
   <readers>
     <reader id="01001">
+      <enable>Y</enable>
       <ip>192.168.0.201</ip>
       <port>6000</port>
       <tunnel>FH001</tunnel>
-      <enable>Y</enable>
+      <virtual reader="" type="900">N</virtual>
     </reader>
   </readers>
 </HY_RFID102>

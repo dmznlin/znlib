@@ -10,6 +10,7 @@
 *.in: 输入通道编号(1-8)
 *.out: 输出通道编号(1-8)
 *.enable: 0为关闭
+*.auto_off: 输出自动关闭
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-->
 <probers>
   <prober id="N1" name="一期1号磅">
@@ -22,6 +23,7 @@
       <tunnel id="T1" name="1号进">
         <in>1</in>
         <out>1</out>
+        <auto_off>5000</auto_off>
       </tunnel>
     </tunnels>
   </prober>
