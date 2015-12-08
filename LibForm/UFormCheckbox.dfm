@@ -3,7 +3,7 @@ object fFormCheckbox: TfFormCheckbox
   Top = 289
   BorderIcons = [biSystemMenu]
   BorderStyle = bsSingle
-  ClientHeight = 99
+  ClientHeight = 107
   ClientWidth = 287
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
@@ -13,23 +13,28 @@ object fFormCheckbox: TfFormCheckbox
   Font.Style = []
   OldCreateOrder = False
   Position = poDesktopCenter
+  DesignSize = (
+    287
+    107)
   PixelsPerInch = 96
   TextHeight = 12
   object Label1: TLabel
     Left = 12
     Top = 10
     Width = 265
-    Height = 19
+    Height = 21
+    Anchors = [akLeft, akTop, akRight]
     AutoSize = False
     Caption = #25552#31034'1:'
-    Layout = tlBottom
+    Layout = tlCenter
     WordWrap = True
   end
   object BtnOK: TButton
     Left = 135
-    Top = 66
+    Top = 74
     Width = 65
     Height = 22
+    Anchors = [akTop, akRight]
     Caption = #30830#23450
     Default = True
     ModalResult = 1
@@ -37,9 +42,10 @@ object fFormCheckbox: TfFormCheckbox
   end
   object BtnExit: TButton
     Left = 212
-    Top = 66
+    Top = 74
     Width = 65
     Height = 22
+    Anchors = [akTop, akRight]
     Cancel = True
     Caption = #21462#28040
     ModalResult = 2

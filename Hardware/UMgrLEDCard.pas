@@ -582,8 +582,8 @@ begin
     begin
       nLine := Lines[nIdx];
 
-      if (not nLine.FIsValid) or
-        ((Length(FDataTunnels)>0) and (Pos(nLine.FLineID, FDataTunnels)<1)) then
+      if (not nLine.FIsValid) or ((Length(FDataTunnels) > 0) and
+         (Pos(nLine.FLineID, FDataTunnels) < 1)) then
       begin
         Inc(nIdx); Continue;
       end;

@@ -75,7 +75,8 @@ begin
     Label1.Caption := nHint1;
     CheckBox1.Caption := nHint2;
     CheckBox1.Left := Label1.Left + 4;
-    
+    CheckBox1.Width := Canvas.TextWidth(nHint2) + 32;
+
     nNum := Canvas.TextWidth(nHint1);
     if (nNum mod Label1.Width) = 0 then
          nNum := nNum div Label1.Width
@@ -85,15 +86,31 @@ begin
     Label1.Height := nNum * (Canvas.TextHeight('Èó') + 5);
     CheckBox1.Top := Label1.Top + Label1.Height + 5;
     BtnOK.Top := CheckBox1.Top + CheckBox1.Height + 12;
+
+    nNum := CheckBox1.Width + Label1.Left * 2;
+    if nNum > ClientWidth then
+      ClientWidth := nNum;
+    //xxxxx
   end else
   begin
     RadioYes.Left := Label1.Left;
     RadioYes.Caption := nHint1;
+    RadioYes.Width := Canvas.TextWidth(nHint1) + 32;
     RadioNo.Top := RadioYes.Top + RadioYes.Height + 5;
 
     RadioNo.Left := Label1.Left;
     RadioNo.Caption := nHint2;
+    RadioNo.Width := Canvas.TextWidth(nHint2) + 32;
     BtnOK.Top := RadioNo.Top + RadioNo.Height + 5;
+
+    if RadioYes.Width > RadioNo.Width then
+         nNum := RadioYes.Width
+    else nNum := RadioNo.Width;
+
+    nNum := nNum + Label1.Left * 2;
+    if nNum > ClientWidth then
+      ClientWidth := nNum;
+    //xxxxx
   end;
 
   BtnExit.Top := BtnOK.Top;

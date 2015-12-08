@@ -35,7 +35,10 @@ type
     FVReader: string;          //读头标识
     FVType  : THYReaderVType;  //虚拟类型
 
-    FClient : TIdTCPClient;    //通信方式
+    FKeepOnce: Integer;        //单次保持
+    FKeepPeer: Boolean;        //保持模式
+    FKeepLast: Int64;          //上次活动
+    FClient : TIdTCPClient;    //通信链路
   end;
 
   THYReaderThreadType = (ttAll, ttActive);
@@ -64,6 +67,8 @@ type
     //扫描可用
     function ReadCard(const nReader: PHYReaderItem): Boolean;
     //读卡片
+    function IsCardValid(const nCard: string): Boolean;
+    //校验卡号
   public
     constructor Create(AOwner: THYReaderManager; AType: THYReaderThreadType);
     destructor Destroy; override;
@@ -80,6 +85,7 @@ type
   private
     FEnable: Boolean;
     //是否启用
+    FMonitorCount: Integer;
     FThreadCount: Integer;
     //读卡线程
     FReaderIndex: Integer;
@@ -87,6 +93,9 @@ type
     //读头索引
     FReaders: TList;
     //读头列表
+    FCardLength: Integer;
+    FCardPrefix: TStrings;
+    //卡号标识
     FSyncLock: TCriticalSection;
     //同步锁定
     FThreads: array[0..cHYReader_MaxThread-1] of THYRFIDReader;
@@ -127,11 +136,17 @@ end;
 constructor THYReaderManager.Create;
 var nIdx: Integer;
 begin
+  FEnable := False;
+  FThreadCount := 1;
+  FMonitorCount := 1;  
+
   for nIdx:=Low(FThreads) to High(FThreads) do
     FThreads[nIdx] := nil;
   //xxxxx
+
+  FCardLength := 0;
+  FCardPrefix := TStringList.Create;
   
-  FEnable := False;
   FReaders := TList.Create;
   FSyncLock := TCriticalSection.Create;
 end;
@@ -181,7 +196,7 @@ begin
        (nNum > FReaders.Count) then Exit;
     //线程不能超过预定值,或不多余读头个数
 
-    if nNum = 0 then
+    if nNum < FMonitorCount then
          nType := ttAll
     else nType := ttActive;
 
@@ -244,6 +259,21 @@ begin
     nRoot := nXML.Root.FindNode('config');
     if Assigned(nRoot) then
     begin
+      nNode := nRoot.FindNode('enable');
+      if Assigned(nNode) then
+        Self.FEnable := nNode.ValueAsString <> 'N';
+      //xxxxx
+
+      nNode := nRoot.FindNode('cardlen');
+      if Assigned(nNode) then
+           FCardLength := nNode.ValueAsInteger
+      else FCardLength := 0;
+
+      nNode := nRoot.FindNode('cardprefix');
+      if Assigned(nNode) then
+           SplitStr(UpperCase(nNode.ValueAsString), FCardPrefix, 0, ',')
+      else FCardPrefix.Clear;
+
       nNode := nRoot.FindNode('thread');
       if Assigned(nNode) then
            FThreadCount := nNode.ValueAsInteger
@@ -253,9 +283,14 @@ begin
         raise Exception.Create('RFID102 Reader Thread-Num Need Between 1-10.');
       //xxxxx
 
-      nNode := nRoot.FindNode('enable');
+      nNode := nRoot.FindNode('monitor');
       if Assigned(nNode) then
-        Self.FEnable := nNode.ValueAsString <> 'N';
+           FMonitorCount := nNode.ValueAsInteger
+      else FMonitorCount := 1;
+
+      if (FMonitorCount < 1) or (FMonitorCount > FThreadCount) then
+        raise Exception.Create(Format(
+          'RFID102 Reader Monitor-Num Need Between 1-%d.', [FThreadCount]));
       //xxxxx
     end;
 
@@ -275,6 +310,7 @@ begin
       with nNode,nReader^ do
       begin
         FLocked := False;
+        FKeepLast := 0;
         FLastActive := GetTickCount;
 
         FID := AttributeByName['id'];
@@ -296,6 +332,21 @@ begin
           if nTmp.AttributeByName['type'] = '900' then
                FVType := rt900
           else FVType := rt02n;
+        end else
+        begin
+          FVirtual := False;
+          //默认不虚拟
+        end;
+
+        nTmp := FindNode('keeponce');
+        if Assigned(nTmp) then
+        begin
+          FKeepOnce := nTmp.ValueAsInteger;
+          FKeepPeer := nTmp.AttributeByName['keeppeer'] = 'Y';
+        end else
+        begin
+          FKeepOnce := 0;
+          //默认不合并
         end;
 
         FClient := TIdTCPClient.Create;
@@ -628,6 +679,30 @@ begin
   end;
 end;
 
+//Date: 2015-12-07
+//Parm: 卡号
+//Desc: 验证nCard是否有效
+function THYRFIDReader.IsCardValid(const nCard: string): Boolean;
+var nIdx: Integer;
+begin
+  with FOwner do
+  begin
+    Result := False;
+    if (FCardLength > 0) and (Length(nCard) < FCardLength) then Exit;
+    //leng verify
+
+    Result := FCardPrefix.Count = 0;
+    if Result then Exit;
+
+    for nIdx:=FCardPrefix.Count - 1 downto 0 do
+     if Pos(FCardPrefix[nIdx], nCard) = 1 then
+     begin
+       Result := True;
+       Exit;
+     end;
+  end;
+end;
+
 function THYRFIDReader.ReadCard(const nReader: PHYReaderItem): Boolean;
 var nEPC: string;
     nBuf,nRecv: TIdBytes;
@@ -664,30 +739,53 @@ begin
      (FRecvItem.FStatus <> #03) and (FRecvItem.FStatus <> #04) then Exit;
   //xxxxx
 
+  FEPCList.Clear;
   nStart:=1;
   nInt := Ord(FRecvItem.FData[1]);
+
   for nIdx:=0 to nInt-1 do
   begin
     nLen := Ord(FRecvItem.FData[nStart+1]);
     nEPC := HexStr(Copy(FRecvItem.FData, nStart+2, nLen));
-
     nStart := nStart + nLen + 1;
-    FEPCList.Add(nEPC);
+
+    if IsCardValid(nEPC) then
+      FEPCList.Add(nEPC);
+    //xxxxx
   end;
     
-  if Terminated then Exit;
-  nReader.FCard := CombinStr(FEPCList, ',', False);
-  FEPCList.Clear;
+  if (not Terminated) and (FEPCList.Count > 0) then
+  begin
+    Result := True;
+    //read success
+    
+    if nReader.FKeepOnce > 0 then
+    begin
+      if Pos(FEPCList[0], nReader.FCard) > 0 then
+      begin
+        if GetTickCount - nReader.FKeepLast < nReader.FKeepOnce then
+        begin
+          if not nReader.FKeepPeer then
+            nReader.FKeepLast := GetTickCount;
+          Exit;
+        end;
+      end;
 
-  if Assigned(FOwner.FOnProc) then
-    FOwner.FOnProc(nReader);
-  //xxxxx
+      nReader.FKeepLast := GetTickCount;
+      //同卡号连刷压缩
+    end;
 
-  if Assigned(FOwner.FOnEvent) then
-    FOwner.FOnEvent(nReader);
-  //xxxxx
+    nReader.FCard := CombinStr(FEPCList, ',', False);
+    //multi card
+    
+    if Assigned(FOwner.FOnProc) then
+      FOwner.FOnProc(nReader);
+    //xxxxx
 
-  Result := True;
+    if Assigned(FOwner.FOnEvent) then
+      FOwner.FOnEvent(nReader);
+    //xxxxx
+  end;
 end;
 
 initialization

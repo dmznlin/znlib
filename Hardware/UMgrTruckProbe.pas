@@ -723,7 +723,7 @@ begin
     Host := nHost.FHost;
     Port := nHost.FPort;
     
-    ReadTimeout := 3 * 1000;
+    ReadTimeout := 2 * 1000;
     ConnectTimeout := 3 * 1000;
   end;
 end;
@@ -744,11 +744,10 @@ begin
       for nIdx:=Low(FTunnels) to High(FTunnels) do
       begin
         with FTunnels[nIdx] do
-        if (FAutoOFF > 0) and (FLastOn > 0) and
-           (GetTickCount - FLastOn >= FAutoOFF) then
+        if (FLastOn > 0) and (GetTickCount - FLastOn >= FAutoOFF) then
         begin
           FLastOn := 0;
-          TunnelOC(FTunnels[nIdx].FID, False);
+          TunnelOC(FTunnels[nIdx].FID, True);
         end;
       end; //auto off tunnel-out
 
@@ -765,6 +764,8 @@ begin
       for nIdx:=Low(FHosts) to High(FHosts) do
       begin
         if Terminated then Exit;
+        if not FHosts[nIdx].FEnable then Continue;
+
         FNowClient := GetClient(@FOwner.FHosts[nIdx]);
         DoExecute(@FOwner.FHosts[nIdx]);
       end;
@@ -840,6 +841,14 @@ begin
       nBuf := RawToBytes(PProberFrameDataForward(nCmd.FData)^, nSize);
     end else
     begin
+      if (nCmd.FTunnel.FLastOn > 0) and
+         (PProberFrameControl(nCmd.FData).FHeader.FExtend =
+                              nCmd.FTunnel.FHost.FOutSignalOn) then
+      begin
+        Continue;
+        //启用自动关闭,禁用手动关闭指令
+      end;
+
       nSize := cSize_Prober_Control;
       nBuf := RawToBytes(PProberFrameControl(nCmd.FData)^, nSize);
     end;
@@ -851,9 +860,11 @@ begin
       Exit;
     end;
 
-    if nCmd.FCommand = cProber_Frame_RelaysOC then
+    if (nCmd.FTunnel.FAutoOFF > 0) and
+       (nCmd.FCommand = cProber_Frame_RelaysOC) then
     begin
-      if PProberFrameControl(nCmd.FData).FHeader.FExtend = nCmd.FTunnel.FHost.FOutSignalOn then
+      if PProberFrameControl(nCmd.FData).FHeader.FExtend =
+                             nCmd.FTunnel.FHost.FOutSignalOff then
         nCmd.FTunnel.FLastOn := GetTickCount;
       //通道输出端最后打开时间
     end;
