@@ -226,9 +226,9 @@ begin
   //设置退出标记
 
   for nIdx:=Low(FThreads) to High(FThreads) do
-  if Assigned(FThreads[nIdx]) then
   begin
-    FThreads[nIdx].StopMe;
+    if Assigned(FThreads[nIdx]) then
+      FThreads[nIdx].StopMe;
     FThreads[nIdx] := nil;
   end;
 
@@ -402,8 +402,17 @@ begin
     FWaiter.EnterWait;
     if Terminated then Exit;
 
-    DoExecute;
-    //执行读卡
+    FActiveReader := nil;
+    try
+      DoExecute;
+    finally
+      if Assigned(FActiveReader) then
+      begin
+        FOwner.FSyncLock.Enter;
+        FActiveReader.FLocked := False;
+        FOwner.FSyncLock.Leave;
+      end;
+    end;
   except
     on E: Exception do
     begin
@@ -483,13 +492,9 @@ begin
 end;
 
 procedure THYRFIDReader.DoExecute;
-var nStr: string;
 begin
   FOwner.FSyncLock.Enter;
   try
-    FActiveReader := nil;
-    //init
-
     if FThreadType = ttAll then
     begin
       ScanActiveReader(False);
@@ -521,42 +526,32 @@ begin
     FOwner.FSyncLock.Leave;
   end;
 
-  with FOwner do
+  if Assigned(FActiveReader) and (not Terminated) then
   try
-    if Assigned(FActiveReader) and (not Terminated) then
-    try
-      if ReadCard(FActiveReader) then
-      begin
-        if FThreadType = ttActive then
-          FWaiter.Interval := cHYReader_Wait_Short;
-        FActiveReader.FLastActive := GetTickCount;
-      end else
-      begin
-        if (FActiveReader.FLastActive > 0) and
-           (GetTickCount - FActiveReader.FLastActive >= 5 * 1000) then
-          FActiveReader.FLastActive := 0;
-        //无卡片时,自动转为不活动
-      end;
-    except
-      on E:Exception do
-      begin
-        FActiveReader.FLastActive := 0;
-        //置为不活动
-
-        nStr := 'Reader:[ %s:%d ] Msg:[ %s ]';
-        nStr := Format(nStr, [FActiveReader.FHost, FActiveReader.FPort, E.Message]);
-        WriteLog(nStr);
-
-        CloseReader(FActiveReader);
-        //focus reconnect
-      end;
-    end;
-  finally
-    if Assigned(FActiveReader) then
+    if ReadCard(FActiveReader) then
     begin
-      FSyncLock.Enter;
-      FActiveReader.FLocked := False;
-      FSyncLock.Leave;
+      if FThreadType = ttActive then
+        FWaiter.Interval := cHYReader_Wait_Short;
+      FActiveReader.FLastActive := GetTickCount;
+    end else
+    begin
+      if (FActiveReader.FLastActive > 0) and
+         (GetTickCount - FActiveReader.FLastActive >= 5 * 1000) then
+        FActiveReader.FLastActive := 0;
+      //无卡片时,自动转为不活动
+    end;
+  except
+    on E:Exception do
+    begin
+      FActiveReader.FLastActive := 0;
+      //置为不活动
+
+      WriteLog(Format('Reader:[ %s:%d ] Msg: %s', [FActiveReader.FHost,
+        FActiveReader.FPort, E.Message]));
+      //xxxxx
+
+      FOwner.CloseReader(FActiveReader);
+      //focus reconnect
     end;
   end;
 end;

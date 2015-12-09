@@ -461,11 +461,11 @@ begin
     begin
       nList.Add('');
       nMain := FDataList[nIdx];
-      nStr := '%s.%s:' + #9 + '%d';
-                                                
-      nList.Add(Format(nStr, [nMain.FDesc, 'NumAll', nMain.FNumAll]));
-      nList.Add(Format(nStr, [nMain.FDesc, 'NumFree', nMain.FNumFree]));
-      nList.Add(Format(nStr, [nMain.FDesc, 'NumLock', nMain.FNumLock]));
+      nStr := '%s.%s.%s:' + #9 + '%d';
+
+      nList.Add(Format(nStr, [nMain.FFlag, nMain.FDesc, 'NumAll', nMain.FNumAll]));
+      nList.Add(Format(nStr, [nMain.FFlag, nMain.FDesc, 'NumFree', nMain.FNumFree]));
+      nList.Add(Format(nStr, [nMain.FFlag, nMain.FDesc, 'NumLock', nMain.FNumLock]));
     end;
   finally
     FSyncLock.Leave;
