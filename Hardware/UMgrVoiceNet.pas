@@ -98,6 +98,7 @@ type
     //字符列表
   protected
     procedure Execute; override;
+    procedure Doexecute;
     //执行线程
     procedure CombineBuffer;
     //合并缓冲
@@ -458,47 +459,63 @@ begin
 end;
 
 procedure TNetVoiceConnector.Execute;
+begin
+  while True do
+  try
+    FWaiter.EnterWait;
+    if Terminated then
+    begin
+      DisconnectClient;
+      Exit;
+    end;
+
+    Doexecute;
+  except
+    on E:Exception do
+    begin
+      WriteLog(E.Message);
+    end;
+  end;
+end;
+
+procedure TNetVoiceConnector.Doexecute;
 var nStr: string;
     nIdx: Integer;
     nCard: PVoiceCardHost;
 begin
-  while not Terminated do
-  try
-    FWaiter.EnterWait;
-    if Terminated then Exit;
+  with FOwner do
+  begin
+    FSyncLock.Enter;
+    try
+      CombineBuffer;
+    finally
+      FSyncLock.Leave;
+    end;
 
-    with FOwner do
-    begin
-      FSyncLock.Enter;
-      try
-        CombineBuffer;
-      finally
-        FSyncLock.Leave;
-      end;
+    nCard := nil;
+    //init
 
-      nCard := nil;
-      //init
-
-      for nIdx:=FCards.Count - 1 downto 0 do
-      try
-        nCard := FCards[nIdx];
-        SendVoiceData(nCard);
-      except
+    for nIdx:=FCards.Count - 1 downto 0 do
+    try
+      if Terminated then Exit;
+      nCard := FCards[nIdx];
+      SendVoiceData(nCard);
+    except
+      on E: Exception do
+      begin
         if Assigned(nCard) then
         begin
-          nStr := '语音卡[ %s:%d ]发送失败.';
-          nStr := Format(nStr, [nCard.FHost, nCard.FPort]);
+          nCard.FVoiceTime := nCard.FVoiceTime + 1;
+          //发送累计
+
+          nStr := 'Card:[ %s:%d ] Msg: %s';
+          nStr := Format(nStr, [nCard.FHost, nCard.FPort, E.Message]);
           WriteLog(nStr);
         end;
 
         DisconnectClient;
         //断开链路
       end;
-    end;
-  except
-    on E:Exception do
-    begin
-      WriteLog(E.Message);
     end;
   end;
 end;
@@ -617,8 +634,7 @@ end;
 //Parm: 语音卡
 //Desc: 向nCard发送缓冲区数据
 procedure TNetVoiceConnector.SendVoiceData(const nCard: PVoiceCardHost);
-var nStr: string;
-    nBuf: TIdBytes;
+var nBuf: TIdBytes;
 begin
   if nCard.FVoiceTime = MAXBYTE then Exit;
   //不发送标记
@@ -627,24 +643,16 @@ begin
   if GetTickCount - nCard.FVoiceLast < nCard.FParam.FInterval * 1000 then Exit;
   //发送间隔未到
 
-  try
-    if FClient.Host <> nCard.FHost then
-    begin
-      DisconnectClient;
-      FClient.Host := nCard.FHost;
-      FClient.Port := nCard.FPort;
-    end;
-
-    if not FClient.Connected then
-      FClient.Connect;
-    //xxxxx
-  except
-     nStr := '语音卡[ %s:%d ]连接失败.';
-     nStr := Format(nStr, [nCard.FHost, nCard.FPort]);
-
-     WriteLog(nStr);
-     Exit;
+  if FClient.Host <> nCard.FHost then
+  begin
+    DisconnectClient;
+    FClient.Host := nCard.FHost;
+    FClient.Port := nCard.FPort;
   end;
+
+  if not FClient.Connected then
+    FClient.Connect;
+  //xxxxx
 
   SetLength(nBuf, 0);
   nBuf := RawToBytes(nCard.FVoiceData, Voice2Word(nCard.FVoiceData.FLength) + 3);

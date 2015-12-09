@@ -843,15 +843,15 @@ begin
   try
     Result := False;
     //default
-    
+
+    if not (GetTunnel(nTunnel, nPH, nPT) and Assigned(nPH.FReader)) then Exit;
+    //通道数据无效
+
     if Assigned(nBuf) then
     begin
       nList := nBuf;
     end else
     begin
-      if not (GetTunnel(nTunnel, nPH, nPT) and Assigned(nPH.FReader)) then Exit;
-      //通道数据无效
-      
       nList := nPH.FReader.FBuffer;
       nPH.FReader.DeleteFromBuffer(nPT.FTunnel, nList);
       //覆盖未执行命令
