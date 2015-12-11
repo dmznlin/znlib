@@ -683,7 +683,8 @@ begin
   with FOwner do
   begin
     Result := False;
-    if (FCardLength > 0) and (Length(nCard) < FCardLength) then Exit;
+    nIdx := Length(Trim(nCard));
+    if (nIdx < 1) or ((FCardLength > 0) and (nIdx < FCardLength)) then Exit;
     //leng verify
 
     Result := FCardPrefix.Count = 0;

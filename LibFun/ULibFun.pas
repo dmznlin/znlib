@@ -695,6 +695,7 @@ function Float2PInt(const nValue: Double; const nPrecision: Integer;
  const nRound: Boolean): Int64;
 var nStr: string;
     nInt: Integer;
+    nMask: Double;
 begin
   nInt := Length(IntToStr(nPrecision)) - 1;
   //放大倍数(10,100)包含0的个数
@@ -706,8 +707,14 @@ begin
   //防止浮点运算的误差
 
   if nStr = '' then
-    nStr := '0';
-  Result := Trunc(StrToFloat(nStr) * nPrecision);
+  begin
+    Result := 0;
+    Exit;
+  end;
+
+  nMask := StrToFloat(nStr);
+  //拆分计算,此步必须
+  Result := Trunc(nMask * nPrecision);
 
   if nRound then
   begin

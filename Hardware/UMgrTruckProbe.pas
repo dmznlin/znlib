@@ -418,7 +418,7 @@ end;
 procedure TProberManager.RegisterDataType;
 begin
   if not Assigned(gMemDataManager) then
-    raise Exception.Create('ProberManager Need MemDataManager Support.');
+    raise Exception.Create('ProberManager Needs MemDataManager Support.');
   //xxxxx
 
   with gMemDataManager do
