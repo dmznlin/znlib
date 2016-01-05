@@ -153,8 +153,8 @@ type
     //创建释放
     procedure LoadConfig(const nFile: string);
     //读取配置
-    procedure ActivePort(const nTunnel: string; nEvent: TOnTunnelDataEvent;
-      const nOpenPort: Boolean = False);
+    function ActivePort(const nTunnel: string; nEvent: TOnTunnelDataEvent;
+      const nOpenPort: Boolean = False): Boolean;
     procedure ClosePort(const nTunnel: string);
     //起停端口
     function GetPort(const nID: string): PPTPortItem;
@@ -496,11 +496,14 @@ end;
 //Date: 2014-06-11
 //Parm: 通道号;接收事件
 //Desc: 开启nTunnel通道读写端口
-procedure TPoundTunnelManager.ActivePort(const nTunnel: string;
-  nEvent: TOnTunnelDataEvent; const nOpenPort: Boolean);
+function TPoundTunnelManager.ActivePort(const nTunnel: string;
+  nEvent: TOnTunnelDataEvent; const nOpenPort: Boolean): Boolean;
 var nStr: string;
     nPT: PPTTunnelItem;
 begin
+  Result := False;
+  //xxxxx
+
   FSyncLock.Enter;
   try
     nPT := GetTunnel(nTunnel);
@@ -585,6 +588,8 @@ begin
         WriteLog(E.Message);
       end;
     end;
+
+    Result := True;
   finally
     FSyncLock.Leave;
   end;

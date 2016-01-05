@@ -693,9 +693,8 @@ end;
 //Desc: 将nValue放大nPrecision,然后取整,小数位四舍五入
 function Float2PInt(const nValue: Double; const nPrecision: Integer;
  const nRound: Boolean): Int64;
-var nStr: string;
+var nStr,nVal: string;
     nInt: Integer;
-    nMask: Double;
 begin
   nInt := Length(IntToStr(nPrecision)) - 1;
   //放大倍数(10,100)包含0的个数
@@ -712,9 +711,12 @@ begin
     Exit;
   end;
 
-  nMask := StrToFloat(nStr);
-  //拆分计算,此步必须
-  Result := Trunc(nMask * nPrecision);
+  nVal := Copy(nStr, 1, Length(nStr)-2);
+  //去掉多补的两位
+  nVal := StringReplace(nVal, '.', '', []);
+  //去掉小数点
+  Result := StrToInt(nVal);
+  //转为整型
 
   if nRound then
   begin

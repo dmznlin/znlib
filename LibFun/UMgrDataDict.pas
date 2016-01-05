@@ -22,7 +22,7 @@ const
   cDictTable_DataDict = $0002;
 
 type
-  TDictFormatStyle = (fsNone, fsFixed, fsSQL);
+  TDictFormatStyle = (fsNone, fsFixed, fsSQL, fsCheckBox);
   //格式化方式: 固定数据,数据库数据
 
   PDictFormatItem = ^TDictFormatItem;
