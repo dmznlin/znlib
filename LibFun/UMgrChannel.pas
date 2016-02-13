@@ -8,16 +8,19 @@ interface
 
 uses
   Windows, Classes, SysUtils, SyncObjs, uROClient, uROWinInetHttpChannel,
-  uROBinMessage, UBaseObject;
+  uROBinMessage, uROSOAPMessage, UBaseObject;
 
 type
+  TChannelMsgType = (mtBin, mtSoap);
+  //消息类型
+  
   PChannelItem = ^TChannelItem;
   TChannelItem = record
     FUsed: Boolean;                //是否占用
     FType: Integer;                //通道类型
     FChannel: IUnknown;            //通道对象
 
-    FMsg: TROBinMessage;           //消息对象
+    FMsg: TROMessage;              //消息对象
     FHttp: TROWinInetHTTPChannel;  //通道对象
   end;
 
@@ -42,7 +45,8 @@ type
     constructor Create;
     destructor Destroy; override;
     //创建释放
-    function LockChannel(const nType: Integer = -1): PChannelItem;
+    function LockChannel(const nType: Integer = -1;
+     const nMsgType: TChannelMsgType = mtBin): PChannelItem;
     procedure ReleaseChannel(const nChannel: PChannelItem);
     //通道处理
     procedure ClearChannel;
@@ -144,7 +148,8 @@ begin
 end;
 
 //Desc: 锁定通道
-function TChannelManager.LockChannel(const nType: Integer): PChannelItem;
+function TChannelManager.LockChannel(const nType: Integer;
+ const nMsgType: TChannelMsgType): PChannelItem;
 var nIdx,nFit: Integer;
     nItem: PChannelItem;
 begin
@@ -190,9 +195,12 @@ begin
       begin
         FType := nType;
         FChannel := nil;
-
-        FMsg := TROBinMessage.Create;
         FHttp := TROWinInetHTTPChannel.Create(nil);
+
+        case nMsgType of
+         mtBin: FMsg := TROBinMessage.Create;
+         mtSoap: FMsg := TROSOAPMessage.Create;
+        end;
       end;
 
       Result := nItem;
