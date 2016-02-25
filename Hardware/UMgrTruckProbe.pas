@@ -788,6 +788,12 @@ function TProberManager.IsTunnelOK(const nTunnel: string): Boolean;
 var nIdx,nNum: Integer;
     nPT: PProberTunnel;
 begin
+  if Trim(nTunnel) = '' then
+  begin
+    Result := True;
+    Exit;
+  end; //空通道默认正常
+
   Result := False;
   nPT := GetTunnel(nTunnel);
 
