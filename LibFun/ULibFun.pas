@@ -715,7 +715,7 @@ begin
   //去掉多补的两位
   nVal := StringReplace(nVal, '.', '', []);
   //去掉小数点
-  Result := StrToInt(nVal);
+  Result := StrToInt64(nVal);
   //转为整型
 
   if nRound then

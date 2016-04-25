@@ -267,6 +267,7 @@ end;
 //Parm：读头
 //Desc：读取nReader上的卡号
 procedure TJMReaderThead.ReadCard(const nReader: PJMReaderItem);
+var nInt,nRet: Integer;
 begin
   if nReader.FEnable then
   try
@@ -281,10 +282,23 @@ begin
     end;
 
     FDataLen := 255;
-    if an_getautocard(nReader.FSock, @FBuffer[0], @FDataLen) <> 0 then
+    nRet := an_getautocard(nReader.FSock, @FBuffer[0], @FDataLen);
+
+    if nRet <> 0 then
     begin
-      if GetTickCount - FLastActive >= 10 * 60 * 1000 then
+      nInt := GetTickCount - FLastActive;
+      if (nRet = 401) or  //链路异常,加速重连
+        ((nRet = 206) and (nInt >= 4 * 60 * 1000 )) or //无卡号
+         (nInt >= 10 * 60 * 1000) then
+      begin
+        if nRet = 206 then
+          FWaiter.Wakeup(True);
+        //xxxxx
+        
+        FLastActive := GetTickCount;
         CloseReader(nReader);
+        WriteLog(Format('重新连接[ %s],代码: %d.', [nReader.FName, nRet]));
+      end;
       Exit;
     end;
     //read card no

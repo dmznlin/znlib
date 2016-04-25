@@ -30,7 +30,7 @@ type
     destructor Destroy; override;
     {*创建释放*}
     function EnterWait: Cardinal;
-    procedure Wakeup;
+    procedure Wakeup(const nForce: Boolean = False);
     {*等待.唤醒*}
     function IsWaiting: Boolean;
     function IsTimeout: Boolean;
@@ -132,11 +132,11 @@ begin
   InterlockedExchange(FStatus, cIsIdle);
 end;
 
-procedure TWaitObject.Wakeup;
+procedure TWaitObject.Wakeup(const nForce: Boolean);
 begin
-  if FStatus = cIsWaiting then
+  if (FStatus = cIsWaiting) or nForce then
     SetEvent(FEvent);
-  //do only waiting
+  //xxxxx
 end;
 
 //------------------------------------------------------------------------------
