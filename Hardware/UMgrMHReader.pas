@@ -1,13 +1,21 @@
 {*******************************************************************************
   作者: dmzn@163.com 2016-08-18
   描述: 明华RF-35LT读卡器驱动单元
+
+  备注:
+  *.IC卡共分为 16个扇区,每个扇区有4个块;其中每个扇区的1、2、3是可写的,
+    每块可写16个字符.
+  *.第一扇区的1、2、3块为保留（或许）区块,第4块不可动.真正写入数据,是从
+    第2个扇区开始,每个扇区只写前3块.
+  *.每个扇区的区块不是从0-3相对编号,而是从0开始的绝对编号,每个扇区的第一个
+    区块编号nBlock=扇区x4.
 *******************************************************************************}
 unit UMgrMHReader;
 
 interface
 
 uses
-  Windows, Classes, SysUtils, NativeXml, USysLoger;
+  Windows, Classes, SysUtils, NativeXml, ULibFun, USysLoger;
 
 const
   cLibDLL = 'mwrf32.dll';
@@ -156,7 +164,9 @@ type
     FName: string;           //名称
     FPort: Integer;          //端口
     FBaud: Integer;          //波特率
+
     FHwnd: LongInt;          //端口句柄
+    FBuf,FData: string;      //数据缓存
   end;
 
   TMHReaderManager = class(TObject)
@@ -174,6 +184,7 @@ type
     //检索堵头
     function InitReader(const nIdx: Integer;
       const nReset: Boolean = True): Boolean;
+    procedure ResetReader(const nIdx: Integer; const nAction: string);
     procedure CloseReader(const nIdx: Integer = -1);
     //打开关闭
     procedure BeepReader(const nIdx: Integer; const nNum: Integer = 1);
@@ -207,6 +218,13 @@ var
 
 implementation
 
+const
+  sKey          = 'ffffffffffff';    //卡片密钥
+  sDataPrefix   = '@';               //数据前缀
+  cBlockDataLen = 16;                //区块容量
+  cMaxDataLen   = 15 * 3 * 16;       //数据容量: 15扇区,每区3块,每块16字符
+
+//------------------------------------------------------------------------------
 procedure WriteLog(const nEvent: string);
 begin
   gSysLoger.AddLog(TMHReaderManager, '明华RF驱动', nEvent);
@@ -415,6 +433,26 @@ begin
   end;
 end;
 
+//Date: 2016-09-03
+//Parm: 读头索引;动作名称
+//Desc: 重置读卡器状态
+procedure TMHReaderManager.ResetReader(const nIdx: Integer; const nAction: string);
+var nHwnd: Integer;
+begin
+  with FReaders[nIdx] do
+  begin
+    nHwnd := rf_halt(FHwnd);
+    if nHwnd <> 0 then
+      WriteReaderLog(nIdx, nHwnd, nAction + 'HALT', '失败');
+    //xxxxx
+
+    nHwnd := rf_reset(FHwnd, 10);
+    if nHwnd <> 0 then
+      WriteReaderLog(nIdx, nHwnd, nAction + 'RESET', '失败');
+    //xxxxx
+  end;
+end;
+
 //Date: 2016-09-01
 //Parm: 读头标识
 //Desc: 读取nID上当前磁卡的0扇区0区块,默认为卡号
@@ -435,7 +473,6 @@ begin
     if nHwnd <> 0 then
     begin
       WriteReaderLog(nIdx, nHwnd, '读取卡号', '失败');
-      BeepReader(nIdx, 2);
       Exit;
     end;
 
@@ -443,7 +480,6 @@ begin
     if Length(nStr) <> 8 then
     begin
       WriteReaderLog(nIdx, 50, '读取卡号', '失败');
-      BeepReader(nIdx, 2);
       Exit;
     end;
 
@@ -452,16 +488,13 @@ begin
               nStr[3] + nStr[4] +
               nStr[1] + nStr[2];
     //xxxxx
+  finally
+    if Result = '' then
+         BeepReader(nIdx, 2)
+    else BeepReader(nIdx, 1);
 
-    BeepReader(nIdx, 1);
-    rf_halt(FHwnd);
-  except
-    on E:Exception do
-    begin
-      nStr := '读取卡号[ %s.%s ]失败,描述: %s';
-      WriteLog(Format(nStr, [FID, FName, E.Message]));
-      CloseReader(nIdx);
-    end;
+    ResetReader(nIdx, '读取卡号');
+    //xxxxx
   end;
 end;
 
@@ -469,16 +502,235 @@ end;
 //Parm: 读头标识
 //Desc: 读取nID上的卡片数据
 function TMHReaderManager.ReadCardData(const nID: string): string;
+var nStr: string;
+    nIdx,nHwnd,nLen: Integer;
+    nLInt: LongInt;
+    nBuf: array[0..15] of Char;
+    nMode,nSection,nBlock: SmallInt;
 begin
+  Result := '';
+  nIdx := GetReader(nID);
 
+  if nIdx < 0 then Exit;
+  if not InitReader(nIdx) then Exit;
+
+  with FReaders[nIdx] do
+  try
+    FData := '';
+    nHwnd := rf_card(FHwnd, 1, @nLInt);
+    
+    if nHwnd <> 0 then
+    begin
+      WriteReaderLog(nIdx, nHwnd, 'CARD', '失败');
+      Exit;
+    end; //no card
+
+    nLen := 0;
+    //card data length
+
+    nSection := 1;
+    nBlock := 4;
+    nMode := 0;
+
+    while True do
+    begin
+      if nBlock mod 4 = 0 then
+      begin
+        nHwnd := rf_load_key_hex(FHwnd, nMode, nSection, PChar(sKey));
+        if nHwnd <> 0 then
+        begin
+          WriteReaderLog(nIdx, nHwnd, 'LOADKEY', '失败');
+          Exit;
+        end;
+
+        nHwnd := rf_authentication(FHwnd, nMode, nSection);
+        if nHwnd <> 0 then
+        begin
+          WriteReaderLog(nIdx, nHwnd, 'AUTH', '失败');
+          Exit;
+        end;
+      end; //load key and auth
+
+      nHwnd := rf_read(FHwnd, nBlock, @nBuf);
+      if nHwnd <> 0 then
+      begin
+        WriteReaderLog(nIdx, nHwnd, 'READ', '失败');
+        Exit;
+      end;
+
+      FBuf := nBuf;
+      //block data
+
+      if nBlock = 4 then //2扇区1区块
+      begin
+        nStr := Copy(FBuf, 1, 4);
+        if Pos(sDataPrefix, nStr) <> 1 then
+        begin
+          WriteReaderLog(nIdx, 50, '卡片数据', '前缀无效');
+          Exit;
+        end;
+
+        System.Delete(nStr, 1, 1);
+        if not IsNumber(nStr, False) then
+        begin
+          WriteReaderLog(nIdx, 50, '卡片数据', '长度无效');
+          Exit;
+        end;
+
+        nLen := StrToInt(nStr);
+        //data length
+        System.Delete(FBuf, 1, 4);
+      end;
+
+      FData := FData + FBuf;
+      if Length(FData) >= nLen then
+      begin
+        FData := Copy(FData, 1, nLen);
+        Break;
+      end;
+
+      Inc(nBlock);
+      if nBlock mod 4 = 3 then
+      begin
+        Inc(nSection);
+        Inc(nBlock);
+        if nSection = 16 then Break;
+      end; //next section
+    end;
+
+    if (nLen > 0) and (nLen = Length(FData)) then
+      Result := FData;
+    //xxxxx
+  finally
+    if Result = '' then
+         BeepReader(nIdx, 2)
+    else BeepReader(nIdx, 1);
+
+    ResetReader(nIdx, '读取数据');
+    //xxxxx
+  end;
 end;
 
 //Date: 2016-09-01
 //Parm: 读头标识
 //Desc: 将nData写入nID读头上的卡片
 function TMHReaderManager.WriteCardData(const nData, nID: string): Boolean;
+var nStr: string;
+    nIdx,nHwnd,nPos,nLen,nInt: Integer;
+    nLInt: LongInt;
+    nMode,nSection,nBlock: SmallInt;
 begin
+  Result := False;
+  nIdx := GetReader(nID);
 
+  if nIdx < 0 then Exit;
+  if not InitReader(nIdx) then Exit;
+
+  with FReaders[nIdx] do
+  try
+    nPos := 1;
+    nLen := Length(nData);
+
+    if (nLen > cMaxDataLen) or (nLen < 1) then
+    begin
+      if nLen < 1 then
+           nStr := '数据为空'
+      else nStr := Format('长度超过%d字节', [cMaxDataLen]);
+      
+      WriteReaderLog(nIdx, 50, '待写入', nStr);
+      Exit;
+    end;
+
+    nHwnd := rf_card(FHwnd, 1, @nLInt);
+    if nHwnd <> 0 then
+    begin
+      WriteReaderLog(nIdx, nHwnd, 'CARD', '失败');
+      Exit;
+    end; //no card
+
+    nSection := 1;
+    nBlock := 4;
+    nMode := 0;
+
+    while True do
+    begin
+      if nBlock mod 4 = 0 then
+      begin
+        nHwnd := rf_load_key_hex(FHwnd, nMode, nSection, PChar(sKey));
+        if nHwnd <> 0 then
+        begin
+          WriteReaderLog(nIdx, nHwnd, 'LOADKEY', '失败');
+          Exit;
+        end;
+
+        nHwnd := rf_authentication(FHwnd, nMode, nSection);
+        if nHwnd <> 0 then
+        begin
+          WriteReaderLog(nIdx, nHwnd, 'AUTH', '失败');
+          Exit;
+        end;
+      end; //load key and auth
+
+      if nBlock = 4 then //2扇区1区块
+      begin
+        nStr := IntToStr(nLen);
+        nStr := sDataPrefix + StringOfChar('0', 3 - Length(nStr)) + nStr;
+        //write data length
+
+        nInt := cBlockDataLen - Length(nStr);
+        if nLen <= nInt then
+        begin
+          nStr := nStr + nData;
+          nPos := nPos + nLen;
+        end else
+        begin
+          nStr := nStr + Copy(nData, 1, nInt);
+          nPos := nPos + nInt;
+        end;
+      end else
+      begin
+        nInt := nLen - nPos + 1;
+        //剩余字节数
+        if nInt <= cBlockDataLen then
+        begin
+          nStr := Copy(nData, nPos, nInt);
+          nPos := nPos + nInt;
+        end else
+        begin
+          nStr := Copy(nData, nPos, cBlockDataLen);
+          nPos := nPos + cBlockDataLen;
+        end;
+      end;
+
+      nHwnd := rf_write(FHwnd, nBlock, PChar(nStr));
+      if nHwnd <> 0 then
+      begin
+        WriteReaderLog(nIdx, nHwnd, 'WRITE', '失败');
+        Exit;
+      end;
+
+      if nPos >= nLen + 1 then
+      begin
+        Result := True;
+        Break;
+      end; //write over
+
+      Inc(nBlock);
+      if nBlock mod 4 = 3 then
+      begin
+        Inc(nSection);
+        Inc(nBlock);
+        if nSection = 16 then Break;
+      end; //next section
+    end;
+  finally
+    if Result then
+         BeepReader(nIdx, 1)
+    else BeepReader(nIdx, 2);
+
+    ResetReader(nIdx, '写入数据');
+    //xxxxx
+  end;
 end;
 
 initialization
