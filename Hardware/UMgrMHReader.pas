@@ -221,8 +221,11 @@ implementation
 const
   sKey          = 'ffffffffffff';    //卡片密钥
   sDataPrefix   = '@';               //数据前缀
+  cPrefixLen    = 4;                 //前缀长度
   cBlockDataLen = 16;                //区块容量
-  cMaxDataLen   = 15 * 3 * 16;       //数据容量: 15扇区,每区3块,每块16字符
+
+  cMaxDataLen   = 15 * 3 * 16 - cPrefixLen;
+  //数据容量: 15扇区,每区3块,每块16字符,扣除前缀
 
 //------------------------------------------------------------------------------
 procedure WriteLog(const nEvent: string);
@@ -549,7 +552,7 @@ begin
           WriteReaderLog(nIdx, nHwnd, 'AUTH', '失败');
           Exit;
         end;
-      end; //load key and auth
+      end; //new section,load key and auth
 
       nHwnd := rf_read(FHwnd, nBlock, @nBuf);
       if nHwnd <> 0 then
@@ -563,7 +566,7 @@ begin
 
       if nBlock = 4 then //2扇区1区块
       begin
-        nStr := Copy(FBuf, 1, 4);
+        nStr := Copy(FBuf, 1, cPrefixLen);
         if Pos(sDataPrefix, nStr) <> 1 then
         begin
           WriteReaderLog(nIdx, 50, '卡片数据', '前缀无效');
@@ -579,7 +582,7 @@ begin
 
         nLen := StrToInt(nStr);
         //data length
-        System.Delete(FBuf, 1, 4);
+        System.Delete(FBuf, 1, cPrefixLen);
       end;
 
       FData := FData + FBuf;
@@ -636,7 +639,7 @@ begin
       if nLen < 1 then
            nStr := '数据为空'
       else nStr := Format('长度超过%d字节', [cMaxDataLen]);
-      
+
       WriteReaderLog(nIdx, 50, '待写入', nStr);
       Exit;
     end;
@@ -669,12 +672,13 @@ begin
           WriteReaderLog(nIdx, nHwnd, 'AUTH', '失败');
           Exit;
         end;
-      end; //load key and auth
+      end; //new section,load key and auth
 
       if nBlock = 4 then //2扇区1区块
       begin
         nStr := IntToStr(nLen);
-        nStr := sDataPrefix + StringOfChar('0', 3 - Length(nStr)) + nStr;
+        nInt := cPrefixLen - 1 - Length(nStr);
+        nStr := sDataPrefix + StringOfChar('0', nInt) + nStr;
         //write data length
 
         nInt := cBlockDataLen - Length(nStr);
