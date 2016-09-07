@@ -768,9 +768,69 @@ begin
   Result := TunnelOC(nTunnel, False) = '';
 end;
 
+//Date: 2016-09-07
+//Parm: 通道标识
+//Desc: 判断nTunnel所有输入有信号
 function TProberOPCManager.IsTunnelOK(const nTunnel: string): Boolean;
+var nStr: string;
+    nIdx,nVal: Integer;
+    nF: POPCFolder;
+    nI: POPCItem;
+    nT: POPCProberTunnel;
 begin
+  Result := False;
+  nIdx := GetTunnel(nTunnel);
 
+  if nIdx < 0 then
+  begin
+    nStr := Format('通道编号[ %s ]无效.', [nTunnel]);
+    WriteLog(nStr);
+    Exit;
+  end;
+
+  nT := FTunnels[nIdx];
+  if not nT.FEnable then
+  begin
+    Result := True;
+    Exit;
+  end;
+
+  for nIdx:=Low(nT.FOut) to High(nT.FOut) do
+  begin
+    if nT.FOut[nIdx] = cProber_NullASCII then Continue;
+    //invalid out address
+
+    GetItem(nF, nI, nT.FOut[nIdx]);
+    //get opc item
+
+    if not (Assigned(nI) and Assigned(nI.FGItem)) then
+    begin
+      nStr := '通道[ %s ]输出节点[ %s ]在OPC中无效.';
+      nStr := Format(nStr, [nTunnel, nT.FOut[nIdx]]);
+
+      WriteLog(nStr);
+      Exit;
+    end;
+
+    nStr := nI.FGItem.ValueStr;
+    if not IsNumber(nStr, False) then
+    begin
+      nStr := Format('通道[ %s ]输入点[ %s ]数据无效.', [nTunnel, nT.FOut[nIdx]]);
+      WriteLog(nStr);
+      Exit;
+    end;
+
+    nVal := StrToInt(nStr);
+    if nVal <>  nT.FHost.FInSignalOn then Exit;
+    //no single,check failure
+
+    {$IFDEF DEBUG}
+    with nI.FGItem do
+    begin
+      WriteLog(Format('读取:[ T: %s, I: %s, V: %d ].', [nTunnel, ItemID, nVal]));
+    end;
+    {$ENDIF}
+  end;
 end;
 
 initialization
