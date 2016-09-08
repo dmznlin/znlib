@@ -4,12 +4,12 @@
 *******************************************************************************}
 unit UMgrTruckProbeOPC;
 
-{$DEFINE DEBUG}
+{.$DEFINE DEBUG}
 interface
 
 uses
-  Windows, Classes, SysUtils, dOPCIntf, dOPCComn, dOPCDA, dOPC, NativeXml,
-  USysLoger, ULibFun;
+  Windows, Classes, SysUtils, ExtCtrls, SyncObjs, dOPCIntf, dOPCComn, dOPCDA,
+  dOPC, NativeXml, UMemDataPool, USysLoger, ULibFun;
 
 type
   POPCProberHost = ^TOPCProberHost;
@@ -31,13 +31,13 @@ type
 
   POPCProberTunnel = ^TOPCProberTunnel;
   TOPCProberTunnel = record
-    FEnable : Boolean;                 //是否启用
-    FID     : string;                  //标识
-    FName   : string;                  //名称
+    FEnable : Boolean;                  //是否启用
+    FID     : string;                   //标识
+    FName   : string;                   //名称
 
-    FIn     : TOPCProberIOAddress;     //输入地址
-    FOut    : TOPCProberIOAddress;     //输出地址
-    FHost   : POPCProberHost;          //所在主机
+    FIn     : TOPCProberIOAddress;      //输入地址
+    FOut    : TOPCProberIOAddress;      //输出地址
+    FHost   : POPCProberHost;           //所在主机
   end;
 
   POPCFolder = ^TOPCFolder;
@@ -58,6 +58,20 @@ type
     FGItem : TdOPCItem;                 //OPC项目对象
   end;
 
+  TOPCWriteAction = (waWrite, waConnSrv);
+  //OPC动作: 写数据,连接服务器
+
+  POPCWriteItem = ^TOPCWriteItem;
+  TOPCWriteItem = record
+    FEnable : Boolean;                  //是否启用
+    FAction: TOPCWriteAction;           //动作
+
+    FHost: string;                      //OPC主机
+    FFolder: string;                    //OPC目录
+    FItem: string;                      //项目对象名
+    FValue: OleVariant;                 //项目对象值
+  end;
+
   TProberOPCManager = class(TObject)
   private
     FFolders: TList;
@@ -66,11 +80,19 @@ type
     //主机列表
     FTunnels: TList;
     //通道列表
+    FIDWriteData: Integer;
+    FWriteList: TList;
+    FWriteTimer: TTimer;
+    //主线程写入
+    FSyncLock: TCriticalSection;
+    //同步锁定
   protected
     procedure ClearFolders(const nFree: Boolean = True);
     procedure ClearHosts(const nFree: Boolean = True);
     procedure ClearTunnels(const nFree: Boolean = True);
+    procedure ClearWriteList(const nFree: Boolean = True);
     //清理资源
+    function GetHost(const nID: string): POPCProberHost;
     function GetTunnel(const nTunnel: string): Integer;
     function GetItem(var nFolder: POPCFolder; var nItem: POPCItem;
       const nIDName: string; const nType: Byte = 1): Integer;
@@ -79,6 +101,13 @@ type
       var nErr: string; var nLevel: Integer): Boolean;
     function BuildOPCGroup(const nHost: POPCProberHost; var nErr: string): Boolean;
     //构建OPC列表
+    procedure RegisterDataType;
+    //注册数据
+    function WriteOPCData: Boolean;
+    procedure OnWriteTimer(Sender: TObject);
+    //主线程写入
+    procedure ReConnectOPCServer(const nHost,nFolder: string);
+    //重连服务器
   public
     constructor Create;
     destructor Destroy; override;
@@ -116,9 +145,20 @@ end;
 //------------------------------------------------------------------------------
 constructor TProberOPCManager.Create;
 begin
+  RegisterDataType;
+  //do first
+
   FFolders := TList.Create;
   FHosts := TList.Create;
   FTunnels := TList.Create;
+
+  FWriteTimer := TTimer.Create(nil);
+  FWriteTimer.OnTimer := OnWriteTimer;
+  FWriteTimer.Interval := 200;
+  FWriteTimer.Enabled := False;
+
+  FWriteList := TList.Create;
+  FSyncLock := TCriticalSection.Create;
 end;
 
 destructor TProberOPCManager.Destroy;
@@ -126,7 +166,41 @@ begin
   ClearHosts();
   ClearFolders();
   ClearTunnels();
+
+  FWriteTimer.Free;
+  ClearWriteList();
+  
+  FSyncLock.Free;
   inherited;
+end;
+
+procedure OnNew(const nFlag: string; const nType: Word; var nData: Pointer);
+var nWrite: POPCWriteItem;
+begin
+  if nFlag = 'WriteData' then
+  begin
+    New(nWrite);
+    nData := nWrite;
+  end;
+end;
+
+procedure OnFree(const nFlag: string; const nType: Word; const nData: Pointer);
+begin
+  if nFlag = 'WriteData' then
+  begin
+    Dispose(POPCWriteItem(nData));
+  end;
+end;
+
+procedure TProberOPCManager.RegisterDataType;
+begin
+  if not Assigned(gMemDataManager) then
+    raise Exception.Create('ProberOPCManager Needs MemDataManager Support.');
+  //xxxxx
+
+  with gMemDataManager do
+    FIDWriteData := RegDataType('WriteData', 'OPCManager', OnNew, OnFree, 2);
+  //xxxxx
 end;
 
 //Date: 2016-09-05
@@ -210,6 +284,39 @@ begin
   if nFree then
     FreeAndNil(FTunnels);
   //xxxxx
+end;
+
+//Date: 2016-09-08
+//Parm: 释放对象
+//Desc: 清理待写入列表
+procedure TProberOPCManager.ClearWriteList(const nFree: Boolean);
+var nIdx: Integer;
+begin
+  for nIdx:=FWriteList.Count-1 downto 0 do
+  begin
+    gMemDataManager.UnLockData(FWriteList[nIdx]);
+    FWriteList.Delete(nIdx);
+  end;
+
+  if nFree then
+    FreeAndNil(FWriteList);
+  //xxxxx
+end;
+
+//Date: 2016-09-08
+//Parm: 主机标识
+//Desc: 检索标识为nID的主机项
+function TProberOPCManager.GetHost(const nID: string): POPCProberHost;
+var nIdx: Integer;
+begin
+  Result := nil;
+
+  for nIdx:=FHosts.Count-1 downto 0 do
+  if CompareText(nID, POPCProberHost(FHosts[nIdx]).FID) = 0 then
+  begin
+    Result := FHosts[nIdx];
+    Break;
+  end;
 end;
 
 //Date: 2016-09-06
@@ -660,6 +767,7 @@ begin
 
   nErr := '';
   Result := True;
+  FWriteTimer.Enabled := True;
 end;
 
 //Date: 2016-09-06
@@ -670,6 +778,9 @@ var i,j,nIdx: Integer;
     nI: POPCItem;
     nPHost: POPCProberHost;
 begin
+  FWriteTimer.Enabled := False;
+  //close writer
+
   for nIdx:=0 to FHosts.Count-1 do
   begin
     nPHost := FHosts[nIdx];
@@ -697,11 +808,13 @@ begin
   end;
 end;
 
+//------------------------------------------------------------------------------
 //Date: 2016-09-06
 //Parm: 通道标识;开合
 //Desc: 控制nTunnel的打开关闭
 function TProberOPCManager.TunnelOC(const nTunnel: string; nOC: Boolean): string;
 var nIdx,nVal: Integer;
+    nW: POPCWriteItem;
     nF: POPCFolder;
     nI: POPCItem;
     nT: POPCProberTunnel;
@@ -723,32 +836,48 @@ begin
        nVal := nT.FHost.FOutSignalOn
   else nVal := nT.FHost.FOutSignalOff;
 
-  for nIdx:=Low(nT.FOut) to High(nT.FOut) do
-  begin
-    if nT.FOut[nIdx] = cProber_NullASCII then Continue;
-    //invalid out address
-
-    GetItem(nF, nI, nT.FOut[nIdx]);
-    //get opc item
-
-    if not (Assigned(nI) and Assigned(nI.FGItem)) then
+  FSyncLock.Enter;
+  try
+    for nIdx:=Low(nT.FOut) to High(nT.FOut) do
     begin
-      Result := '通道[ %s ]输出节点[ %s ]在OPC中无效.';
-      Result := Format(Result, [nTunnel, nT.FOut[nIdx]]);
+      if nT.FOut[nIdx] = cProber_NullASCII then Continue;
+      //invalid out address
 
-      WriteLog(Result);
-      Exit;
+      GetItem(nF, nI, nT.FOut[nIdx]);
+      //get opc item
+
+      if not (Assigned(nI) and Assigned(nI.FGItem)) then
+      begin
+        Result := '通道[ %s ]输出节点[ %s ]在OPC中无效.';
+        Result := Format(Result, [nTunnel, nT.FOut[nIdx]]);
+
+        WriteLog(Result);
+        Exit;
+      end;
+
+      {$IFDEF DEBUG}
+      with nI.FGItem do
+      begin
+        WriteLog(Format('写入:[ T: %s, I: %s, V: %d ].', [nTunnel, ItemID, nVal]));
+      end;
+      {$ENDIF}
+
+      nW := gMemDataManager.LockData(FIDWriteData);
+      FWriteList.Add(nW);
+
+      nW.FAction := waWrite;
+      nW.FHost := nF.FHost.FID;
+      nW.FFolder := nF.FID;
+
+      nW.FItem := nI.FID;
+      nW.FValue := nVal;
+      nW.FEnable := True;
+
+      //nI.FGItem.WriteSync(nVal);
+      //write data
     end;
-
-    {$IFDEF DEBUG}
-    with nI.FGItem do
-    begin
-      WriteLog(Format('写入:[ T: %s, I: %s, V: %d ].', [nTunnel, ItemID, nVal]));
-    end;
-    {$ENDIF}
-
-    nI.FGItem.WriteSync(nVal);
-    //write data
+  finally
+    FSyncLock.Leave;
   end;
 end;
 
@@ -772,7 +901,7 @@ end;
 //Parm: 通道标识
 //Desc: 判断nTunnel所有输入有信号
 function TProberOPCManager.IsTunnelOK(const nTunnel: string): Boolean;
-var nStr: string;
+var nStr,nHost,nFolder: string;
     nIdx,nVal: Integer;
     nF: POPCFolder;
     nI: POPCItem;
@@ -795,42 +924,192 @@ begin
     Exit;
   end;
 
-  for nIdx:=Low(nT.FOut) to High(nT.FOut) do
-  begin
-    if nT.FIn[nIdx] = cProber_NullASCII then Continue;
-    //invalid out address
+  nHost := '';
+  nFolder := '';
+  //init
 
-    GetItem(nF, nI, nT.FIn[nIdx]);
+  FSyncLock.Enter;
+  try
+    for nIdx:=Low(nT.FIn) to High(nT.FIn) do
+    try
+      if nT.FIn[nIdx] = cProber_NullASCII then Continue;
+      //invalid out address
+
+      GetItem(nF, nI, nT.FIn[nIdx]);
+      //get opc item
+
+      if not (Assigned(nI) and Assigned(nI.FGItem)) then
+      begin
+        nStr := '通道[ %s ]输入节点[ %s ]在OPC中无效.';
+        WriteLog(Format(nStr, [nTunnel, nT.FIn[nIdx]]));
+        Exit;
+      end;
+
+      if nHost = '' then
+        nHost := nF.FHost.FID;
+      if nFolder = '' then
+        nFolder := nF.FID;
+      //xxxxx
+
+      nStr := nI.FGItem.ValueStr;
+      //get data
+
+      if CompareText(nStr, 'True') = 0 then
+      begin
+        nVal := 1;
+      end else
+
+      if CompareText(nStr, 'False') = 0 then
+      begin
+        nVal := 0;
+      end else
+      begin
+        if not IsNumber(nStr, False) then
+        begin
+          nStr := '通道[ %s ]输入点[ %s ]数据无效.';
+          WriteLog(Format(nStr, [nTunnel, nT.FIn[nIdx]]));
+          Exit;
+        end;
+
+        nVal := StrToInt(nStr);
+      end;
+
+      {$IFDEF DEBUG}
+      with nI.FGItem do
+      begin
+        nStr := '读取:[ T: %s, I: %s, V: %d ].';
+        WriteLog(Format(nStr, [nTunnel, ItemID, nVal]));
+      end;
+      {$ENDIF}
+
+      if nVal <>  nT.FHost.FInSignalOn then Exit;
+      //no single,check failure
+    except
+      on E: Exception do
+      begin
+        WriteLog('IsTunnelOK Error: ' + E.Message);
+        ReConnectOPCServer(nHost, nFolder);
+        Exit;
+      end;
+    end;
+  finally
+    FSyncLock.Leave;
+  end;
+
+  Result := True;
+end;
+
+//Date: 2016-09-08
+//Parm: 主机标识;目录标识
+//Desc: 向主线程投递重连服务器指令
+procedure TProberOPCManager.ReConnectOPCServer(const nHost,nFolder: string);
+var nIdx: Integer;
+    nW: POPCWriteItem;
+begin
+  FSyncLock.Enter;
+  try
+    for nIdx:=FWriteList.Count-1 downto 0 do
+    begin
+      nW := FWriteList[nIdx];
+      if nW.FAction = waConnSrv then Exit;
+      //command has exits
+    end;
+
+    nW := gMemDataManager.LockData(FIDWriteData);
+    FWriteList.Insert(0, nW);
+    nW.FAction := waConnSrv;
+
+    nW.FHost := nHost;
+    nW.FFolder := nFolder;
+    nW.FEnable := True;
+  finally
+    FSyncLock.Leave;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+//Date: 2016-09-08
+//Desc: 主线程业务
+procedure TProberOPCManager.OnWriteTimer(Sender: TObject);
+var nIdx: Integer;
+begin
+  FSyncLock.Enter;
+  try
+    if FWriteList.Count < 1 then
+      Exit;
+    nIdx := 0;
+
+    while True do
+    try
+      if WriteOPCData then
+           nIdx := 2
+      else Inc(nIdx);
+
+      if nIdx > 1 then
+      begin
+        ClearWriteList(False);
+        Break;
+      end;
+    except
+      Inc(nIdx);
+    end;
+  finally
+    FSyncLock.Leave;
+  end;
+end;
+
+//Date: 2016-09-08
+//Desc:
+function TProberOPCManager.WriteOPCData: Boolean;
+var nStr: string;
+    nIdx: Integer;
+    nF: POPCFolder;
+    nI: POPCItem;
+    nW: POPCWriteItem;
+begin
+  Result := False;
+  //default val
+  nW := nil;
+  
+  for nIdx:=0 to FWriteList.Count - 1 do
+  try
+    nW := FWriteList[nIdx];
+    if not nW.FEnable then Continue;
+
+    if nW.FAction = waConnSrv then
+    begin
+      nW.FEnable := False;
+      ConnectOPCServer(nStr, GetHost(nW.FHost));
+      Continue;
+    end;
+
+    GetItem(nF, nI, nW.FItem);
     //get opc item
 
     if not (Assigned(nI) and Assigned(nI.FGItem)) then
     begin
-      nStr := '通道[ %s ]输入节点[ %s ]在OPC中无效.';
-      nStr := Format(nStr, [nTunnel, nT.FIn[nIdx]]);
+      nStr := '项目节点[ %s ]在OPC中已无效.';
+      nStr := Format(nStr, [nW.FItem]);
 
       WriteLog(nStr);
+      nW.FEnable := False;
+      Continue;
+    end;
+
+    nI.FGItem.WriteSync(nW.FValue);
+    //write data
+    nW.FEnable := False;
+  except
+    on E: Exception do
+    begin
+      WriteLog('主线程操作失败,描述: ' + E.Message);
+      if Assigned(nW) then
+        ConnectOPCServer(nStr, GetHost(nW.FHost));
       Exit;
     end;
-
-    nStr := nI.FGItem.ValueStr;
-    if not IsNumber(nStr, False) then
-    begin
-      nStr := Format('通道[ %s ]输入点[ %s ]数据无效.', [nTunnel, nT.FIn[nIdx]]);
-      WriteLog(nStr);
-      Exit;
-    end;
-
-    nVal := StrToInt(nStr);
-    if nVal <>  nT.FHost.FInSignalOn then Exit;
-    //no single,check failure
-
-    {$IFDEF DEBUG}
-    with nI.FGItem do
-    begin
-      WriteLog(Format('读取:[ T: %s, I: %s, V: %d ].', [nTunnel, ItemID, nVal]));
-    end;
-    {$ENDIF}
   end;
+
+  Result := True;
 end;
 
 initialization
