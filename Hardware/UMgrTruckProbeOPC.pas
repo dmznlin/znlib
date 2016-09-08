@@ -797,16 +797,16 @@ begin
 
   for nIdx:=Low(nT.FOut) to High(nT.FOut) do
   begin
-    if nT.FOut[nIdx] = cProber_NullASCII then Continue;
+    if nT.FIn[nIdx] = cProber_NullASCII then Continue;
     //invalid out address
 
-    GetItem(nF, nI, nT.FOut[nIdx]);
+    GetItem(nF, nI, nT.FIn[nIdx]);
     //get opc item
 
     if not (Assigned(nI) and Assigned(nI.FGItem)) then
     begin
-      nStr := '通道[ %s ]输出节点[ %s ]在OPC中无效.';
-      nStr := Format(nStr, [nTunnel, nT.FOut[nIdx]]);
+      nStr := '通道[ %s ]输入节点[ %s ]在OPC中无效.';
+      nStr := Format(nStr, [nTunnel, nT.FIn[nIdx]]);
 
       WriteLog(nStr);
       Exit;
@@ -815,7 +815,7 @@ begin
     nStr := nI.FGItem.ValueStr;
     if not IsNumber(nStr, False) then
     begin
-      nStr := Format('通道[ %s ]输入点[ %s ]数据无效.', [nTunnel, nT.FOut[nIdx]]);
+      nStr := Format('通道[ %s ]输入点[ %s ]数据无效.', [nTunnel, nT.FIn[nIdx]]);
       WriteLog(nStr);
       Exit;
     end;
