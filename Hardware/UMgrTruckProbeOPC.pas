@@ -163,12 +163,17 @@ end;
 
 destructor TProberOPCManager.Destroy;
 begin
-  ClearHosts();
-  ClearFolders();
-  ClearTunnels();
+  FSyncLock.Enter;
+  try
+    FWriteTimer.Free;
+    ClearWriteList();
 
-  FWriteTimer.Free;
-  ClearWriteList();
+    ClearHosts();
+    ClearFolders();
+    ClearTunnels();
+  finally
+    FSyncLock.Leave;
+  end;
   
   FSyncLock.Free;
   inherited;
@@ -1059,7 +1064,7 @@ begin
 end;
 
 //Date: 2016-09-08
-//Desc:
+//Desc: 主进程执行写操作
 function TProberOPCManager.WriteOPCData: Boolean;
 var nStr: string;
     nIdx: Integer;
@@ -1069,7 +1074,7 @@ var nStr: string;
 begin
   Result := False;
   //default val
-  nW := nil;
+  //nW := nil;
   
   for nIdx:=0 to FWriteList.Count - 1 do
   try
@@ -1079,7 +1084,7 @@ begin
     if nW.FAction = waConnSrv then
     begin
       nW.FEnable := False;
-      ConnectOPCServer(nStr, GetHost(nW.FHost));
+      //ConnectOPCServer(nStr, GetHost(nW.FHost));
       Continue;
     end;
 
@@ -1103,8 +1108,8 @@ begin
     on E: Exception do
     begin
       WriteLog('主线程操作失败,描述: ' + E.Message);
-      if Assigned(nW) then
-        ConnectOPCServer(nStr, GetHost(nW.FHost));
+      //if Assigned(nW) then
+      //  ConnectOPCServer(nStr, GetHost(nW.FHost));
       Exit;
     end;
   end;
