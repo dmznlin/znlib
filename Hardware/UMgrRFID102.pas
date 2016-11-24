@@ -56,6 +56,7 @@ type
 
     FCardLen: Integer;         //卡号长度
     FCardPre: TStrings;        //前缀控制
+    FOptions: TStrings;        //附加选项
   end;
 
   THYReaderThreadType = (ttAll, ttActive);
@@ -145,6 +146,7 @@ type
     //启停读头
     procedure OpenDoor(const nReader: string);
     //打开道闸
+    property Readers: TList read FReaders;
     property OnCardProc: THYReaderProc read FOnProc write FOnProc;
     property OnCardEvent: THYReaderEvent read FOnEvent write FOnEvent;
     //属性相关
@@ -215,7 +217,9 @@ begin
     nItem.FClient.Free;
     nItem.FClient := nil;
 
-    FreeAndNil(nItem.FCardPre);    
+    FreeAndNil(nItem.FCardPre);
+    FreeAndNil(nItem.FOptions);
+       
     Dispose(nItem);
     FReaders.Delete(nIdx);
   end;
@@ -491,6 +495,13 @@ begin
           FCardPre := TStringList.Create;
           SplitStr(UpperCase(nTmp.ValueAsString), FCardPre, 0, ',');
         end else FCardPre := nil;
+
+        nTmp := FindNode('options');
+        if Assigned(nTmp) then
+        begin
+          FOptions := TStringList.Create;
+          SplitStr(nTmp.ValueAsString, FOptions, 0, ';');
+        end else FOptions := nil;
       end;
     end;
   finally

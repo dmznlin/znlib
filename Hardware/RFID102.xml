@@ -18,6 +18,7 @@
 *.keeponce:同卡号连续刷卡时,卡号有效间隔,单位毫秒.
 *.keeppeer: Y,每keeponce视为一次;N,间隔keeponce刷卡视为一次.
 *.cardlen,cardprefix:卡片识别标识,比全局配置优先级高.
+*.options: 附加参数,用于特定业务
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-->
 <HY_RFID102>
   <config>
@@ -37,6 +38,7 @@
       <virtual reader="" type="900">N</virtual>
       <cardlen>10</cardlen>
       <cardprefix>C0F0</cardprefix>
+      <options>key1=value;key2=value</options>
     </reader>
   </readers>
 </HY_RFID102>
