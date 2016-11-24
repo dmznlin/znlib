@@ -76,7 +76,8 @@ type
     tCmd_Reader_ReadWorkmode          = $36,
     tCmd_Reader_SetEASweight          = $37,
     tCmd_Reader_SetSyris485TimeOut    = $38,
-    tCmd_Reader_SetReplyTimeOut       = $3B
+    tCmd_Reader_SetReplyTimeOut       = $3B,
+    tCmd_Reader_SetReLay              = $3C
     //读写器自定义命令
 
     //1	0x21	读取读写器信息
@@ -92,6 +93,7 @@ type
     //11	0x37	EAS测试精度设置命令
     //12	0x38	设置Syris485响应偏执时间
     //13	0x3b	设置触发有效时间
+    //14  0x3c  设置继电器开合状态
   );
 
   PRFIDReaderCmd = ^TRFIDReaderCmd;

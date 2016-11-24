@@ -169,9 +169,11 @@ type
     FBuf,FData: string;      //数据缓存
   end;
 
+  TMHReaders = array of TMHReader;
+
   TMHReaderManager = class(TObject)
   private
-    FReaders: array of TMHReader;
+    FReaders: TMHReaders;
     //读头列表
     FErrorCode: Integer;
     FErrorDesc: string;
@@ -187,10 +189,11 @@ type
     procedure ResetReader(const nIdx: Integer; const nAction: string);
     procedure CloseReader(const nIdx: Integer = -1);
     //打开关闭
-    procedure BeepReader(const nIdx: Integer; const nNum: Integer = 1);
+    procedure BeepReader(const nIdx: Integer; const nNum: Integer = 1;
+      const nForce: Boolean = False);
     //读头蜂鸣
     procedure WriteReaderLog(const nIdx,nCode: Integer;
-      const nAction,nResult: string);
+      const nAction,nResult: string;const nForce: Boolean = False);
     //记录日志
   public
     constructor Create;
@@ -209,6 +212,7 @@ type
     property ErrorDesc: string read FErrorDesc;
     property ReaderLog: Boolean read FReaderLog write FReaderLog;
     property ReaderBeep: Boolean read FReaderBeep write FReaderBeep;
+    property Readers:  TMHReaders read FReaders;
     //属性相关
   end;
 
@@ -250,10 +254,10 @@ end;
 //Parm: 读头索引;错误码;动作;结果
 //Desc: 记录nIdx读头的错误信息
 procedure TMHReaderManager.WriteReaderLog(const nIdx, nCode: Integer;
-  const nAction,nResult: string);
+  const nAction,nResult: string; const nForce: Boolean);
 var nStr: string;
 begin
-  if not FReaderLog then Exit;
+  if (not FReaderLog) and (not nForce) then Exit;
   //xxxxx
   
   with FReaders[nIdx] do
@@ -302,7 +306,7 @@ begin
     Result := False;
     if not FEnable then
     begin
-      WriteReaderLog(nIdx, 50, '读卡器', '已关闭');
+      WriteReaderLog(nIdx, 50, '读卡器', '已关闭', True);
       Exit;
     end;
 
@@ -316,7 +320,7 @@ begin
 
     if nHwnd <= 0 then
     begin
-      WriteReaderLog(nIdx, nHwnd, '初始化', '失败');
+      WriteReaderLog(nIdx, nHwnd, '初始化', '失败', True);
       Exit;
     end;
 
@@ -423,10 +427,11 @@ end;
 //Date: 2016-09-01
 //Parm: 读头索引;蜂鸣次数
 //Desc: 使nIdx的读头蜂鸣nNum次
-procedure TMHReaderManager.BeepReader(const nIdx: Integer; const nNum: Integer);
+procedure TMHReaderManager.BeepReader(const nIdx: Integer; const nNum: Integer;
+  const nForce: Boolean);
 var i: Integer;
 begin
-  if FReaderBeep and (FReaders[nIdx].FHwnd > 0) then
+  if (FReaderBeep and (FReaders[nIdx].FHwnd > 0)) or nForce then
   begin
     for i:=nNum downto 1 do
     begin
@@ -494,7 +499,7 @@ begin
   finally
     if Result = '' then
          BeepReader(nIdx, 2)
-    else BeepReader(nIdx, 1);
+    else BeepReader(nIdx, 1, True);
 
     ResetReader(nIdx, '读取卡号');
     //xxxxx
@@ -607,7 +612,7 @@ begin
   finally
     if Result = '' then
          BeepReader(nIdx, 2)
-    else BeepReader(nIdx, 1);
+    else BeepReader(nIdx, 1, True);
 
     ResetReader(nIdx, '读取数据');
     //xxxxx
@@ -729,7 +734,7 @@ begin
     end;
   finally
     if Result then
-         BeepReader(nIdx, 1)
+         BeepReader(nIdx, 1, True)
     else BeepReader(nIdx, 2);
 
     ResetReader(nIdx, '写入数据');
