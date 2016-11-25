@@ -54,6 +54,7 @@ type
     FObject   : string;                //对象标识
     FSleep    : Integer;               //对象间隔
     FText     : string;                //播发内容
+    FPeerLong : Integer;               //单字时长
     FTimes    : Integer;               //重发次数
     FInterval : Integer;               //重发间隔
     FRepeat   : Integer;               //单次重复
@@ -346,7 +347,7 @@ end;
 procedure TNetVoiceManager.LoadConfig(const nFile: string);
 var i,nIdx: Integer;
     nXML: TNativeXml;
-    nRoot,nNode,nTmp: TXmlNode;
+    nRoot,nNode,nTmp,nTnd: TXmlNode;
     
     nCard: PVoiceCardHost;
     nParam: PVoiceContentParam;
@@ -365,14 +366,16 @@ begin
       //标记不发送
       nCard.FVoiceKeep := 0;
       //标记不保持
+      nCard.FVoiceLast := 0;
+      //标记未发送
 
-      with nRoot do
+      with nRoot,nCard^ do
       begin
-        nCard.FID     := AttributeByName['id'];
-        nCard.FName   := AttributeByName['name'];
-        nCard.FHost   := NodeByName('ip').ValueAsString;
-        nCard.FPort   := NodeByName('port').ValueAsInteger;
-        nCard.FEnable := NodeByName('enable').ValueAsInteger = 1;
+        FID     := AttributeByName['id'];
+        FName   := AttributeByName['name'];
+        FHost   := NodeByName('ip').ValueAsString;
+        FPort   := NodeByName('port').ValueAsInteger;
+        FEnable := NodeByName('enable').ValueAsInteger = 1;
       end;
 
       nNode := nRoot.FindNode('contents');
@@ -387,17 +390,22 @@ begin
           New(nParam);
           nCard.FContent.Add(nParam);
 
-          with nTmp do
+          with nTmp,nParam^ do
           begin
-            nParam.FID       := AttributeByName['id'];
-            nParam.FObject   := NodeByName('object').ValueAsString;
-            nParam.FSleep    := NodeByName('sleep').ValueAsInteger;
-            nParam.FText     := NodeByName('text').ValueAsString;
-            nParam.FTimes    := NodeByName('times').ValueAsInteger;
-            nParam.FInterval := NodeByName('interval').ValueAsInteger;
+            FID       := AttributeByName['id'];
+            FObject   := NodeByName('object').ValueAsString;
+            FSleep    := NodeByName('sleep').ValueAsInteger;
+            FText     := NodeByName('text').ValueAsString;
 
-            nParam.FRepeat   := NodeByName('repeat').ValueAsInteger;
-            nParam.FReInterval := NodeByName('reinterval').ValueAsInteger;
+            nTnd := FindNode('peerword');
+            if Assigned(nTnd) then
+                 FPeerLong := nTnd.ValueAsInteger
+            else FPeerLong := 220;
+
+            FTimes    := NodeByName('times').ValueAsInteger;
+            FInterval := NodeByName('interval').ValueAsInteger;
+            FRepeat   := NodeByName('repeat').ValueAsInteger;
+            FReInterval := NodeByName('reinterval').ValueAsInteger;
           end;
         end;
       end else nCard.FContent := nil;
@@ -686,10 +694,15 @@ begin
         StrPCopy(@FContent[0], nStr);
         FLength := Word2Voice(Length(nStr) + 2);
 
-        nCard.FParam := nParm;
-        nCard.FVoiceLast := 0;
-        nCard.FVoiceTime := 0;
-        nCard.FVoiceKeep := Length(WideString(nStr)) * 220; //每字220毫秒
+        with nCard^ do
+        begin
+          FParam := nParm;
+          FVoiceLast := 0;
+          FVoiceTime := 0;
+
+          FVoiceKeep := Length(WideString(nStr)) * nParm.FPeerLong;
+          //计算播放内容的时长
+        end;
       end;
 
       {$IFDEF DEBUG}
