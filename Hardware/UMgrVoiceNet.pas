@@ -4,6 +4,7 @@
 *******************************************************************************}
 unit UMgrVoiceNet;
 
+{.$DEFINE DEBUG}
 interface
 
 uses
@@ -26,7 +27,11 @@ const
   cVoice_Code_Unicode   = $03;         //编码
 
   cVoice_FrameInterval  = 10;          //帧间隔
-  cVoice_ContentLen     = 4096;        //文本长度
+  cVoice_Status_Busy    = $4E;         //播音状态
+  cVoice_Status_Idle    = $4F;         //空闲状态
+
+  cVoice_Content_Len    = 4096;        //文本长度
+  cVoice_Content_Keep   = 60 * 1000;   //停留超时
 
 type
   TVoiceWord = record
@@ -40,7 +45,7 @@ type
     FLength   : TVoiceWord;            //数据长度
     FCommand  : Byte;                  //命令字
     FParam    : Byte;                  //命令参数
-    FContent  : array[0..cVoice_ContentLen-1] of Char;
+    FContent  : array[0..cVoice_Content_Len-1] of Char;
   end;
 
   PVoiceContentParam = ^TVoiceContentParam;
@@ -66,6 +71,7 @@ type
     FText     : string;                //待播发文本
     FCard     : string;                //执行语音卡
     FContent  : string;                //执行内容标识
+    FAddTime  : Int64;                 //内容添加时间
   end;
 
   PVoiceCardHost = ^TVoiceCardHost;
@@ -81,6 +87,7 @@ type
     FVoiceData: TVoiceDataItem;        //语音数据
     FVoiceLast: Int64;                 //上次播发
     FVoiceTime: Byte;                  //播发次数
+    FVoiceKeep: Integer;               //保持时间
     FParam    : PVoiceContentParam;    //播发参数
   end;
 
@@ -100,9 +107,11 @@ type
     procedure Execute; override;
     procedure Doexecute;
     //执行线程
-    procedure CombineBuffer;
-    //合并缓冲
     procedure DisconnectClient;
+    //清理链路
+    function IsCardBusy(const nCard: PVoiceCardHost): Boolean;
+    //状态判定
+    function MakeCardData(const nCard: PVoiceCardHost): Boolean;
     procedure SendVoiceData(const nCard: PVoiceCardHost);
     //发送数据
   public
@@ -318,9 +327,14 @@ begin
     New(nData);
     FBuffer.Add(nData);
 
-    nData.FText := nText;
+    nData.FText := Trim(nText);
     nData.FCard := nCard;
     nData.FContent := nContent;
+    nData.FAddTime := GetTickCount;
+
+    {$IFDEF DEBUG}
+    WriteLog('Add: ' + nText);
+    {$ENDIF}
   finally
     FSyncLock.Leave;
   end;   
@@ -349,6 +363,8 @@ begin
 
       nCard.FVoiceTime := MAXBYTE;
       //标记不发送
+      nCard.FVoiceKeep := 0;
+      //标记不保持
 
       with nRoot do
       begin
@@ -485,13 +501,6 @@ var nStr: string;
 begin
   with FOwner do
   begin
-    FSyncLock.Enter;
-    try
-      CombineBuffer;
-    finally
-      FSyncLock.Leave;
-    end;
-
     nCard := nil;
     //init
 
@@ -499,7 +508,16 @@ begin
     try
       if Terminated then Exit;
       nCard := FCards[nIdx];
+
+      FSyncLock.Enter;
+      try
+        MakeCardData(nCard);
+      finally
+        FSyncLock.Leave;
+      end;
+
       SendVoiceData(nCard);
+      //发送数据
     except
       on E: Exception do
       begin
@@ -520,38 +538,79 @@ begin
   end;
 end;
 
+//Date: 2016-11-25
+//Parm: 语音卡
+//Desc: 测试nCard是否处于繁忙状态
+function TNetVoiceConnector.IsCardBusy(const nCard: PVoiceCardHost): Boolean;
+var nBuf: TIdBytes;
+    nData: TVoiceDataItem;
+begin
+  Result := GetTickCount - nCard.FVoiceLast < nCard.FVoiceKeep;
+  if Result then Exit; //keep short time
+  if not FClient.Connected then Exit;
+
+  with nData do
+  begin
+    FHead := cVoice_CMD_Head;
+    FLength := Word2Voice(1);
+    FCommand := cVoice_CMD_QStatus;
+  end;
+
+  SetLength(nBuf, 0);
+  nBuf := RawToBytes(nData, Voice2Word(nData.FLength) + 3);
+  //数据缓冲
+
+  FClient.IOHandler.Write(nBuf);
+  Sleep(cVoice_FrameInterval);
+  //发送并等待  
+
+  FClient.IOHandler.ReadBytes(nBuf, 1, False);
+  Result := (Length(nBuf) > 0) and (nBuf[0] <> cVoice_Status_Idle);
+end;
+
 //Desc: 将发送缓冲数据合并到语音卡缓冲
-procedure TNetVoiceConnector.CombineBuffer;
+function TNetVoiceConnector.MakeCardData(const nCard: PVoiceCardHost): Boolean;
 var nStr: string;
     i,nIdx,nLen: Integer;
-
-    nCard: PVoiceCardHost;
     nRes: PVoiceResource;
     nParm: PVoiceContentParam;
     nTxt: PVoiceContentNormal;
+
+    //Desc: 释放缓存项
+    procedure DisposeBufferItem;
+    begin
+      Dispose(PVoiceContentNormal(FOwner.FBuffer[nIdx]));
+      FOwner.FBuffer.Delete(nIdx);
+    end;
 begin
   with FOwner do
   begin
-    for nIdx:=0 to FBuffer.Count - 1 do
+    Result := False;
+    nIdx := 0;
+    
+    while nIdx < FBuffer.Count do
     begin
       nTxt := FBuffer[nIdx];
-      nCard := FindCardHost(nTxt.FCard);
-
-      if not Assigned(nCard) then
+      if GetTickCount - nTxt.FAddTime > cVoice_Content_Keep then
       begin
-        nStr := '语音卡[ %s ]标识不存在.';
+        nStr := '语音卡[ %s ]内容超时.';
         nStr := Format(nStr, [nTxt.FCard]);
-
         WriteLog(nStr);
+
+        DisposeBufferItem;
         Continue;
       end;
+
+      if FindCardHost(nTxt.FCard) <> nCard then Continue;
+      //非本卡播放
 
       if not nCard.FEnable then
       begin
         nStr := '语音卡[ %s ]已停用.';;
         nStr := Format(nStr, [nCard.FID]);
-
         WriteLog(nStr);
+
+        DisposeBufferItem;
         Continue;
       end;
 
@@ -560,10 +619,14 @@ begin
       begin
         nStr := '语音卡[ %s:%s ]内容标识不存在.';;
         nStr := Format(nStr, [nCard.FID, nTxt.FContent]);
-
         WriteLog(nStr);
+
+        DisposeBufferItem;
         Continue;
       end;
+
+      if IsCardBusy(nCard) then Exit;
+      //忙时不处理
 
       //------------------------------------------------------------------------
       SplitStr(nTxt.FText, FListA, 0, #9, False);
@@ -608,25 +671,36 @@ begin
       //xxxxx
 
       //------------------------------------------------------------------------
-
       with nCard.FVoiceData do
       begin
         FHead := cVoice_CMD_Head;
         FCommand := cVoice_CMD_Play;
         FParam := cVoice_Code_GB2312;
 
+        nLen := cVoice_Content_Len - 7;
+        //避免内容超长                
+        if Length(nStr) > nLen then
+          nStr := Copy(nStr, 1, nLen);
         nStr := '[m3]' + nStr + '[d]';
+        
         StrPCopy(@FContent[0], nStr);
         FLength := Word2Voice(Length(nStr) + 2);
 
         nCard.FParam := nParm;
         nCard.FVoiceLast := 0;
         nCard.FVoiceTime := 0;
+        nCard.FVoiceKeep := Length(WideString(nStr)) * 220; //每字220毫秒
       end;
-    end;
 
-    ClearDataList(FBuffer);
-    //清空缓冲
+      {$IFDEF DEBUG}
+      WriteLog('Get: ' + nTxt.FText);
+      {$ENDIF}
+
+      DisposeBufferItem;
+      //处理完毕,释放
+      Result := True;
+      Exit;
+    end;
   end;
 end;
 
