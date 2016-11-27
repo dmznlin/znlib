@@ -7,11 +7,20 @@
 *.tunnel: 所在通道
 *.printer: 绑定打印
 *.type: 读卡器类型,(0.现场;1.进厂;2.出厂)
-*.uselabel: 是否与电子签配对使用
+*.uselabel: 是否与电子签配对使用(Y/N)
 *.ledtext: LED显示内容
+*.options: 附加参数,Key=Value;Key=Value形式
 +++++++++++++++++++++++++++++++++++ -->
 <readers>
   <readone>
+    <item>
+      <id>ZT001</id>
+      <ip>192.168.3.90</ip>
+      <port>8000</port>
+      <tunnel>ZT001</tunnel>
+      <uselabel>N</uselabel>
+      <options>key1=value;key2=values</options>
+    </item>
   </readone>
   <readkeep>
     <item>
@@ -19,14 +28,6 @@
       <ip>192.168.3.92</ip>
       <port>8000</port>
       <tunnel>FH001</tunnel>
-      <ledtext>  华新水泥    百年品质  </ledtext>
-    </item>
-    <item>
-      <id>FH002</id>
-      <ip>192.168.3.91</ip>
-      <port>8000</port>
-      <tunnel>FH002</tunnel>
-      <uselabel>N</uselabel>
       <ledtext>  华新水泥    百年品质  </ledtext>
     </item>
   </readkeep>

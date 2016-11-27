@@ -19,15 +19,17 @@ const
   cPTWait_Long  = 2 * 1000; //网络通讯时刷新频度
 
 type
-  TOnTunnelDataEvent = procedure (const nValue: Double) of object;
-  //事件定义
-
   TPoundTunnelManager = class;
   TPoundTunnelConnector = class;
 
   PPTPortItem = ^TPTPortItem;
   PPTCameraItem = ^TPTCameraItem;
   PPTTunnelItem = ^TPTTunnelItem;
+
+  TOnTunnelDataEvent = procedure (const nValue: Double) of object;
+  TOnTunnelDataEventEx = procedure (const nValue: Double;
+    const nPort: PPTPortItem) of object;
+  //事件定义
   
   TPTTunnelItem = record
     FID: string;                     //标识
@@ -42,12 +44,13 @@ type
     FCardInterval: Integer;          //读卡间隔
     FSampleNum: Integer;             //采样个数
     FSampleFloat: Integer;           //采样浮动
-    FAdditional: string;             //附加参数
+    FOptions: TStrings;              //附加参数
 
     FCamera: PPTCameraItem;          //摄像机
     FCameraTunnels: array[0..cPTMaxCameraTunnel-1] of Byte;
                                      //摄像通道                                     
-    FOnData: TOnTunnelDataEvent;     //接收事件
+    FOnData: TOnTunnelDataEvent;
+    FOnDataEx:TOnTunnelDataEventEx;  //接收事件
     FOldEventTunnel: PPTTunnelItem;  //原接收通道
   end;
 
@@ -97,7 +100,10 @@ type
     FCOMPort: TComPort;              //读写对象
     FCOMBuff: string;                //通讯缓冲
     FCOMData: string;                //通讯数据
+    FCOMDataEx: string;              //原始数据
+    
     FEventTunnel: PPTTunnelItem;     //接收通道
+    FOptions: TStrings;              //附加参数
   end;
 
   TPoundTunnelConnector = class(TThread)
@@ -147,14 +153,17 @@ type
     function ParseWeight(const nPort: PPTPortItem): Boolean;
     procedure OnComData(Sender: TObject; Count: Integer);
     //读取数据
+    procedure DisconnectClient(const nClient: TIdTCPClient);
+    //关闭链路
   public
     constructor Create;
     destructor Destroy; override;
     //创建释放
     procedure LoadConfig(const nFile: string);
     //读取配置
-    function ActivePort(const nTunnel: string; nEvent: TOnTunnelDataEvent;
-      const nOpenPort: Boolean = False): Boolean;
+    function ActivePort(const nTunnel: string; const nEvent: TOnTunnelDataEvent;
+      const nOpenPort: Boolean = False;
+      const nEventEx: TOnTunnelDataEventEx = nil): Boolean;
     procedure ClosePort(const nTunnel: string);
     //起停端口
     function GetPort(const nID: string): PPTPortItem;
@@ -205,6 +214,7 @@ end;
 procedure TPoundTunnelManager.ClearList(const nFree: Boolean);
 var nIdx: Integer;
     nPort: PPTPortItem;
+    nTunnel: PPTTunnelItem;
 begin
   for nIdx:=FPorts.Count - 1 downto 0 do
   begin
@@ -221,6 +231,7 @@ begin
       nPort.FClient.Free;
     end;
 
+    FreeAndNil(nPort.FOptions);
     Dispose(nPort);
     FPorts.Delete(nIdx);
   end;
@@ -233,7 +244,10 @@ begin
 
   for nIdx:=FTunnels.Count - 1 downto 0 do
   begin
-    Dispose(PPTTunnelItem(FTunnels[nIdx]));
+    nTunnel := FTunnels[nIdx];
+    FreeAndNil(nTunnel.FOptions);
+    
+    Dispose(nTunnel);
     FTunnels.Delete(nIdx);
   end;
 
@@ -242,6 +256,20 @@ begin
     FPorts.Free;
     FCameras.Free;
     FTunnels.Free;
+  end;
+end;
+
+//Date: 2016-11-26
+//Parm: 套接字
+//Desc: 管理nClient链路
+procedure TPoundTunnelManager.DisconnectClient(const nClient: TIdTCPClient);
+begin
+  if Assigned(nClient) then
+  begin
+    nClient.Disconnect;
+    if Assigned(nClient.IOHandler) then
+      nClient.IOHandler.InputBuffer.Clear;
+    //xxxxx
   end;
 end;
 
@@ -300,69 +328,84 @@ begin
       FPorts.Add(nPort);
       FillChar(nPort^, SizeOf(TPTPortItem), #0);
 
-      nPort.FID := AttributeByName['id'];
-      nPort.FName := AttributeByName['name'];
-      nPort.FType := NodeByName('type').ValueAsString;
-
-      nTmp := FindNode('conn');
-      if Assigned(nTmp) then
-           nStr := nTmp.ValueAsString
-      else nStr := 'com';
-
-      if CompareText('tcp', nStr) = 0 then
-           nPort.FConn := ctTCP
-      else nPort.FConn := ctCOM;
-
-      nPort.FPort := NodeByName('port').ValueAsString;
-      nPort.FRate := StrToBaudRate(NodeByName('rate').ValueAsString);
-      nPort.FDatabit := StrToDataBits(NodeByName('databit').ValueAsString);
-      nPort.FStopbit := StrToStopBits(NodeByName('stopbit').ValueAsString);
-      nPort.FParitybit := StrToParity(NodeByName('paritybit').ValueAsString);
-      nPort.FParityCheck := NodeByName('paritycheck').ValueAsString = 'Y';
-
-      nPort.FCharBegin := Char(StrToInt(NodeByName('charbegin').ValueAsString));
-      nPort.FCharEnd := Char(StrToInt(NodeByName('charend').ValueAsString));
-      nPort.FPackLen := NodeByName('packlen').ValueAsInteger;
-
-      nTmp := FindNode('invalidlen');
-      if Assigned(nTmp) then //直接指定截取长度
+      with nPort^ do
       begin
-        nPort.FInvalidBegin := 0;
-        nPort.FInvalidEnd := nTmp.ValueAsInteger;
-      end else
-      begin
-        nPort.FInvalidBegin := NodeByName('invalidbegin').ValueAsInteger;
-        nPort.FInvalidEnd := NodeByName('invalidend').ValueAsInteger;
+        FID := AttributeByName['id'];
+        FName := AttributeByName['name'];
+        FType := NodeByName('type').ValueAsString;
+
+        nTmp := FindNode('conn');
+        if Assigned(nTmp) then
+             nStr := nTmp.ValueAsString
+        else nStr := 'com';
+
+        if CompareText('tcp', nStr) = 0 then
+             nPort.FConn := ctTCP
+        else nPort.FConn := ctCOM;
+
+        FPort := NodeByName('port').ValueAsString;
+        FRate := StrToBaudRate(NodeByName('rate').ValueAsString);
+        FDatabit := StrToDataBits(NodeByName('databit').ValueAsString);
+        FStopbit := StrToStopBits(NodeByName('stopbit').ValueAsString);
+        FParitybit := StrToParity(NodeByName('paritybit').ValueAsString);
+        FParityCheck := NodeByName('paritycheck').ValueAsString = 'Y';
+
+        FCharBegin := Char(StrToInt(NodeByName('charbegin').ValueAsString));
+        FCharEnd := Char(StrToInt(NodeByName('charend').ValueAsString));
+        FPackLen := NodeByName('packlen').ValueAsInteger;
+
+        nTmp := FindNode('invalidlen');
+        if Assigned(nTmp) then //直接指定截取长度
+        begin
+          FInvalidBegin := 0;
+          FInvalidEnd := nTmp.ValueAsInteger;
+        end else
+        begin
+          FInvalidBegin := NodeByName('invalidbegin').ValueAsInteger;
+          FInvalidEnd := NodeByName('invalidend').ValueAsInteger;
+        end;
+
+        FSplitTag := Char(StrToInt(NodeByName('splittag').ValueAsString));
+        FSplitPos := NodeByName('splitpos').ValueAsInteger;
+        FDataMirror := NodeByName('datamirror').ValueAsInteger = 1;
+        FDataEnlarge := NodeByName('dataenlarge').ValueAsFloat;
+
+        nTmp := FindNode('maxval');
+        if Assigned(nTmp) and (nTmp.AttributeByName['enable'] = 'y') then
+        begin
+          FMaxValue := nTmp.ValueAsFloat;
+          FMaxValid := StrToFloat(nTmp.AttributeByName['valid']);
+
+          FMaxValue := Float2Float(FMaxValue, 100, False);
+          FMaxValid := Float2Float(FMaxValid, 100, False);
+        end else
+        begin
+          FMaxValue := 0;
+          FMaxValid := 0;
+        end;
+
+        nTmp := FindNode('minval');
+        if Assigned(nTmp) and (nTmp.AttributeByName['enable'] = 'y') then
+             FMinValue := Float2Float(nTmp.ValueAsFloat, 100, False)
+        else FMinValue :=0;
+
+        nTmp := FindNode('hostip');
+        if Assigned(nTmp) then
+          FHostIP := nTmp.ValueAsString;
+        //xxxxx
+
+        nTmp := FindNode('hostport');
+        if Assigned(nTmp) then
+          FHostPort := nTmp.ValueAsInteger;
+        //xxxxx
+
+        nTmp := FindNode('options');
+        if Assigned(nTmp) then
+        begin
+          FOptions := TStringList.Create;
+          SplitStr(nTmp.ValueAsString, FOptions, 0, ';');
+        end else FOptions := nil;
       end;
-
-      nPort.FSplitTag := Char(StrToInt(NodeByName('splittag').ValueAsString));
-      nPort.FSplitPos := NodeByName('splitpos').ValueAsInteger;
-      nPort.FDataMirror := NodeByName('datamirror').ValueAsInteger = 1;
-      nPort.FDataEnlarge := NodeByName('dataenlarge').ValueAsFloat;
-
-      nTmp := FindNode('maxval');
-      if Assigned(nTmp) and (nTmp.AttributeByName['enable'] = 'y') then
-      begin
-        nPort.FMaxValue := nTmp.ValueAsFloat;
-        nPort.FMaxValid := StrToFloat(nTmp.AttributeByName['valid']);
-
-        nPort.FMaxValue := Float2Float(nPort.FMaxValue, 100, False);
-        nPort.FMaxValid := Float2Float(nPort.FMaxValid, 100, False);
-      end else
-      begin
-        nPort.FMaxValue := 0;
-        nPort.FMaxValid := 0;
-      end;
-
-      nTmp := FindNode('minval');
-      if Assigned(nTmp) and (nTmp.AttributeByName['enable'] = 'y') then
-           nPort.FMinValue := Float2Float(nTmp.ValueAsFloat, 100, False)
-      else nPort.FMinValue :=0;
-
-      nTmp := FindNode('hostip');
-      if Assigned(nTmp) then nPort.FHostIP := nTmp.ValueAsString;
-      nTmp := FindNode('hostport');
-      if Assigned(nTmp) then nPort.FHostPort := nTmp.ValueAsInteger;
 
       nPort.FClient := nil;
       nPort.FClientActive := False;
@@ -383,13 +426,16 @@ begin
         FCameras.Add(nCamera);
         FillChar(nCamera^, SizeOf(TPTCameraItem), #0);
 
-        nCamera.FID := AttributeByName['id'];
-        nCamera.FHost := NodeByName('host').ValueAsString;
-        nCamera.FPort := NodeByName('port').ValueAsInteger;
-        nCamera.FUser := NodeByName('user').ValueAsString;
-        nCamera.FPwd := NodeByName('password').ValueAsString;
-        nCamera.FPicSize := NodeByName('picsize').ValueAsInteger;
-        nCamera.FPicQuality := NodeByName('picquality').ValueAsInteger;
+        with nCamera^ do
+        begin
+          FID := AttributeByName['id'];
+          FHost := NodeByName('host').ValueAsString;
+          FPort := NodeByName('port').ValueAsInteger;
+          FUser := NodeByName('user').ValueAsString;
+          FPwd := NodeByName('password').ValueAsString;
+          FPicSize := NodeByName('picsize').ValueAsInteger;
+          FPicQuality := NodeByName('picquality').ValueAsInteger;
+        end;
 
         nTmp := FindNode('type');
         if Assigned(nTmp) then
@@ -412,37 +458,42 @@ begin
         raise Exception.Create(Format('通道[ %s.Port ]无效.', [nTunnel.FName]));
       //xxxxxx
 
-      nTunnel.FID := AttributeByName['id'];
-      nTunnel.FName := AttributeByName['name'];
-      nTunnel.FProber := NodeByName('prober').ValueAsString;
-      nTunnel.FReader := NodeByName('reader').ValueAsString;
-      nTunnel.FUserInput := NodeByName('userinput').ValueAsString = 'Y';
-
-      nTunnel.FFactoryID := NodeByName('factory').ValueAsString;
-      nTunnel.FCardInterval := NodeByName('cardInterval').ValueAsInteger;
-      nTunnel.FSampleNum := NodeByName('sampleNum').ValueAsInteger;
-      nTunnel.FSampleFloat := NodeByName('sampleFloat').ValueAsInteger;
-
-      nTmp := FindNode('additional');
-      if Assigned(nTmp) then
-           nTunnel.FAdditional := nTmp.ValueAsString
-      else nTunnel.FAdditional := '';
-
-      nTmp := FindNode('AutoWeight');
-      if Assigned(nTmp) then
-           nTunnel.FAutoWeight := nTmp.ValueAsString = 'Y'
-      else nTunnel.FAutoWeight := False;
-
-      nTmp := FindNode('camera');
-      if Assigned(nTmp) then
+      with nTunnel^ do
       begin
-        nStr := nTmp.AttributeByName['id'];
-        nTunnel.FCamera := GetCamera(nStr);
-        SplitCameraTunnel(nTunnel, nTmp.ValueAsString);
-      end else
-      begin
-        nTunnel.FCamera := nil;
-        //no camera
+        FID := AttributeByName['id'];
+        FName := AttributeByName['name'];
+        FProber := NodeByName('prober').ValueAsString;
+        FReader := NodeByName('reader').ValueAsString;
+        FUserInput := NodeByName('userinput').ValueAsString = 'Y';
+
+        FFactoryID := NodeByName('factory').ValueAsString;
+        FCardInterval := NodeByName('cardInterval').ValueAsInteger;
+        FSampleNum := NodeByName('sampleNum').ValueAsInteger;
+        FSampleFloat := NodeByName('sampleFloat').ValueAsInteger;
+
+        nTmp := FindNode('options');
+        if Assigned(nTmp) then
+        begin
+          FOptions := TStringList.Create;
+          SplitStr(nTmp.ValueAsString, FOptions, 0, ';');
+        end else FOptions := nil;
+
+        nTmp := FindNode('autoweight');
+        if Assigned(nTmp) then
+             FAutoWeight := nTmp.ValueAsString = 'Y'
+        else FAutoWeight := False; //南方特例,尽量不要用
+
+        nTmp := FindNode('camera');
+        if Assigned(nTmp) then
+        begin
+          nStr := nTmp.AttributeByName['id'];
+          FCamera := GetCamera(nStr);
+          SplitCameraTunnel(nTunnel, nTmp.ValueAsString);
+        end else
+        begin
+          FCamera := nil;
+          //no camera
+        end;
       end;
     end;
   finally
@@ -497,7 +548,8 @@ end;
 //Parm: 通道号;接收事件
 //Desc: 开启nTunnel通道读写端口
 function TPoundTunnelManager.ActivePort(const nTunnel: string;
-  nEvent: TOnTunnelDataEvent; const nOpenPort: Boolean): Boolean;
+  const nEvent: TOnTunnelDataEvent; const nOpenPort: Boolean;
+  const nEventEx: TOnTunnelDataEventEx): Boolean;
 var nStr: string;
     nPT: PPTTunnelItem;
 begin
@@ -510,6 +562,8 @@ begin
     if not Assigned(nPT) then Exit;
 
     nPT.FOnData := nEvent;
+    nPT.FOnDataEx := nEventEx;
+    
     nPT.FOldEventTunnel := nPT.FPort.FEventTunnel;
     nPT.FPort.FEventTunnel := nPT;
     
@@ -618,14 +672,8 @@ begin
         nPT.FPort.FCOMPort.Close;
       //通道空闲则关闭
 
-      if Assigned(nPT.FPort.FClient) then
-      with nPT.FPort.FClient do
-      begin
-        Disconnect;
-        if Assigned(IOHandler) then
-          IOHandler.InputBuffer.Clear;
-        //关闭链路
-      end;
+      DisconnectClient(nPT.FPort.FClient);
+      //关闭链路
     end;
   finally
     FSyncLock.Leave;
@@ -659,6 +707,10 @@ begin
         nVal := StrToFloat(nPort.FCOMData) * nPort.FDataEnlarge;
         nPort.FEventTunnel.FOnData(nVal);
         nPort.FCOMData := '';
+
+        if Assigned(nPort.FEventTunnel.FOnDataEx) then
+          nPort.FEventTunnel.FOnDataEx(nVal, nPort);
+        //xxxxx
       end;
     except
       on E: Exception do
@@ -702,6 +754,7 @@ begin
 
     nPort.FCOMData := Copy(nPort.FCOMData, nIdx + 1, nEnd - nIdx - 1);
     //待处理表头包数据
+    nPort.FCOMDataEx := nPort.FCOMData;
 
     if nPort.FSplitPos > 0 then
     begin
@@ -861,9 +914,8 @@ begin
     Synchronize(DoSyncEvent);
     Result := True;
   except
-    FActiveClient.Disconnect;
-    if Assigned(FActiveClient.IOHandler) then
-      FActiveClient.IOHandler.InputBuffer.Clear;
+    FOwner.DisconnectClient(FActiveClient);
+    //关闭链路
     raise;
   end;
 end;
@@ -880,6 +932,10 @@ begin
 
     FActiveTunnel.FOnData(nVal);
     FActiveTunnel.FPort.FCOMData := '';
+
+    if Assigned(FActiveTunnel.FOnDataEx) then
+      FActiveTunnel.FOnDataEx(nVal, FActivePort);
+    //xxxxx
   end;
 end;
 

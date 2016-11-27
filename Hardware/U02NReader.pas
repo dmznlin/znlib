@@ -8,7 +8,8 @@ interface
 
 uses
   Windows, Classes, SysUtils, SyncObjs, UWaitItem, IdComponent, IdUDPBase,
-  IdGlobal, IdUDPServer, IdSocketHandle, NativeXml, ULibFun, USysLoger;
+  IdGlobal, IdUDPServer, IdSocketHandle, NativeXml, ULibFun, UMemDataPool,
+  USysLoger;
 
 type
   TReaderType = (rtOnce, rtKeep);
@@ -32,8 +33,7 @@ type
     FELast  : Int64;             //上次触发
     FETimeOut: Boolean;          //电子签超时
     FRealLabel: string;          //实际业务的电子标签
-
-    FPrepare: Boolean;           //预装读卡器
+    FOptions: TStrings;          //附加参数
   end;
 
   PReaderCard = ^TReaderCard;
@@ -47,7 +47,7 @@ type
     FInTime : Int64;             //首次时间
   end;
 
-  TOnCard = procedure (nHost: TReaderHost; nCard: TReaderCard);
+  TOnCard = procedure (const nCard: string; const nHost: PReaderHost);
   //卡片事件
 
   T02NReader = class(TThread)
@@ -63,14 +63,21 @@ type
     //服务端
     FWaiter: TWaitObject;
     //等待对象
+    FIDCardData: Word;
+    //数据标识
+    FDefaultHost: TReaderHost;
+    //默认读头
     FSyncLock: TCriticalSection;
     //同步锁
     FCardIn: TOnCard;
     FCardOut: TOnCard;
     //卡片事件
   protected
+    function DoReaderCard: Boolean;
     procedure Execute; override;
     //执行线程
+    procedure RegisterDataType;
+    //注册数据
     procedure OnUDPRead(AThread: TIdUDPListenerThread; AData: TIdBytes;
       ABinding: TIdSocketHandle);
     //读取数据
@@ -114,8 +121,42 @@ begin
   gSysLoger.AddLog(T02NReader, '现场近距读卡器', nEvent);
 end;
 
+procedure OnNew(const nFlag: string; const nType: Word; var nData: Pointer);
+var nItem: PReaderCard;
+begin
+  if nFlag = 'CardData' then
+  begin
+    New(nItem);
+    nData := nItem;
+  end;
+end;
+
+procedure OnFree(const nFlag: string; const nType: Word; const nData: Pointer);
+var nItem: PReaderCard;
+begin
+  if nFlag = 'CardData' then
+  begin
+    nItem := nData;
+    Dispose(nItem);
+  end;
+end;
+
+procedure T02NReader.RegisterDataType;
+begin
+  if not Assigned(gMemDataManager) then
+    raise Exception.Create('02NReader Needs MemDataManager Support.');
+  //xxxxx
+
+  with gMemDataManager do
+    FIDCardData := RegDataType('CardData', '02NReader', OnNew, OnFree, 2);
+  //xxxxx
+end;
+
 constructor T02NReader.Create;
 begin
+  RegisterDataType;
+  //do first
+  
   inherited Create(False);
   FreeOnTerminate := False;
 
@@ -137,10 +178,7 @@ begin
   FServer.Active := False;
   FServer.Free;
 
-  ClearCards(True);
   ClearReader(True);
-  //xxxxx
-
   FWaiter.Free;
   FSyncLock.Free;
   inherited;
@@ -148,14 +186,20 @@ end;
 
 procedure T02NReader.ClearReader(const nFree: Boolean);
 var nIdx: Integer;
+    nHost: PReaderHost;
 begin
   for nIdx:=FReaders.Count - 1 downto 0 do
   begin
-    Dispose(PReaderHost(FReaders[nIdx]));
+    nHost := FReaders[nIdx];
+    FreeAndNil(nHost.FOptions);
+    
+    Dispose(nHost);
     FReaders.Delete(nIdx);
   end;
 
-  if nFree then FReaders.Free;
+  if nFree then
+    FReaders.Free;
+  //xxxxx
 end;
 
 procedure T02NReader.ClearCards(const nFree: Boolean);
@@ -163,7 +207,7 @@ var nIdx: Integer;
 begin
   for nIdx:=FCards.Count - 1 downto 0 do
   begin
-    Dispose(PReaderCard(FCards[nIdx]));
+    gMemDataManager.UnLockData(FCards[nIdx]);
     FCards.Delete(nIdx);
   end;
 
@@ -314,10 +358,9 @@ begin
 
           FTunnel := nNode.NodeByName('tunnel').ValueAsString;
           FEEnable := False;
-
           FFun := rfSite;
-          nTP := nNode.NodeByName('type');
-
+          
+          nTP := nNode.FindNode('type');
           if Assigned(nTP) then
           begin
             nInt := nTP.ValueAsInteger;
@@ -326,15 +369,17 @@ begin
             //xxxxx
           end;
 
-          nTP := nNode.NodeByName('printer');
+          nTP := nNode.FindNode('printer');
           if Assigned(nTP) then
                FPrinter := nTP.ValueAsString
           else FPrinter := '';
 
-          nTP := nNode.NodeByName('prepare');
+          nTP := nNode.FindNode('options');
           if Assigned(nTP) then
-               FPrepare := UpperCase(nTP.ValueAsString) = 'Y'
-          else FPrepare := False;
+          begin
+            FOptions := TStringList.Create;
+            SplitStr(nTP.ValueAsString, FOptions, 0, ';');
+          end else FOptions := nil;
         end;
       end;
     end;
@@ -356,21 +401,23 @@ begin
           FPort := nNode.NodeByName('port').ValueAsInteger;
           FTunnel := nNode.NodeByName('tunnel').ValueAsString;
                                           
-          nTP := nNode.NodeByName('ledtext');
+          nTP := nNode.FindNode('ledtext');
           if Assigned(nTP) then
                FLEDText := nTP.ValueAsString
-          else FLEDText := '  精品水泥  ' + '  值得信赖  ';
+          else FLEDText := 'NULL';
 
-          nTP := nNode.NodeByName('prepare');
+          nTP := nNode.FindNode('options');
           if Assigned(nTP) then
-               FPrepare := UpperCase(nTP.ValueAsString) = 'Y'
-          else FPrepare := False;
+          begin
+            FOptions := TStringList.Create;
+            SplitStr(nTP.ValueAsString, FOptions, 0, ';');
+          end else FOptions := nil;
 
           nNode := nNode.FindNode('uselabel');
           //使用电子签
           if Assigned(nNode) then
-               FEEnable := nNode.ValueAsString <> 'N'
-          else FEEnable := True; 
+               FEEnable := nNode.ValueAsString = 'Y'
+          else FEEnable := False;
         end;
       end;
     end;
@@ -381,95 +428,122 @@ end;
 
 //------------------------------------------------------------------------------
 procedure T02NReader.Execute;
-var nIdx: Integer;
-    nHost: TReaderHost;
-    nCard: TReaderCard;
-    nPCard: PReaderCard;
 begin
+  FillChar(FDefaultHost, SizeOf(FDefaultHost), #0);
+  with FDefaultHost do
+  begin
+    FType := rtOnce;
+    FFun := rfSite;
+    FTunnel := '';
+  end; //默认读头,用于桌面读卡器业务
+
   while not Terminated do
   try
     FWaiter.EnterWait;
-    if Terminated then Exit;
+    //xxxxx
 
     while True do
     begin
-      FSyncLock.Enter;
-      try
-        nPCard := nil;
-        for nIdx:=FCards.Count - 1 downto 0 do
-        begin
-          nPCard := FCards[nIdx];
-          if nPCard.FOldOne then
-          begin
-            Dispose(nPCard);
-            nPCard := nil;
-
-            FCards.Delete(nIdx);
-            Continue;
-          end; //已无效
-
-          if Assigned(nPCard.FHost) and (nPCard.FHost.FType = rtKeep) then
-          begin
-            if GetTickCount - nPCard.FLast > FKeepTime then
-            begin
-              nPCard.FEvent := False;
-              nPCard.FOldOne := True;
-
-              nPCard.FHost.FRealLabel := '';
-              //卡片抽走,清空业务标签
-            end;
-
-            if nPCard.FHost.FEEnable and (nPCard.FHost.FRealLabel <> '') and //使用电子签
-               (not nPCard.FHost.FETimeOut) and                              //业务未超时
-               (GetTickCount - nPCard.FHost.FELast > 5 * 60 * 1000) then
-            begin
-              nPCard.FEvent := False;
-              nPCard.FHost.FETimeOut := True;
-            end;
-          end; //已超时
-
-          if nPCard.FEvent then
-               nPCard := nil
-          else Break;
-        end;
-
-        if Assigned(nPCard) then
-        begin
-          nPCard.FEvent := True;
-          nCard := nPCard^;
-
-          if Assigned(nPCard.FHost) then
-          begin
-            nHost := nPCard.FHost^;
-          end else
-          begin
-            nHost.FType := rtOnce;
-            nHost.FFun := rfSite;
-            nHost.FTunnel := '';
-          end;
-          {----------------- +by dmzn@173.com 2012.09.01 -----------------
-           FHost为空,表示该磁卡号来自桌面型读卡器或其它,在处理业务前,无法
-           获知该磁卡所在的通道号.系统将来源强制为袋装刷卡.
-          ----------------------------------------------------------------}
-        end else Break;
-      finally
-        FSyncLock.Leave;
-      end;
-
-      if nCard.FOldOne or
-         (Assigned(nPCard.FHost) and nPCard.FHost.FETimeOut) then
-      begin
-        if Assigned(FCardOut) then FCardOut(nHost, nCard);
-      end else
-      begin
-        if Assigned(FCardIn) then FCardIn(nHost, nCard);
-      end;
+      if Terminated then Exit;
+      if not DoReaderCard then Break;
     end;
   except
     on E:Exception do
     begin
       WriteLog(E.Message);
     end;
+  end;
+end;
+
+//Desc: 执行业务
+function T02NReader.DoReaderCard: Boolean;
+var nIdx: Integer;
+    nCard: string;
+    nCardOut: Boolean;
+    nHost: PReaderHost;
+    nPCard: PReaderCard;
+begin
+  FSyncLock.Enter;
+  try
+    Result := False;
+    nPCard := nil;
+    //init
+
+    for nIdx:=FCards.Count - 1 downto 0 do
+    begin
+      nPCard := FCards[nIdx];
+      if nPCard.FOldOne then
+      begin
+        gMemDataManager.UnLockData(nPCard);
+        nPCard := nil;
+
+        FCards.Delete(nIdx);
+        Continue;
+      end; //已无效
+
+      if Assigned(nPCard.FHost) and (nPCard.FHost.FType = rtOnce) then
+      begin
+        if (nPCard.FEvent) and
+           (GetTickCount - nPCard.FLast > FKeepTime * 3) then
+        begin
+          nPCard.FOldOne := True;
+        end;
+      end else //单刷读卡器
+
+      if Assigned(nPCard.FHost) and (nPCard.FHost.FType = rtKeep) then
+      begin
+        if GetTickCount - nPCard.FLast > FKeepTime then
+        begin
+          nPCard.FEvent := False;
+          nPCard.FOldOne := True;
+
+          nPCard.FHost.FRealLabel := '';
+          //卡片抽走,清空业务标签
+        end;
+
+        if (nPCard.FHost.FEEnable) and             //使用电子签
+           (nPCard.FHost.FRealLabel <> '') and     
+           (not nPCard.FHost.FETimeOut) and        //业务未超时
+           (GetTickCount - nPCard.FHost.FELast > 5 * 60 * 1000) then
+        begin
+          nPCard.FEvent := False;
+          nPCard.FHost.FETimeOut := True;
+        end;
+      end; //连刷读卡器
+
+      if nPCard.FEvent then
+           nPCard := nil
+      else Break; //找到新卡
+    end;
+
+    if not Assigned(nPCard) then Exit;
+    //没有需处理卡片
+
+    if Assigned(nPCard.FHost) then
+         nHost := nPCard.FHost
+    else nHost := @FDefaultHost;
+    {----------------- +by dmzn@173.com 2012.09.01 -------------------------
+     FHost为空,表示该磁卡号来自桌面型读卡器或其它,在处理业务前,无法
+     获知该磁卡所在的通道号.系统将来源强制为袋装刷卡.
+    -----------------------------------------------------------------------}
+                                                                     
+    nCardOut := (nPCard.FOldOne) or
+                (Assigned(nPCard.FHost) and nPCard.FHost.FETimeOut);
+    //卡片抽走,或电子签超时
+
+    nCard := nPCard.FCard;
+    nPCard.FEvent := True; 
+    Result := True;
+  finally
+    FSyncLock.Leave;
+  end;
+
+  if nCardOut then
+  begin
+    if Assigned(FCardOut) then FCardOut(nCard, nHost);
+  end else
+  begin
+    if Assigned(FCardIn) then FCardIn(nCard, nHost);
   end;
 end;
 
@@ -535,13 +609,7 @@ begin
         nPCard.FEvent := False;
         //换道操作
       end;
-      {
-      if nPCard.FHost.FType = rtOnce then
-      begin
-        nPCard.FEvent := False;
-        //单次读每次刷有效
-      end;
-      }
+
       if GetTickCount - nPCard.FLast >= 2 * 1000 then
       begin
         nPCard.FEvent := False;
@@ -549,7 +617,8 @@ begin
       end;
     end else
     begin
-      New(nPCard);
+      nPCard := gMemDataManager.LockData(FIDCardData);
+      //new lock
       FCards.Add(nPCard);
 
       if nInt >= 0 then
@@ -632,7 +701,7 @@ begin
 end;
 
 initialization
-  g02NReader := T02NReader.Create;
+  g02NReader := nil;
 finalization
   FreeAndNil(g02NReader);
 end.

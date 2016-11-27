@@ -328,7 +328,7 @@ begin
     New(nData);
     FBuffer.Add(nData);
 
-    nData.FText := Trim(nText);
+    nData.FText := TrimRight(nText);
     nData.FCard := nCard;
     nData.FContent := nContent;
     nData.FAddTime := GetTickCount;
@@ -609,8 +609,11 @@ begin
         Continue;
       end;
 
-      if FindCardHost(nTxt.FCard) <> nCard then Continue;
-      //非本卡播放
+      if FindCardHost(nTxt.FCard) <> nCard then
+      begin
+        Inc(nIdx);
+        Continue;
+      end; //非本卡播放
 
       if not nCard.FEnable then
       begin
