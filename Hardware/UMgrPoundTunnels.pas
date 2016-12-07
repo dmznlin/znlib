@@ -791,7 +791,7 @@ begin
     //数据反转
 
     nPort.FCOMData := Trim(nPort.FCOMData);
-    Result := IsNumber(nPort.FCOMData, False);
+    Result := IsNumber(nPort.FCOMData, True);
 
     if Result and (nPort.FMaxValue > 0) then
     begin
