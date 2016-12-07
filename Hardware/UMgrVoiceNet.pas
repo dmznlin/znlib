@@ -555,7 +555,7 @@ var nBuf: TIdBytes;
 begin
   Result := GetTickCount - nCard.FVoiceLast < nCard.FVoiceKeep;
   if Result then Exit; //keep short time
-  if not FClient.Connected then Exit;
+  if (not FClient.Connected) or (FClient.Host <> nCard.FHost) then Exit;
 
   with nData do
   begin

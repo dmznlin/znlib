@@ -13,7 +13,7 @@
 *.peerword: 单字时长,单位毫秒
 *.interval: 重发间隔,单位秒
 *.repeat: 单次内容循环次数
-*.reinterval: 单次内容循环间隔
+*.reinterval: 单次内容循环间隔,单位毫秒
 
 节点: card.contents.resource
 *.key: 待处理内容
