@@ -497,6 +497,7 @@ begin
           nPCard.FEvent := False;
           nPCard.FOldOne := True;
 
+          nPCard.FHost.FETimeOut := False;
           nPCard.FHost.FRealLabel := '';
           //卡片抽走,清空业务标签
         end;
