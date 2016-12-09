@@ -310,6 +310,28 @@ begin
   end;
 end;
 
+//Date: 2016-12-09
+//Parm: 文本
+//Desc: 按宽字节计算nText中有效内容的长度
+function CalTextLength(const nText: string): Integer;
+var nStr: string;
+    nWStr: WideString;
+    nIdx,nLen: Integer;
+begin
+  Result := 0;
+  nWStr := nText;
+  nLen := Length(nWStr);
+
+  for nIdx:=1 to nLen do
+  begin
+    nStr := nWStr[nIdx];
+    if IsDBCSLeadByte(byte(nStr[1])) or //double byte
+       (nStr[1] in ['a'..'z', 'A'..'Z', '0'..'9']) then //single byte
+      Inc(Result);
+    //xxxxx
+  end;
+end;
+
 //Date: 2015-04-23
 //Parm: 文本;语音卡标识;内容配置标识
 //Desc: 在nCard播发使用nContent参数处理的nText,写入缓冲等待处理
@@ -320,7 +342,7 @@ begin
     raise Exception.Create('Voice Service Should Start First.');
   //xxxxx
 
-  if Length(nText) < 1 then Exit;
+  if CalTextLength(nText) < 1 then Exit;
   //invalid text
 
   FSyncLock.Enter;
@@ -328,7 +350,7 @@ begin
     New(nData);
     FBuffer.Add(nData);
 
-    nData.FText := TrimRight(nText);
+    nData.FText := nText;
     nData.FCard := nCard;
     nData.FContent := nContent;
     nData.FAddTime := GetTickCount;
@@ -703,7 +725,7 @@ begin
           FVoiceLast := 0;
           FVoiceTime := 0;
 
-          FVoiceKeep := Length(WideString(nStr)) * nParm.FPeerLong;
+          FVoiceKeep := CalTextLength(nStr) * nParm.FPeerLong;
           //计算播放内容的时长
         end;
       end;
