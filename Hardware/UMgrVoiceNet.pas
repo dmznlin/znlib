@@ -9,7 +9,8 @@ interface
 
 uses
   Windows, Classes, SysUtils, SyncObjs, IdComponent, IdTCPConnection, IdGlobal,
-  IdTCPClient, IdSocketHandle, NativeXml, UWaitItem, ULibFun, USysLoger;
+  IdTCPClient, IdSocketHandle, NativeXml, UWaitItem, ULibFun, UMemDataPool,
+  USysLoger;
 
 const
   cVoice_CMD_Head       = $FD;         //帧头
@@ -131,6 +132,8 @@ type
     //语音卡列表
     FBuffer: TList;
     //数据缓冲
+    FIDContent: Word;
+    //数据标识
     FVoicer: TNetVoiceConnector;
     //语音对象
     FSyncLock: TCriticalSection;
@@ -138,6 +141,8 @@ type
   protected
     procedure ClearDataList(const nList: TList; const nFree: Boolean = False);
     //清理缓冲
+    procedure RegisterDataType;
+    //注册数据
     function FindContentParam(const nCard: PVoiceCardHost;
       const nID: string): PVoiceContentParam;
     function FindCardHost(const nID: string): PVoiceCardHost;
@@ -185,9 +190,43 @@ begin
   Result := Word(nVW); 
 end;
 
+procedure OnNew(const nFlag: string; const nType: Word; var nData: Pointer);
+var nItem: PVoiceContentNormal;
+begin
+  if nFlag = 'NVContent' then
+  begin
+    New(nItem);
+    nData := nItem;
+  end;
+end;
+
+procedure OnFree(const nFlag: string; const nType: Word; const nData: Pointer);
+var nItem: PVoiceContentNormal;
+begin
+  if nFlag = 'NVContent' then
+  begin
+    nItem := nData;
+    Dispose(nItem);
+  end;
+end;
+
+procedure TNetVoiceManager.RegisterDataType;
+begin
+  if not Assigned(gMemDataManager) then
+    raise Exception.Create('NetVoiceManager Needs MemDataManager Support.');
+  //xxxxx
+
+  with gMemDataManager do
+    FIDContent := RegDataType('NVContent', 'NetVoiceManager', OnNew, OnFree, 2);
+  //xxxxx
+end;
+
 //------------------------------------------------------------------------------
 constructor TNetVoiceManager.Create;
 begin
+  RegisterDataType;
+  //do first
+  
   FCards := TList.Create;
   FBuffer := TList.Create;
   FSyncLock := TCriticalSection.Create;
@@ -238,7 +277,7 @@ begin
 
     if nList = FBuffer then
     begin
-      Dispose(PVoiceContentNormal(nList[nIdx]));
+      gMemDataManager.UnLockData(nList[nIdx]);
       nList.Delete(nIdx);
     end;
   end;
@@ -347,7 +386,7 @@ begin
 
   FSyncLock.Enter;
   try
-    New(nData);
+    nData := gMemDataManager.LockData(FIDContent);
     FBuffer.Add(nData);
 
     nData.FText := nText;
@@ -609,7 +648,7 @@ var nStr: string;
     //Desc: 释放缓存项
     procedure DisposeBufferItem;
     begin
-      Dispose(PVoiceContentNormal(FOwner.FBuffer[nIdx]));
+      gMemDataManager.UnLockData(FOwner.FBuffer[nIdx]);
       FOwner.FBuffer.Delete(nIdx);
     end;
 begin

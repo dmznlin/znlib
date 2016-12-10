@@ -56,7 +56,11 @@ type
     //读头列表
     FCards: TList;
     //收到卡列表
-    FKeepTime: Integer;
+    FListA: TStrings;
+    //字符列表
+    FKeepELabel: Integer;
+    FKeepReadone: Integer;
+    FKeepReadkeep: Integer;
     //超时等待
     FSrvPort: Integer;
     FServer: TIdUDPServer;
@@ -104,7 +108,6 @@ type
     procedure ActiveELabel(const nTunnel,nELabel: string);
     //激活电子签
     property ServerPort: Integer read FSrvPort write FSrvPort;
-    property KeepTime: Integer read FKeepTime write FKeepTime;
     property OnCardIn: TOnCard read FCardIn write FCardIn;
     property OnCardOut: TOnCard read FCardOut write FCardOut;
     //属性相关
@@ -124,7 +127,7 @@ end;
 procedure OnNew(const nFlag: string; const nType: Word; var nData: Pointer);
 var nItem: PReaderCard;
 begin
-  if nFlag = 'CardData' then
+  if nFlag = 'NRCardData' then
   begin
     New(nItem);
     nData := nItem;
@@ -134,7 +137,7 @@ end;
 procedure OnFree(const nFlag: string; const nType: Word; const nData: Pointer);
 var nItem: PReaderCard;
 begin
-  if nFlag = 'CardData' then
+  if nFlag = 'NRCardData' then
   begin
     nItem := nData;
     Dispose(nItem);
@@ -148,10 +151,11 @@ begin
   //xxxxx
 
   with gMemDataManager do
-    FIDCardData := RegDataType('CardData', '02NReader', OnNew, OnFree, 2);
+    FIDCardData := RegDataType('NRCardData', '02NReader', OnNew, OnFree, 2);
   //xxxxx
 end;
 
+//------------------------------------------------------------------------------
 constructor T02NReader.Create;
 begin
   RegisterDataType;
@@ -160,9 +164,9 @@ begin
   inherited Create(False);
   FreeOnTerminate := False;
 
+  FListA := TStringList.Create;
   FReaders := TList.Create;
   FCards := TList.Create;
-  FKeepTime := 2 * 1000;
 
   FWaiter := TWaitObject.Create;
   FWaiter.Interval := INFINITE;
@@ -181,6 +185,8 @@ begin
   ClearReader(True);
   FWaiter.Free;
   FSyncLock.Free;
+
+  FListA.Free;
   inherited;
 end;
 
@@ -258,6 +264,7 @@ end;
 //Desc: 设置nELabel活动时间
 procedure T02NReader.ActiveELabel(const nTunnel,nELabel: string);
 var i,nIdx: Integer;
+    nMatch: Boolean;
     nHost: PReaderHost;
     nCard: PReaderCard;
 begin
@@ -268,8 +275,21 @@ begin
       nHost := FReaders[nIdx];
       if CompareText(nTunnel, nHost.FTunnel) = 0 then
       begin
-        if nHost.FEEnable and (
-          (nHost.FRealLabel = '') or (Pos(nHost.FRealLabel, nELabel) > 0)) then
+        nMatch := nHost.FRealLabel = '';
+        if not nMatch then
+        begin
+          SplitStr(nHost.FRealLabel, FListA, 0, ';');
+          //multi real label
+
+          for i:=FListA.Count-1 downto 0 do
+          if Pos(FListA[i], nELabel) > 0 then
+          begin
+            nMatch := True;
+            Break;
+          end;
+        end;
+
+        if nHost.FEEnable and nMatch then
         begin
           nHost.FELabel := nELabel;
           nHost.FELast := GetTickCount;
@@ -335,10 +355,34 @@ begin
     ClearReader(False);
     nXML.LoadFromFile(nFile);
 
-    nTmp := nXML.Root.NodeByName('local_udp');
+    FSrvPort := 1234;
+    FKeepELabel := 300;
+    FKeepReadone := 6000;
+    FKeepReadkeep := 2000; //default value
+
+    nTmp := nXML.Root.NodeByName('config');
     if Assigned(nTmp) then
-         FSrvPort := nTmp.ValueAsInteger
-    else FSrvPort := 1234;
+    begin
+      nTP := nTmp.FindNode('local_port');
+      if Assigned(nTP) then
+        FSrvPort := nTP.ValueAsInteger;
+      //xxxxx
+
+      nTP := nTmp.FindNode('keep_readone');
+      if Assigned(nTP) then
+        FKeepReadone := nTP.ValueAsInteger;
+      //xxxxx
+
+      nTP := nTmp.FindNode('keep_readkeep');
+      if Assigned(nTP) then
+        FKeepReadkeep := nTP.ValueAsInteger;
+      //xxxxx
+
+      nTP := nTmp.FindNode('keep_elabel');
+      if Assigned(nTP) then
+        FKeepELabel := nTP.ValueAsInteger;
+      //xxxxx
+    end;
 
     nTmp := nXML.Root.NodeByName('readone');
     if Assigned(nTmp) then
@@ -484,7 +528,7 @@ begin
       if Assigned(nPCard.FHost) and (nPCard.FHost.FType = rtOnce) then
       begin
         if (nPCard.FEvent) and
-           (GetTickCount - nPCard.FLast > FKeepTime * 3) then
+           (GetTickCount - nPCard.FLast > FKeepReadone) then
         begin
           nPCard.FOldOne := True;
         end;
@@ -492,7 +536,7 @@ begin
 
       if Assigned(nPCard.FHost) and (nPCard.FHost.FType = rtKeep) then
       begin
-        if GetTickCount - nPCard.FLast > FKeepTime then
+        if GetTickCount - nPCard.FLast > FKeepReadkeep then
         begin
           nPCard.FEvent := False;
           nPCard.FOldOne := True;
@@ -505,7 +549,7 @@ begin
         if (nPCard.FHost.FEEnable) and             //使用电子签
            (nPCard.FHost.FRealLabel <> '') and     
            (not nPCard.FHost.FETimeOut) and        //业务未超时
-           (GetTickCount - nPCard.FHost.FELast > 5 * 60 * 1000) then
+           (GetTickCount - nPCard.FHost.FELast > FKeepELabel * 1000) then
         begin
           nPCard.FEvent := False;
           nPCard.FHost.FETimeOut := True;
