@@ -398,26 +398,29 @@ begin
   if Result <> '' then Exit;
 
   nWS := '';
-  Result := nStr;
   nLen := Length(nStr);
 
   for nIdx:=1 to nLen do
   begin
     nSA := nStr[nIdx];
-    if Windows.IsDBCSLeadByte(Byte(nSA[1])) then
+    if Windows.IsDBCSLeadByte(Byte(nSA[1])) then //双字节
     begin
-      nWS := nWS + nSA;
-      //双字节,汉字
+      nWS := nWS + nSA; 
       if nIdx < nLen then Continue;
     end;
 
-    if nWS <> '' then
+    if nWS = '' then
+    begin
+      Result := Result + nSA;
+      //非汉字直接拼接
+    end else
     begin
       nRes := FFileUTF.Values[nWS];
       //有对应翻译
 
-      if nRes <> '' then
-        Result := StringReplace(Result, nWS, nRes, []);
+      if nRes = '' then
+           Result := Result + nWS
+      else Result := Result + nRes;
       nWS := '';
     end;
   end;
