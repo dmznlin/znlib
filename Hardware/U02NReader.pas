@@ -182,7 +182,10 @@ begin
   FServer.Active := False;
   FServer.Free;
 
+  ClearCards(True);
   ClearReader(True);
+  //xxxxx
+
   FWaiter.Free;
   FSyncLock.Free;
 
@@ -217,7 +220,9 @@ begin
     FCards.Delete(nIdx);
   end;
 
-  if nFree then FCards.Free;
+  if nFree then
+    FCards.Free;
+  //xxxxx
 end;
 
 procedure T02NReader.StopMe(const nFree: Boolean);
