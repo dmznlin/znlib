@@ -154,7 +154,7 @@ type
     procedure ClearBuffer(const nList: TList; const nFree: Boolean = False);
     //Çå¿Õ»º³å
     procedure DeleteMultiJSDataItem(const nData: PMultiJSDataItem;
-              nList: TList);
+              nList: TList; const nLock: Boolean = True);
     //É¾³ýÖ¸Áî          
     procedure DeleteFromBuffer(nAddr: Byte; nList: TList);
     //É¾³ýÖ¸Áî
@@ -329,15 +329,15 @@ begin
   begin
     nData := nList[nIdx];
     if nData.FTunnel.FTunnel = nAddr then
-      DeleteMultiJSDataItem(nData, nList);
+      DeleteMultiJSDataItem(nData, nList, False);
   end;
 end;
 
 procedure TMultJSItem.DeleteMultiJSDataItem(const nData: PMultiJSDataItem;
-  nList: TList);
+  nList: TList; const nLock: Boolean);
 var nIdx: Integer;
 begin
-  FOwner.FSyncLock.Enter;
+  if nLock then FOwner.FSyncLock.Enter;
   try
     gMemDataManager.UnLockData(nData);
     nIdx := nList.IndexOf(nData);
@@ -346,7 +346,7 @@ begin
       nList.Delete(nIdx);
     //xxxxx
   finally
-    FOwner.FSyncLock.Leave;
+    if nLock then FOwner.FSyncLock.Leave;
   end;
 end;
 
