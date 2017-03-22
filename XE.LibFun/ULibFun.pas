@@ -46,9 +46,9 @@ type
     class function SplitFloat(const nStr: string; 
       const nDef: Double = 0): Double; static;
     //拆分出数值
-    class function GetPinYin(const nCH: WideString): string; static;
+    class function GetPinYin(const nCH: string): string; static;
     //获取nChinese的拼音简写
-    class function MirrorStr(const nStr: WideString): WideString; static;
+    class function MirrorStr(const nStr: string): string; static;
     //镜像反转nStr字符串
     class function IsNumber(const nStr: string; 
       const nFloat: Boolean = True): Boolean; static;
@@ -416,7 +416,7 @@ end;
 //Date: 2017-03-17
 //Parm: 字符串
 //Desc: 将nStr镜像反转
-class function TStringHelper.MirrorStr(const nStr: WideString): WideString;
+class function TStringHelper.MirrorStr(const nStr: string): string ;
 var nIdx,nLen: Integer;
 begin
   nLen := Length(nStr);
@@ -541,7 +541,7 @@ end;
 //Date: 2017-03-17
 //Parm: 中文字符串
 //Desc: 获取nCH的拼音首字母 
-class function TStringHelper.GetPinYin(const nCH: WideString): string;
+class function TStringHelper.GetPinYin(const nCH: string): string;
 var nChar: AnsiChar;
     nStr: AnsiString;
     nIdx,nLen: integer;
@@ -746,7 +746,7 @@ begin
   try
     Result := StrToDateTime(nStr, LocalDTSettings);
   except
-    Result := Now;
+    Result := Now();
   end;
 end;
 
