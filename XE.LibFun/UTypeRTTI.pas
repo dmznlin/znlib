@@ -14,7 +14,8 @@ unit UTypeRTTI;
 interface
 
 uses
-  System.Classes, System.Rtti, System.SysUtils, System.TypInfo, ULibFun;
+  System.Classes, System.Rtti, System.SysUtils, System.TypInfo, ULibFun,
+  UManagerGroup;
 
 type
   TRecordSerializer<T> = class
@@ -241,7 +242,7 @@ var nCtx: TRttiContext;
     nType: TRttiType;
     nList: TStrings; 
 begin    
-  nList := TStringList.Create;
+  nList := nil;
   nCtx := TRttiContext.Create;
   try
     nType := nCtx.GetType(TypeInfo(T));
@@ -249,6 +250,9 @@ begin
       raise Exception.Create('TRecordSerializer only support Record Type.');
     //xxxxx
         
+    nList := gMG.FObjectPool.Lock(TStrings) as TStrings;
+    nList.Clear;
+    
     EncodeFields(nCtx, MakeTypeValue(@nRecord, nType.Handle), nList);
     //encode all
 
@@ -256,7 +260,7 @@ begin
     nList.Add(sSerializerAuthor);
     Result := nList.Text;
   finally
-    nList.Free;
+    gMG.FObjectPool.Release(nList);
     nCtx.Free;
   end;
 end;
