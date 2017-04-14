@@ -3,19 +3,30 @@
   描述: 注册管理系统对象的运行状态
 
   备注:
-  *.TCommonObjectBase.DataS,DataP属性,调用时需要用LockPropertyData锁定,避免多
-    线程读写时有脏数据.
+  *.TObjectBase.DataS,DataP,Health属性,调用时需要用SyncEnter锁定,避免多线程操作
+    时写脏数据.
 *******************************************************************************}
 unit UBaseObject;
 
 interface
 
 uses
-  System.Classes, System.SysUtils, System.SyncObjs;
+  System.Classes, System.SysUtils, System.SyncObjs, ULibFun;
 
 type
+  TObjectStatusHelper = class
+  public  
+    class procedure AddTitle(const nList: TStrings; const nClass: string);
+    //添加标题   
+    class function FixData(const nTitle: string;
+      const nData: string): string; overload;
+    class function FixData(const nTitle: string;
+      const nData: Double): string; overload; 
+    //格式化数据    
+  end;
+
   TObjectBase = class(TObject)
-  private
+  strict private
     FSyncLock: TCriticalSection;
     //同步锁定
   public
@@ -35,12 +46,15 @@ type
     //创建释放
     procedure GetStatus(const nList: TStrings); virtual;
     //对象状态
-    procedure LockPropertyData;
-    procedure UnlockProperty;
+    procedure SyncEnter;
+    procedure SyncLeave;
     //同步锁定    
   end;
 
   TManagerBase = class
+  strict private
+    FSyncLock: TCriticalSection;
+    //同步锁定
   strict protected
     type
       TItem = record
@@ -53,17 +67,22 @@ type
   protected
     class function GetMe(const nClass: TClass): Integer;
     class procedure RegistMe(const nReg: Boolean = True); virtual; abstract;
-    //注册管理器
+    //注册管理器  
     procedure GetStatus(const nList: TStrings); virtual;
     //对象状态
+  public       
+    constructor Create;
+    destructor Destroy; override;
+    //创建释放
+    procedure SyncEnter;
+    procedure SyncLeave;
+    //同步锁定 
   end;
 
   TCommonObjectManager = class(TManagerBase)
   private  
     FObjects: TList;
     //对象列表
-    FSyncLock: TCriticalSection;
-    //同步锁定
   public       
     constructor Create;
     destructor Destroy; override;
@@ -82,6 +101,38 @@ implementation
 uses
   UManagerGroup;
 
+//Date: 2017-04-14
+//Parm: 列表;类名
+//Desc: 添加一个类的标题到列表
+class procedure TObjectStatusHelper.AddTitle(const nList: TStrings;
+  const nClass: string);
+var nLen: Integer;
+begin
+  if nList.Count > 0 then     
+      nList.Add('');
+  //xxxxx
+  
+  nLen := Trunc((85 - Length(nClass)) / 2);
+  nList.Add(StringOfChar('+', nLen) + ' ' + nClass + ' ' +
+            StringOfChar('+', nLen));
+  //title
+end;
+
+//Date: 2017-04-10
+//Parm: 前缀标题;数据
+//Desc: 格式化数据,格式为: nTitle(定长) nData
+class function TObjectStatusHelper.FixData(const nTitle, nData: string): string;
+begin
+  Result := ULibFun.TStringHelper.FixWidth(nTitle, 32) + nData;
+end;
+
+class function TObjectStatusHelper.FixData(const nTitle: string;
+  const nData: Double): string;
+begin
+  Result := FixData(nTitle, nData.ToString);
+end;
+
+//------------------------------------------------------------------------------
 constructor TObjectBase.Create;
 begin
   FSyncLock := nil;
@@ -102,33 +153,51 @@ begin
   inherited;
 end;
 
-procedure TObjectBase.LockPropertyData;
+procedure TObjectBase.SyncEnter;
 begin
   if not Assigned(FSyncLock) then   
     FSyncLock := TCriticalSection.Create;
   FSyncLock.Enter;
 end;
 
-procedure TObjectBase.UnlockProperty;
+procedure TObjectBase.SyncLeave;
 begin
   if Assigned(FSyncLock) then
     FSyncLock.Leave;
   //xxxxx
 end;
 
+//Desc: 添加标题行
 procedure TObjectBase.GetStatus(const nList: TStrings);
 begin
-
+  TObjectStatusHelper.AddTitle(nList, ClassName);
 end;
 
 //------------------------------------------------------------------------------
-procedure TManagerBase.GetStatus(const nList: TStrings);
-var nLen: Integer;
+constructor TManagerBase.Create;
 begin
-  nLen := Trunc((85 - Length(ClassName)) / 2);
-  nList.Add(StringOfChar('+', nLen) + ' ' + ClassName + ' ' +
-            StringOfChar('+', nLen));
-  //title
+  inherited;
+  FSyncLock := nil;
+end;
+
+destructor TManagerBase.Destroy;
+begin
+  FSyncLock.Free;
+  inherited;
+end;
+
+procedure TManagerBase.SyncEnter;
+begin
+  if not Assigned(FSyncLock) then   
+    FSyncLock := TCriticalSection.Create;
+  FSyncLock.Enter;
+end;
+
+procedure TManagerBase.SyncLeave;
+begin
+  if Assigned(FSyncLock) then
+    FSyncLock.Leave;
+  //xxxxx
 end;
 
 //Date: 2017-03-23
@@ -155,17 +224,22 @@ begin
   end;    
 end;
 
+//Desc: 添加标题行
+procedure TManagerBase.GetStatus(const nList: TStrings);
+begin
+  TObjectStatusHelper.AddTitle(nList, ClassName);
+end;
+
 //------------------------------------------------------------------------------
 constructor TCommonObjectManager.Create;
 begin
+  inherited;
   FObjects := TList.Create;
-  FSyncLock := TCriticalSection.Create;
 end;
 
 destructor TCommonObjectManager.Destroy;
 begin
   FObjects.Free;
-  FSyncLock.Free;
   inherited;
 end;
 
@@ -183,8 +257,8 @@ begin
     gMG.FObjectManager := FManagers[nIdx].FManager as TCommonObjectManager; 
   end else
   begin
-    FreeAndNil(FManagers[nIdx].FManager);
     gMG.FObjectManager := nil;
+    FreeAndNil(FManagers[nIdx].FManager);    
   end;
 end;
 
@@ -194,44 +268,38 @@ begin
     raise Exception.Create(ClassName + ': Object Is Not Support.');
   //xxxxx
 
-  FSyncLock.Enter;
+  SyncEnter;
   FObjects.Add(nObj);
-  FSyncLock.Leave;
+  SyncLeave;
 end;
 
 procedure TCommonObjectManager.DelObject(const nObj: TObject);
 var nIdx: Integer;
 begin
-  FSyncLock.Enter;
+  SyncEnter;
   try
     nIdx := FObjects.IndexOf(nObj);
     if nIdx > -1 then
       FObjects.Delete(nIdx);
     //xxxxx
   finally
-    FSyncLock.Leave;
+    SyncLeave;
   end;
 end;
 
 procedure TCommonObjectManager.GetStatus(const nList: TStrings);
 var nIdx,nLen: Integer;
 begin
-  FSyncLock.Enter;
+  SyncEnter;
   try
     for nIdx:=0 to FObjects.Count - 1 do
     with TObjectBase(FObjects[nIdx]) do
     begin
-      if nIdx <> 0 then
-        nList.Add('');
-      //xxxxx
-
-      nLen := Trunc((85 - Length(ClassName)) / 2);
-      nList.Add(StringOfChar('+', nLen) + ' ' + ClassName + ' ' +
-                StringOfChar('+', nLen));
+      TObjectStatusHelper.AddTitle(nList, ClassName);
       GetStatus(nList);
     end;
   finally
-    FSyncLock.Leave;
+    SyncLeave;
   end;
 end;
 

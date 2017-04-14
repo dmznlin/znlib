@@ -39,8 +39,6 @@ type
     //锁定对象
     FSrvClosed: Integer;
     //服务关闭 
-    FSyncLock: TCriticalSection;
-    //同步锁定
   protected
     procedure ClearPool(const nFree: Boolean);
     //清理资源
@@ -78,35 +76,28 @@ const
 //------------------------------------------------------------------------------
 constructor TObjectPoolManager.Create;
 begin
+  inherited;
   FNumLocked := 0;
   FSrvClosed := cNo;
   
-  FSyncLock := TCriticalSection.Create;
   NewNormalClass;
+  //reg normal 
 end;
 
 destructor TObjectPoolManager.Destroy;
 begin
-  FSrvClosed := cYes;
-  //set close float
+  SyncEnter;
+  FSrvClosed := cYes; //set close flag  
+  SyncLeave;
 
-  FSyncLock.Enter;
-  try
-    if FNumLocked > 0 then
-    try
-      FSyncLock.Leave;
-      while FNumLocked > 0 do
-        Sleep(1);
-      //wait for relese
-    finally
-      FSyncLock.Enter;
-    end;
-  finally
-    FSyncLock.Leave;
+  if FNumLocked > 0 then
+  begin
+    while FNumLocked > 0 do
+      Sleep(1);
+    //wait for relese
   end;
-
+    
   ClearPool(True);
-  FSyncLock.Free;
   inherited;
 end;
 
@@ -124,8 +115,8 @@ begin
     gMG.FObjectPool := FManagers[nIdx].FManager as TObjectPoolManager; 
   end else
   begin
-    FreeAndNil(FManagers[nIdx].FManager);
     gMG.FObjectPool := nil;
+    FreeAndNil(FManagers[nIdx].FManager);    
   end;
 end;
 
@@ -179,7 +170,7 @@ end;
 function TObjectPoolManager.NewClass(const nClass: TClass;
   const nNew: TObjectNewOne): Integer;
 begin
-  FSyncLock.Enter;
+  SyncEnter;
   try
     Result := FindPool(nClass);
     if Result < 0 then
@@ -195,7 +186,7 @@ begin
       FNewOne := nNew;
     end;
   finally
-    FSyncLock.Leave;
+    SyncLeave;
   end;
 end;
 
@@ -219,12 +210,13 @@ function TObjectPoolManager.Lock(const nClass: TClass;
   const nNew: TObjectNewOne): TObject;
 var nIdx,i: Integer;
     nItem: PObjectPoolItem;    
-begin
-  FSyncLock.Enter;
-  try
+begin  
+  SyncEnter;
+  try    
     Result := nil;
+    if FSrvClosed = cYes then Exit; //pool will close    
     nIdx := FindPool(nClass);
-    
+         
     if (not Assigned(nNew)) and ((nIdx < 0) or 
        (not Assigned(FPool[nIdx].FNewOne))) then
       raise Exception.Create(ClassName + ': Lock Object Need "Create" Method.');
@@ -272,7 +264,7 @@ begin
     Inc(FPool[nIdx].FNumLocked);
     Inc(Self.FNumLocked);
   finally
-    FSyncLock.Leave;
+    SyncLeave;
   end;
 end;
 
@@ -283,9 +275,11 @@ procedure TObjectPoolManager.Release(const nObject: TObject);
 var nIdx,i: Integer;
     nItem: PObjectPoolItem; 
 begin
-  if Assigned(nObject) then
-  try
-    FSyncLock.Enter;
+  if not Assigned(nObject) then Exit;
+  //nothing
+  
+  SyncEnter;
+  try     
     for nIdx := Low(FPool) to High(FPool) do
     with FPool[nIdx] do
     begin
@@ -309,24 +303,20 @@ begin
       end;
     end;
   finally
-    FSyncLock.Leave;
+    SyncLeave;
   end;
 end;
 
 procedure TObjectPoolManager.GetStatus(const nList: TStrings);
-var nIdx,nLen: Integer;
-
-    //Desc: 格式化字符串长度
-    function FW(const nStr: string): string;
-    begin
-      Result := ULibFun.TStringHelper.FixWidth(nStr, 32);
-    end;
+var nIdx,nLen: Integer;    
 begin
-  FSyncLock.Enter;
-  try
-    inherited GetStatus(nList);      
-    nList.Add(FW('NumPool:') + IntToStr(Length(FPool)));
-    nList.Add(FW('NumLocked:') + IntToStr(FNumLocked));
+  with TObjectStatusHelper do
+  try      
+    SyncEnter;
+    inherited GetStatus(nList);
+            
+    nList.Add(FixData('NumPool:', Length(FPool)));
+    nList.Add(FixData('NumLocked:', FNumLocked));
                                   
     for nIdx := Low(FPool) to High(FPool) do
     with FPool[nIdx] do
@@ -336,11 +326,11 @@ begin
       else nLen := 0;
       
       nList.Add('');
-      nList.Add(FW(FClass.ClassName + '.NumAll:') + IntToStr(nLen));
-      nList.Add(FW(FClass.ClassName + '.NumLock:') + IntToStr(FPool[nIdx].FNumLocked));
+      nList.Add(FixData(FClass.ClassName + '.NumAll:', nLen));
+      nList.Add(FixData(FClass.ClassName + '.NumLock:', FNumLocked));
     end;
   finally
-    FSyncLock.Leave;
+    SyncLeave;
   end;
 end;
 

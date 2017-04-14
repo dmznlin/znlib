@@ -851,6 +851,7 @@ begin
   begin
     if (nReader.FCardLen > 0) and (nIdx < nReader.FCardLen) then Exit;
     //length verify
+    Result := True;
 
     if Assigned(nReader.FCardPre) then
     begin
