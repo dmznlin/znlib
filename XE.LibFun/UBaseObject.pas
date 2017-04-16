@@ -10,73 +10,82 @@ unit UBaseObject;
 
 interface
 
-uses
-  System.Classes, System.SysUtils, System.SyncObjs, ULibFun;
+uses   
+  System.Classes, System.SysUtils, System.SyncObjs, ULibFun
+  {$IF defined(MSWINDOWS)},Winapi.Windows{$ENDIF};
 
 type
+  TObjectHealth = (hlHigh, hlNormal, hlLow, hlBad);
+  //对象状态
+  
   TObjectStatusHelper = class
   public  
-    class procedure AddTitle(const nList: TStrings; const nClass: string);
+    class procedure AddTitle(const nList: TStrings;
+      const nClass: string);  static;
     //添加标题   
     class function FixData(const nTitle: string;
-      const nData: string): string; overload;
+      const nData: string): string; overload; static;
     class function FixData(const nTitle: string;
-      const nData: Double): string; overload; 
+      const nData: Double): string; overload; static; 
     //格式化数据    
   end;
 
-  TObjectBase = class(TObject)
-  strict private
-    FSyncLock: TCriticalSection;
-    //同步锁定
+  TObjectBase = class(TObject)  
   public
     type
       TDataDim = 0..2;
       TDataS = array [TDataDim] of string;
-      TDataP = array [TDataDim] of Pointer; 
-      THealth = (hlHigh, hlNormal, hlLow, hlBad);
+      TDataP = array [TDataDim] of Pointer;      
     var
       DataS: TDataS;
       DataP: TDataP;
-      Health: THealth;
-      //状态数据
-            
-    constructor Create;
-    destructor Destroy; override;
-    //创建释放
-    procedure GetStatus(const nList: TStrings); virtual;
-    //对象状态
-    procedure SyncEnter;
-    procedure SyncLeave;
-    //同步锁定    
-  end;
-
-  TManagerBase = class
+      //状态数据 
   strict private
     FSyncLock: TCriticalSection;
     //同步锁定
-  strict protected
-    type
-      TItem = record
-        FClass: TClass;
-        FManager: TObject;
-      end;
-    class var
-      FManagers: array of TItem;
-      //管理器列表
-  protected
-    class function GetMe(const nClass: TClass): Integer;
-    class procedure RegistMe(const nReg: Boolean = True); virtual; abstract;
-    //注册管理器  
-    procedure GetStatus(const nList: TStrings); virtual;
-    //对象状态
-  public       
+  public
     constructor Create;
     destructor Destroy; override;
-    //创建释放
+    //创建释放     
     procedure SyncEnter;
     procedure SyncLeave;
     //同步锁定 
+    function GetHealth: TObjectHealth; virtual;  
+    procedure GetStatus(const nList: TStrings; const nFriendly: Boolean); virtual;
+    //对象状态
+  end;
+
+  TManagerBase = class
+  strict protected 
+    type
+      TItem = record
+        FClass: TClass;
+        FManager: TManagerBase;
+      end;
+    class var
+      FManagers: array of TItem;
+      //管理器列表   
+  strict private
+    FSyncLock: TCriticalSection;
+    //同步锁定
+  protected
+    class function GetMe(const nClass: TClass;
+      const nAutoNew: Boolean = True): Integer; static;
+    class procedure RegistMe(const nReg: Boolean); virtual; abstract;
+    //注册管理器    
+  public 
+    constructor Create;
+    destructor Destroy; override;
+    //创建释放    
+    procedure SyncEnter;
+    procedure SyncLeave;
+    //同步锁定          
+    procedure GetStatus(const nList: TStrings;
+      const nFriendly: Boolean); virtual;
+    function GetHealth: TObjectHealth; virtual;
+    //对象状态 
+    class function GetManager(const nClass: TClass): TManagerBase; static;
+    //检索管理器    
   end;
 
   TCommonObjectManager = class(TManagerBase)
@@ -92,7 +101,27 @@ type
     procedure AddObject(const nObj: TObject);
     procedure DelObject(const nObj: TObject);
     //添加删除
-    procedure GetStatus(const nList: TStrings); override;
+    procedure GetStatus(const nList: TStrings;
+      const nFriendly: Boolean = True); override;
+    //获取状态
+  end;
+
+  TSerialIDManager = class(TManagerBase)
+  private
+    FBase: Int64;
+    //编码基数
+    FTimeStamp: string;
+    //时间戳
+  public
+    constructor Create;
+    //创建释放
+    class procedure RegistMe(const nReg: Boolean); override;
+    //注册管理器    
+    function GetID: Int64;
+    function GetSID: string;
+    //获取标识
+    procedure GetStatus(const nList: TStrings;
+      const nFriendly: Boolean = True); override;
     //获取状态
   end;
 
@@ -135,9 +164,7 @@ end;
 //------------------------------------------------------------------------------
 constructor TObjectBase.Create;
 begin
-  FSyncLock := nil;
-  Health := hlNormal;
-  
+  FSyncLock := nil;  
   if Assigned(gMG.FObjectManager) then
     gMG.FObjectManager.AddObject(Self);
   //xxxxx
@@ -167,8 +194,14 @@ begin
   //xxxxx
 end;
 
-//Desc: 添加标题行
-procedure TObjectBase.GetStatus(const nList: TStrings);
+//Desc: 对象健康度
+function TObjectBase.GetHealth: TObjectHealth;
+begin
+  Result := hlNormal;
+end;
+
+//Desc: 对象状态
+procedure TObjectBase.GetStatus(const nList: TStrings; const nFriendly: Boolean);
 begin
   TObjectStatusHelper.AddTitle(nList, ClassName);
 end;
@@ -201,9 +234,10 @@ begin
 end;
 
 //Date: 2017-03-23
-//Parm: 类别
+//Parm: 类别;自动添加
 //Desc: 检索nClass在管理器列表中的位置
-class function TManagerBase.GetMe(const nClass: TClass): Integer;
+class function TManagerBase.GetMe(const nClass: TClass;
+  const nAutoNew: Boolean): Integer;
 var nIdx: Integer;
 begin
   for nIdx := Low(FManagers) to High(FManagers) do
@@ -213,7 +247,10 @@ begin
     Exit;
   end;
     
-  Result := Length(FManagers); 
+  Result := -1;
+  if not nAutoNew then Exit;
+
+  Result := Length(FManagers);
   nIdx := Result; 
   SetLength(FManagers, nIdx + 1);
 
@@ -224,10 +261,29 @@ begin
   end;    
 end;
 
-//Desc: 添加标题行
-procedure TManagerBase.GetStatus(const nList: TStrings);
+//Desc: 对象状态
+procedure TManagerBase.GetStatus(const nList: TStrings; 
+  const nFriendly: Boolean);
 begin
   TObjectStatusHelper.AddTitle(nList, ClassName);
+end;
+
+//Desc: 对象健康度
+function TManagerBase.GetHealth: TObjectHealth;
+begin
+  Result := hlNormal;
+end;
+
+//Date: 2017-04-15
+//Parm: 类名
+//Desc: 检索类名为nClass的管理器
+class function TManagerBase.GetManager(const nClass: TClass): TManagerBase;
+var nIdx: Integer;
+begin
+  nIdx := GetMe(nClass, False);
+  if nIdx < 0 then
+       Result := nil
+  else Result := FManagers[nIdx].FManager; 
 end;
 
 //------------------------------------------------------------------------------
@@ -287,17 +343,113 @@ begin
   end;
 end;
 
-procedure TCommonObjectManager.GetStatus(const nList: TStrings);
-var nIdx,nLen: Integer;
+//Date: 2017-04-15
+//Parm: 列表;是否友好显示
+//Desc: 将管理器状态数据存入nList中
+procedure TCommonObjectManager.GetStatus(const nList: TStrings;
+  const nFriendly: Boolean);
+var nIdx: Integer;
 begin
-  SyncEnter;
-  try
+  with TObjectStatusHelper do
+  try  
+    SyncEnter;     
+    if not nFriendly then
+    begin
+      inherited GetStatus(nList, nFriendly);
+      nList.Add('NumObject=' + FObjects.Count.ToString);
+      Exit;
+    end;
+    
     for nIdx:=0 to FObjects.Count - 1 do
     with TObjectBase(FObjects[nIdx]) do
     begin
       TObjectStatusHelper.AddTitle(nList, ClassName);
-      GetStatus(nList);
+      GetStatus(nList, nFriendly);
     end;
+  finally
+    SyncLeave;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+constructor TSerialIDManager.Create;
+begin
+  inherited;
+  FBase := 0;
+
+  with TDateTimeHelper do
+  begin
+    FTimeStamp := DateTime2Str(Now());
+    {$IF defined(MSWINDOWS)}
+    FTimeStamp := FTimeStamp + ' Win-OS: ' + TimeLong2CH(GetTickCount);
+    {$ENDIF}
+  end;
+end;
+
+//Date: 2017-03-23
+//Parm: 是否注册
+//Desc: 向系统注册管理器对象
+class procedure TSerialIDManager.RegistMe(const nReg: Boolean);
+var nIdx: Integer;
+begin
+  nIdx := GetMe(TSerialIDManager);
+  if nReg then
+  begin     
+    if not Assigned(FManagers[nIdx].FManager) then
+      FManagers[nIdx].FManager := TSerialIDManager.Create;
+    gMG.FSerialIDManager := FManagers[nIdx].FManager as TSerialIDManager; 
+  end else
+  begin
+    gMG.FSerialIDManager := nil;
+    FreeAndNil(FManagers[nIdx].FManager);    
+  end;
+end;
+
+function TSerialIDManager.GetID: Int64;
+begin
+  SyncEnter;
+  if FBase < High(Int64) then
+       Inc(FBase)
+  else FBase := 1;
+
+  Result := FBase;
+  SyncLeave;
+end;
+
+function TSerialIDManager.GetSID: string;
+begin
+  Result := GetID.ToString;
+end;
+
+//Date: 2017-04-15
+//Parm: 列表;是否友好显示
+//Desc: 将管理器状态数据存入nList中
+procedure TSerialIDManager.GetStatus(const nList: TStrings;
+  const nFriendly: Boolean);
+var nStr: string;
+begin
+  with TObjectStatusHelper do
+  try  
+    SyncEnter;
+    inherited GetStatus(nList, nFriendly);
+    
+    if not nFriendly then
+    begin
+      nList.Add('Base=' + FBase.ToString);
+      Exit;
+    end;
+    
+    with TDateTimeHelper do
+    begin
+      nStr := DateTime2Str(Now());
+      {$IF defined(MSWINDOWS)}
+      nStr := nStr + ' Win-OS: ' + TimeLong2CH(GetTickCount);
+      {$ENDIF}
+    end;
+  
+    nList.Add(FixData('Base:', FBase));
+    nList.Add(FixData('Start On:',  FTimeStamp));
+    nList.Add(FixData('Service Now:',  nStr));
   finally
     SyncLeave;
   end;
@@ -306,5 +458,5 @@ end;
 initialization
   //nothing
 finalization
-  TCommonObjectManager.RegistMe(False);
+  //nothing
 end.

@@ -26,8 +26,10 @@ type
   PObjectPoolClass = ^TObjectPoolClass;
   TObjectPoolClass = record 
     FClass: TClass;               //类名
-    FNewOne: TObjectNewOne;       //生成  
+    FNewOne: TObjectNewOne;       //生成
+      
     FNumLocked: Integer;          //已锁定
+    FNumLockAll: Int64;           //请求次数
     FItems: TList;                //对象列表
   end;
 
@@ -36,6 +38,7 @@ type
     FPool: array of TObjectPoolClass;
     //对象池
     FNumLocked: Integer;
+    FNumLockAll: Int64;
     //锁定对象
     FSrvClosed: Integer;
     //服务关闭 
@@ -56,7 +59,9 @@ type
     function Lock(const nClass: TClass; const nNew: TObjectNewOne=nil): TObject;
     procedure Release(const nObject: TObject);
     //锁定释放
-    procedure GetStatus(const nList: TStrings); override;
+    procedure GetStatus(const nList: TStrings;
+      const nFriendly: Boolean = True); override;
+    function GetHealth: TObjectHealth; override;
     //获取状态
   end;
 
@@ -213,10 +218,12 @@ var nIdx,i: Integer;
 begin  
   SyncEnter;
   try    
-    Result := nil;
-    if FSrvClosed = cYes then Exit; //pool will close    
-    nIdx := FindPool(nClass);
-         
+    Result := nil; 
+    if FSrvClosed = cYes then
+      raise Exception.Create(ClassName + ': Not Support "Lock" When Closing.');
+    //pool will close
+                                
+    nIdx := FindPool(nClass);          
     if (not Assigned(nNew)) and ((nIdx < 0) or 
        (not Assigned(FPool[nIdx].FNewOne))) then
       raise Exception.Create(ClassName + ': Lock Object Need "Create" Method.');
@@ -263,6 +270,15 @@ begin
 
     Inc(FPool[nIdx].FNumLocked);
     Inc(Self.FNumLocked);
+    //inc counter
+
+    if FPool[nIdx].FNumLockAll < High(Int64) then      
+         Inc(FPool[nIdx].FNumLockAll)
+    else FPool[nIdx].FNumLockAll := 0;
+
+    if Self.FNumLockAll < High(Int64) then
+         Inc(Self.FNumLockAll)
+    else Self.FNumLockAll := 0;    
   finally
     SyncLeave;
   end;
@@ -307,16 +323,29 @@ begin
   end;
 end;
 
-procedure TObjectPoolManager.GetStatus(const nList: TStrings);
+//Date: 2017-04-15
+//Parm: 列表;是否友好显示
+//Desc: 将管理器状态数据存入nList中
+procedure TObjectPoolManager.GetStatus(const nList: TStrings;
+  const nFriendly: Boolean);
 var nIdx,nLen: Integer;    
 begin
   with TObjectStatusHelper do
-  try      
+  try
     SyncEnter;
-    inherited GetStatus(nList);
-            
+    inherited GetStatus(nList, nFriendly);
+    
+    if not nFriendly then
+    begin
+      nList.Add('NumPool=' + Length(FPool).ToString);
+      nList.Add('NumLocked=' +  FNumLocked.ToString);
+      nList.Add('NumLockAll=' + FNumLockAll.ToString);
+      Exit;
+    end;
+                           
     nList.Add(FixData('NumPool:', Length(FPool)));
     nList.Add(FixData('NumLocked:', FNumLocked));
+    nList.Add(FixData('NumLockAll:', FNumLockAll));
                                   
     for nIdx := Low(FPool) to High(FPool) do
     with FPool[nIdx] do
@@ -327,8 +356,28 @@ begin
       
       nList.Add('');
       nList.Add(FixData(FClass.ClassName + '.NumAll:', nLen));
-      nList.Add(FixData(FClass.ClassName + '.NumLock:', FNumLocked));
+      nList.Add(FixData(FClass.ClassName + '.NumLocked:', FNumLocked));
+      nList.Add(FixData(FClass.ClassName + '.NumLockAll:', FNumLockAll));
     end;
+  finally
+    SyncLeave;
+  end;
+end;
+
+//Date: 2017-04-16
+//Desc: 获取管理器健康度 
+function TObjectPoolManager.GetHealth: TObjectHealth;
+begin
+  SyncEnter;
+  try
+    Result := hlNormal;
+    if (FNumLocked >= 1000) and (Result < hlLow) then
+      Result := hlLow;
+    //已锁定未释放对象过多
+
+    if (FNumLocked >= 5000) and (Result < hlBad) then
+      Result := hlBad;
+    //锁定对象过多,可能是未执行释放    
   finally
     SyncLeave;
   end;
@@ -337,5 +386,5 @@ end;
 initialization
   //nothing
 finalization
-  TObjectPoolManager.RegistMe(False);
+  //nothing
 end.

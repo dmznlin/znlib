@@ -7,16 +7,20 @@ unit UManagerGroup;
 interface
 
 uses
-  System.Rtti, UBaseObject, UObjectPool;
+  System.Rtti, UBaseObject, UObjectPool, UMemDataPool;
 
 type
   PManagerGroup = ^TManagerGroup;
   TManagerGroup = record
   public
+    FSerialIDManager: TSerialIDManager;
+    //编号管理器
     FObjectManager: TCommonObjectManager;
     //对象管理器
     FObjectPool: TObjectPoolManager;
-    //对象缓冲池  
+    //对象缓冲池
+    FMemDataManager: TMemDataManager;
+    //内存管理器  
   public
     procedure RegistAll(const nReg: Boolean);
     //注册所有

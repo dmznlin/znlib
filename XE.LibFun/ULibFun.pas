@@ -107,6 +107,8 @@ type
     class function Date2Week(nPrefix: string = '';
       nDate: TDateTime = 0): string; static;
     //get the week of nDate
+    class function TimeLong2CH(const nTime: Int64): string; static;
+    //change time long to chinese string
   end;
 
 implementation
@@ -801,6 +803,26 @@ begin
   end;
 
   Result := nPrefix + Result;
+end;
+
+//Date: 2017-04-14
+//Parm: 时间长度(单位毫秒)
+//Desc: 描述nTime毫秒是多长时间(天,小时,分,秒,毫秒)
+class function TDateTimeHelper.TimeLong2CH(const nTime: Int64): string;
+var nD,nH,nM,nS,nMS: Int64;
+begin
+  nD := Trunc(nTime / (1000 * 3600 * 24));
+  nMS := nTime - nD * 1000 * 3600 * 24;
+   
+  nH := Trunc(nMS / (1000 * 3600));
+  nMS := nMS - nH * 1000 * 3600;
+
+  nM := Trunc(nMS / (1000 * 60));
+  nMS := nMS - nM * 1000 * 60;
+
+  nS := Trunc(nMS / 1000);
+  nMS := nMS - nS * 1000;   
+  Result := Format('%d 天 %d 时 %d 分 %d 秒 %d 毫秒', [nD, nH, nM, nS, nMS]);
 end;
 
 end.
