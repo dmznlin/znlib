@@ -49,9 +49,10 @@ type
     //创建释放     
     procedure SyncEnter;
     procedure SyncLeave;
-    //同步锁定 
-    function GetHealth: TObjectHealth; virtual;  
-    procedure GetStatus(const nList: TStrings; const nFriendly: Boolean); virtual;
+    //同步锁定      
+    procedure GetStatus(const nList: TStrings;
+      const nFriendly: Boolean = True); virtual;
+    function GetHealth(const nList: TStrings = nil): TObjectHealth; virtual;
     //对象状态
   end;
 
@@ -81,8 +82,8 @@ type
     procedure SyncLeave;
     //同步锁定          
     procedure GetStatus(const nList: TStrings;
-      const nFriendly: Boolean); virtual;
-    function GetHealth: TObjectHealth; virtual;
+      const nFriendly: Boolean = True); virtual;
+    function GetHealth(const nList: TStrings = nil): TObjectHealth; virtual;
     //对象状态 
     class function GetManager(const nClass: TClass): TManagerBase; static;
     //检索管理器    
@@ -195,7 +196,7 @@ begin
 end;
 
 //Desc: 对象健康度
-function TObjectBase.GetHealth: TObjectHealth;
+function TObjectBase.GetHealth(const nList: TStrings): TObjectHealth;
 begin
   Result := hlNormal;
 end;
@@ -269,7 +270,7 @@ begin
 end;
 
 //Desc: 对象健康度
-function TManagerBase.GetHealth: TObjectHealth;
+function TManagerBase.GetHealth(const nList: TStrings): TObjectHealth;
 begin
   Result := hlNormal;
 end;

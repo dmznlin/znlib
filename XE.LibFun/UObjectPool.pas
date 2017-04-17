@@ -61,7 +61,7 @@ type
     //锁定释放
     procedure GetStatus(const nList: TStrings;
       const nFriendly: Boolean = True); override;
-    function GetHealth: TObjectHealth; override;
+    function GetHealth(const nList: TStrings = nil): TObjectHealth; override;
     //获取状态
   end;
 
@@ -366,18 +366,33 @@ end;
 
 //Date: 2017-04-16
 //Desc: 获取管理器健康度 
-function TObjectPoolManager.GetHealth: TObjectHealth;
+function TObjectPoolManager.GetHealth(const nList: TStrings): TObjectHealth;
+var nStr: string;
 begin
   SyncEnter;
   try
     Result := hlNormal;
     if (FNumLocked >= 1000) and (Result < hlLow) then
+    begin
+      if Assigned(nList) then
+      begin
+        nStr := '已锁定对象[NumLocked: %d]过多,等待释放.';
+        nList.Add(Format(nStr, [FNumLocked]));
+      end;
+
       Result := hlLow;
-    //已锁定未释放对象过多
+    end;
 
     if (FNumLocked >= 5000) and (Result < hlBad) then
+    begin
+      if Assigned(nList) then
+      begin
+        nStr := '已锁定对象[NumLocked: %d]达到警戒值,请检查释放逻辑.';
+        nList.Add(Format(nStr, [FNumLocked]));
+      end;
+
       Result := hlBad;
-    //锁定对象过多,可能是未执行释放    
+    end;    
   finally
     SyncLeave;
   end;
