@@ -17,7 +17,7 @@ uses
 type
   TObjectHealth = (hlHigh, hlNormal, hlLow, hlBad);
   //对象状态
-  
+
   TObjectStatusHelper = class
   public  
     class procedure AddTitle(const nList: TStrings;
@@ -56,6 +56,9 @@ type
     //对象状态
   end;
 
+  TObjectBaseClass = class of TObjectBase;
+  //对象类
+
   TManagerBase = class
   strict protected 
     type
@@ -89,6 +92,9 @@ type
     //检索管理器    
   end;
 
+  TManagerClass = class of TManagerBase;
+  //管理器类
+  
   TCommonObjectManager = class(TManagerBase)
   private  
     FObjects: TList;

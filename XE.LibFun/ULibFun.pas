@@ -16,6 +16,8 @@ type
     type
       TFillPos = (fpLeft, fpMid, fpRight);
       //填充位置:左,中间,右
+      TStringArray = array of string;
+      //字符串动态数组
   
     class function Combine(const nList: TStrings; 
       nFlag: string = '';      

@@ -230,10 +230,6 @@ function TMemDataManager.NewType(const nFlag,nDesc: string;
   const nNumOnce: Byte): Int64;
 var nMain: PMPDataMain;
 begin
-  if not Assigned(gMG.FSerialIDManager) then
-    raise Exception.Create(ClassName + ': Need SerialIDManager Support.');
-  //xxxxx
-
   if not (Assigned(nNew) and Assigned(nDispose)) then
     raise Exception.Create(ClassName + ': New/Free Function Is Null.');
   //xxxxx
@@ -245,6 +241,9 @@ begin
   if (nFlag <> '') and (FindDataMain(0, nFlag) > -1) then
     raise Exception.Create(ClassName + ': Flag Has Exists.');
   //xxxxx
+                      
+  gMG.CheckSupport(ClassName, 'FSerialIDManager', gMG.FSerialIDManager);
+  //check manager
 
   SyncEnter;
   try

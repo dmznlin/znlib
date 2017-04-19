@@ -19,29 +19,35 @@ uses
 
 type
   TRecordSerializer<T> = class
-  strict private
+  public
+    const
+      sSerializerNoSuport = 'not support type.';
+      sSerializerVersion  = 'Znlib.Serializer.Version=0.0.1';
+      sSerializerAuthor   = 'Znlib.Serializer.Author=dmzn@163.com';
+      {*常量定义*}
+
     type
       PPByte = ^PByte;
-           
+      {*类型定义*}
+  private
     class procedure MakeData(const nPrefix,nField,nVal: string;
       const nList: TStrings);
     class function MakePrefix(const nFirst,nNext: string): string;
     //格式化内容
     class procedure EncodeField(const nCtx: TRttiContext;  
       const nFName: string; const nFValue: TValue;
-      const nList: TStrings; const nPrefix: string = '');
+      const nList: TStrings; const nPrefix: string;
+      const nCode: Boolean);
     class procedure EncodeFields(const nCtx: TRttiContext; 
-      const nFValue: TValue; const nList: TStrings; const nPrefix: string = '');
+      const nFValue: TValue; const nList: TStrings; const nPrefix: string;
+      const nCode: Boolean);
     //序列化Field
   public
-    const
-      sSerializerNoSuport = 'not support type.';
-      sSerializerVersion  = 'Znlib.Serializer.Version=0.0.1';
-      sSerializerAuthor   = 'Znlib.Serializer.Author=dmzn@163.com';
-
-    class function Encode(const nRecord: T): string;
+    class function Encode(const nRecord: T;
+      const nCode: Boolean = True): string;
     //序列化Record
-    class procedure Decode(const nRecord: T; const nData: string);
+    class procedure Decode(const nRecord: T; const nData: string;
+      const nCode: Boolean = True);
     //反序列化Record
     class function MakeTypeValue(const nAddr,nType: Pointer): TValue;
     //构建TValue  
@@ -83,12 +89,13 @@ begin
   TValue.Make(nAddr, nType, Result);
 end;
 
+//------------------------------------------------------------------------------
 //Date: 2017-03-15
-//Parm: 实例;记录类型;前缀
+//Parm: 实例;记录类型;前缀;编码
 //Desc: 读取nField中每项的名称和值
 class procedure TRecordSerializer<T>.EncodeField(const nCtx: TRttiContext;
   const nFName: string; const nFValue: TValue;
-  const nList: TStrings; const nPrefix: string);
+  const nList: TStrings; const nPrefix: string; const nCode: Boolean);
 var nIdx: Integer;
     nRF: TRTTIField;
     nArray: TRTTIArrayType;
@@ -142,7 +149,7 @@ begin
         EncodeField(nCtx, MakePrefix(nFName, IntToStr(nIdx)), MakeTypeValue(
           PByte(nFValue.GetReferenceToRawData) +
           nArray.ElementType.TypeSize * nIdx, nArray.ElementType.Handle), 
-          nList, nPrefix);
+          nList, nPrefix, nCode);
         //encode element
       end;
     end;
@@ -157,7 +164,7 @@ begin
         EncodeField(nCtx, MakePrefix(nFName, IntToStr(nIdx)), MakeTypeValue(
           PPByte(nFValue.GetReferenceToRawData)^ + 
           nDynAry.ElementType.TypeSize * nIdx, nDynAry.ElementType.Handle),
-          nList, nPrefix);
+          nList, nPrefix, nCode);
         //encode elment
       end;
     end;
@@ -179,7 +186,7 @@ begin
     end;
     tkRecord:
     begin   
-      EncodeFields(nCtx, nFValue, nList, MakePrefix(nPrefix, nFName));
+      EncodeFields(nCtx, nFValue, nList, MakePrefix(nPrefix, nFName), nCode);
       //record
     end;
             
@@ -190,9 +197,11 @@ begin
     tkWString,
     tkUString:
     begin
-      MakeData(nPrefix, nFName, 
-               TEncodeHelper.EncodeBase64(nFValue.ToString), nList);
-      //string and base64
+      if nCode then      
+           MakeData(nPrefix, nFName,
+                    TEncodeHelper.EncodeBase64(nFValue.ToString), nList)
+           //string and base64
+      else MakeData(nPrefix, nFName, nFValue.ToString, nList);      
     end else
     begin
       MakeData(nPrefix, nFName, sSerializerNoSuport, nList);
@@ -203,7 +212,7 @@ end;
 
 class procedure TRecordSerializer<T>.EncodeFields(const nCtx: TRttiContext;
   const nFValue: TValue; const nList: TStrings;
-  const nPrefix: string);
+  const nPrefix: string; const nCode: Boolean);
 var nRF: TRTTIField;
     nRecord: TRTTIRecordType;
 begin
@@ -221,7 +230,7 @@ begin
     //do later
         
     EncodeField(nCtx, nRF.Name, nRF.GetValue(nFValue.GetReferenceToRawData), 
-                nList, nPrefix);
+                nList, nPrefix, nCode);
     //record
   end; 
 
@@ -229,31 +238,35 @@ begin
   begin
     if Assigned(nRF.FieldType) and (nRF.FieldType.TypeKind = tkRecord) then        
       EncodeField(nCtx, nRF.Name, nRF.GetValue(nFValue.GetReferenceToRawData),
-                  nList, nPrefix);
+                  nList, nPrefix, nCode);
     //record
   end;
 end;
 
 //Date: 2017-03-14
-//Parm: 记录实例;命名前缀
+//Parm: 记录实例;编码字符串
 //Desc: 序列化nRecord为字符串
-class function TRecordSerializer<T>.Encode(const nRecord: T): string;
+class function TRecordSerializer<T>.Encode(const nRecord: T;
+  const nCode: Boolean): string;
 var nCtx: TRttiContext;
     nType: TRttiType;
     nList: TStrings; 
-begin    
+begin   
+  gMG.CheckSupport('TRecordSerializer', 'FObjectPool', gMG.FObjectPool);
+  //check manager
+   
   nList := nil;
   nCtx := TRttiContext.Create;
   try
     nType := nCtx.GetType(TypeInfo(T));
     if nType.TypeKind <> tkRecord then
-      raise Exception.Create('TRecordSerializer only support Record Type.');
+      raise Exception.Create(ClassName + ' Only Support Record Type.');
     //xxxxx
         
     nList := gMG.FObjectPool.Lock(TStrings) as TStrings;
     nList.Clear;
     
-    EncodeFields(nCtx, MakeTypeValue(@nRecord, nType.Handle), nList);
+    EncodeFields(nCtx, MakeTypeValue(@nRecord, nType.Handle), nList, '', nCode);
     //encode all
 
     nList.Add(sSerializerVersion);
@@ -270,7 +283,7 @@ end;
 //Parm: 记录;序列化数据
 //Desc: 将nData赋值给nRecord结构
 class procedure TRecordSerializer<T>.Decode(const nRecord: T;
-  const nData: string);
+  const nData: string; const nCode: Boolean);
 begin
 
 end;
