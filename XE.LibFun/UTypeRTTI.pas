@@ -20,16 +20,22 @@ uses
 type
   TRecordSerializer<T> = class
   public
-    const
-      sSerializerNoSuport = 'not support type.';
-      sSerializerVersion  = 'Znlib.Serializer.Version=0.0.1';
-      sSerializerAuthor   = 'Znlib.Serializer.Author=dmzn@163.com';
+    const 
+      sSerializerNoSuport = 'Znlib.NotSupportType';      
+      sSerializerVersionK = 'Znlib.Serializer.Version';
+      sSerializerVersionV = '0.0.1';
+      sSerializerAuthorK  = 'Znlib.Serializer.Author';
+      sSerializerAuthorV  = 'dmzn@163.com';
+      sSerializerEncodeK  = 'Znlib.Serializer.Encode';
+      sSerializerEncodeY  = 'Y';
+      sSerializerEncodeN  = 'N';      
       {*常量定义*}
 
     type
       PPByte = ^PByte;
       {*类型定义*}
   private
+    class function MakeKey(const nPrefix,nField: string): string;
     class procedure MakeData(const nPrefix,nField,nVal: string;
       const nList: TStrings);
     class function MakePrefix(const nFirst,nNext: string): string;
@@ -44,12 +50,11 @@ type
     //序列化Field
   public
     class function Encode(const nRecord: T;
-      const nCode: Boolean = True): string;
+      const nCode: Boolean = True): string; static;
     //序列化Record
-    class procedure Decode(const nRecord: T; const nData: string;
-      const nCode: Boolean = True);
+    class procedure Decode(const nRecord: T; const nData: string); static;
     //反序列化Record
-    class function MakeTypeValue(const nAddr,nType: Pointer): TValue;
+    class function MakeTypeValue(const nAddr,nType: Pointer): TValue; static;
     //构建TValue  
   end;
 
@@ -66,6 +71,17 @@ begin
   else Result := nFirst + '.' + nNext;
 end;
 
+//Date: 2017-04-19
+//Parm: 前缀,字段 
+//Desc: 构建nPrefix.nField标识
+class function TRecordSerializer<T>.MakeKey(const nPrefix,
+  nField: string): string;
+begin
+  if nPrefix = '' then
+       Result := nField
+  else Result := nPrefix + '.' + nField;
+end;
+
 //Date: 2017-03-15
 //Parm: 前缀,字段,值;是否分割 
 //Desc: 构建nPrefix.nField=nVal的内容
@@ -73,11 +89,8 @@ class procedure TRecordSerializer<T>.MakeData(const nPrefix,nField,nVal: string;
   const nList: TStrings);
 begin
   if nVal <> '' then
-  begin
-    if nPrefix = '' then
-         nList.Add(nField + '=' + nVal)
-    else nList.Add(nPrefix + '.' + nField + '=' + nVal);
-  end;
+    nList.Add(MakeKey(nPrefix, nField) + '=' + nVal);
+  //xxxxx
 end;
 
 //Date: 2017-03-22
@@ -91,8 +104,8 @@ end;
 
 //------------------------------------------------------------------------------
 //Date: 2017-03-15
-//Parm: 实例;记录类型;前缀;编码
-//Desc: 读取nField中每项的名称和值
+//Parm: 上下文;字段名,值;列表;前缀
+//Desc: 读取nFName.nFValue的值,存入nList中
 class procedure TRecordSerializer<T>.EncodeField(const nCtx: TRttiContext;
   const nFName: string; const nFValue: TValue;
   const nList: TStrings; const nPrefix: string; const nCode: Boolean);
@@ -231,7 +244,7 @@ begin
         
     EncodeField(nCtx, nRF.Name, nRF.GetValue(nFValue.GetReferenceToRawData), 
                 nList, nPrefix, nCode);
-    //record
+    //normal field
   end; 
 
   for nRF in nRecord.GetFields do
@@ -264,13 +277,15 @@ begin
     //xxxxx
         
     nList := gMG.FObjectPool.Lock(TStrings) as TStrings;
-    nList.Clear;
+    nList.Clear;    
+    nList.Add(sSerializerVersionK + '=' + sSerializerVersionV);
+    nList.Add(sSerializerAuthorK + '=' + sSerializerAuthorV);
     
-    EncodeFields(nCtx, MakeTypeValue(@nRecord, nType.Handle), nList, '', nCode);
-    //encode all
+    if nCode then
+         nList.Add(sSerializerEncodeK + '=' + sSerializerEncodeY)
+    else nList.Add(sSerializerEncodeK + '=' + sSerializerEncodeN);
 
-    nList.Add(sSerializerVersion);
-    nList.Add(sSerializerAuthor);
+    EncodeFields(nCtx, MakeTypeValue(@nRecord, nType.Handle), nList, '', nCode);      
     Result := nList.Text;
   finally
     gMG.FObjectPool.Release(nList);
@@ -283,7 +298,7 @@ end;
 //Parm: 记录;序列化数据
 //Desc: 将nData赋值给nRecord结构
 class procedure TRecordSerializer<T>.Decode(const nRecord: T;
-  const nData: string; const nCode: Boolean);
+  const nData: string);
 begin
 
 end;

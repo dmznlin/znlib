@@ -13,6 +13,12 @@ uses
 type
   TStringHelper = class
   public
+    const
+      {$IFNDEF XE2_UP}
+        cFirstIndex = 1;
+      {$ELSE}
+        cFirstIndex = Low(String);
+      {$ENDIF}
     type
       TFillPos = (fpLeft, fpMid, fpRight);
       //ÃÓ≥‰Œª÷√:◊Û,÷–º‰,”“
@@ -410,7 +416,7 @@ begin
   try
     if nFloat then
          StrToFloat(nStr)
-    else StrToInt(nStr);
+    else StrToInt64(nStr);
     Result := True;
   except
     //ignor any error
