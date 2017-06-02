@@ -538,7 +538,7 @@ begin
 
           FResponse := nResponse;
           if Assigned(nNode.FindNode('response')) then
-            FResponse := nNode.NodeByName('').ValueAsInteger = 1;
+            FResponse := nNode.NodeByName('response').ValueAsInteger = 1;
           //xxxxx
           
           FOnline := False;
