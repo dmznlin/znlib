@@ -12,6 +12,7 @@
 *.ip,port: 通讯地址
 *.tunnel: 通道标识
 *.response: 应答反馈(1,启用反馈;其它,不启用)
+*.options: 附加参数,用于特定业务
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-->
 <codeprinter>
   <config>
@@ -27,6 +28,7 @@
       <port>8000</port>
       <tunnel>zt001</tunnel>
       <response>0</response>
+      <options>key1=value;key2=values</options>
     </item>
   </printers>
 </codeprinter>

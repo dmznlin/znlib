@@ -27,6 +27,7 @@ type
     FResponse  : Boolean;           //带应答
     FOnline    : Boolean;           //在线
     FLastOn    : Int64;             //上次在线
+    FOptions   : TStrings;          //附加选项
   end;
 
   TCodePrinterManager = class;
@@ -240,11 +241,17 @@ end;
 
 procedure TCodePrinterManager.ClearPrinters(const nFree: Boolean);
 var nIdx: Integer;
+    nPrinter: PCodePrinter;
 begin
   FSyncLock.Enter;
   try
     for nIdx:=FPrinters.Count - 1 downto 0 do
-      Dispose(PCodePrinter(FPrinters[nIdx]));
+    begin
+      nPrinter := FPrinters[nIdx];
+      if Assigned(nPrinter.FOptions) then
+        FreeAndNil(nPrinter.FOptions);
+      Dispose(nPrinter);
+    end;
     //xxxxx
 
     if nFree then
@@ -540,7 +547,13 @@ begin
           if Assigned(nNode.FindNode('response')) then
             FResponse := nNode.NodeByName('response').ValueAsInteger = 1;
           //xxxxx
-          
+
+          if Assigned(nNode.FindNode('options')) then
+          begin
+            FOptions := TStringList.Create;
+            SplitStr(nNode.FindNode('options').ValueAsString, FOptions, 0, ';');
+          end else FOptions := nil;
+
           FOnline := False;
           FLastOn := 0;
         end;
@@ -713,11 +726,9 @@ end;
 //Desc: 打印编码
 function TPrinterZero.PrintCode(const nCode: string;
   var nHint: string): Boolean;
-  var nData: string;
+var nStr,nData: string;
     nCrc: TByteWord;
     nBuf: TIdBytes;
-    nDatatemp: string;
-    nstr: string  ;
 begin
   //protocol: 55 7F len order datas crc16 AA
   nData := Char($55) + Char($7F) + Char(Length(nCode) + 1);
@@ -734,12 +745,12 @@ begin
   begin
     SetLength(nBuf, 0);
     FClient.Socket.ReadBytes(nBuf, 9, False);
-    nstr:= BytesToString(nBuf,Indy8BitEncoding);
+    nStr := BytesToString(nBuf,Indy8BitEncoding);
 
-    nDatatemp :=  Char($55) + Char($FF) + Char($02)+ Char($54)+ Char($4F);
-    nDatatemp :=  nDatatemp + Char($4B)+ Char($5D) + Char($E4) + Char($AA);
+    nData :=  Char($55) + Char($FF) + Char($02)+ Char($54)+ Char($4F);
+    nData :=  nData + Char($4B)+ Char($5D) + Char($E4) + Char($AA);
 
-    if nstr <> nDatatemp then
+    if nstr <> nData then
     begin
       nHint := '喷码机应答错误!';
       Result := False;
@@ -767,9 +778,8 @@ end;
 
 function TPrinterJY.PrintCode(const nCode: string;
   var nHint: string): Boolean;
-  var nData: string;
+var nStr,nData: string;
   nBuf: TIdBytes;
-  nstr: string;
 begin
 
   //久易喷码机
@@ -794,8 +804,8 @@ begin
     SetLength(nBuf, 0);
     FClient.Socket.ReadBytes(nBuf, Length(nData), False);
 
-    nstr:= BytesToString(nBuf, Indy8BitEncoding);
-    if nstr <> nData then
+    nStr := BytesToString(nBuf, Indy8BitEncoding);
+    if nStr <> nData then
     begin
       nHint := '喷码机应答错误!';
       Result := False;
@@ -824,9 +834,8 @@ end;
 
 function TPrinterWSD.PrintCode(const nCode: string;
   var nHint: string): Boolean;
-  var nData: string;
+var nStr,nData: string;
   nBuf: TIdBytes;
-  nstr: string;
 begin
   //威士德喷码机
   //1B 41 29 2A 20 40 37 32 33 34 35 40 39 0D
@@ -851,8 +860,8 @@ begin
     SetLength(nBuf, 0);
     FClient.Socket.ReadBytes(nBuf, Length(nData), False);
 
-    nstr:= BytesToString(nBuf, Indy8BitEncoding);
-    if nstr <> nData then
+    nStr := BytesToString(nBuf, Indy8BitEncoding);
+    if nStr <> nData then
     begin
       nHint := '喷码机应答错误!';
       Result := False;
