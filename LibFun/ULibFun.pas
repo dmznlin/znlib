@@ -523,8 +523,10 @@ begin
     if nAdd then
     begin
       if Copy(nStr, 1, nSLen) <> nSymbol then
+      begin
         nStr := nSymbol + nStr;
-      //xxxxx
+        Inc(nLen, nSLen);
+      end;
 
       if Copy(nStr, nLen - nSLen + 1, nSLen) <> nSymbol then
         nStr := nStr + nSymbol;
@@ -532,8 +534,10 @@ begin
     end else
     begin
       if Copy(nStr, 1, nSLen) = nSymbol then
-        nStr := Copy(nStr, 2, nLen - 1);
-      //xxxxx
+      begin
+        System.Delete(nStr, 1, nSLen);
+        Dec(nLen, nSLen);
+      end;
 
       if Copy(nStr, nLen - nSLen + 1, nSLen) = nSymbol then
         nStr := Copy(nStr, 1, nLen - nSLen);
