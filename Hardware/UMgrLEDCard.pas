@@ -163,6 +163,7 @@ type
     FHeadFont: TCardFont;   //表头
 
     FDataEnable: Boolean;
+    FStatusEnable: Boolean;
     FColWidth: array of Integer;
     FRowNum: Integer;
     FRowHeight: Integer;
@@ -678,10 +679,13 @@ begin
         nLine := Lines[nIdx];
         MidDrawText(nLine.FName, FFontHeadSAdjust, FFontHeadLAdjust);
 
-        if nLine.FIsValid then
-             nStr := '启用'
-        else nStr := '停用';
-        MidDrawText(nStr, FFontHeadSAdjust, FFontHeadLAdjust);
+        if FStatusEnable then
+        begin
+          if nLine.FIsValid then
+               nStr := '启用'
+          else nStr := '停用';
+          MidDrawText(nStr, FFontHeadSAdjust, FFontHeadLAdjust);
+        end;
 
         if nLine.FTrucks.Count < 1 then
           Inc(nIdx);
@@ -1335,6 +1339,7 @@ begin
       nNode := nXML.Root.Nodes[nIdx].FindNode('data_area');
       if not Assigned(nNode) then Continue;
       FDataEnable := nNode.AttributeByName['use_data'] <> 'N';
+      FStatusEnable := nNode.AttributeByName['use_status'] <> 'N';
 
       FRowNum := nNode.NodeByName('rownum').ValueAsInteger;
       FRowHeight := nNode.NodeByName('rowheight').ValueAsInteger;
