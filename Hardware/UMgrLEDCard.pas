@@ -693,7 +693,8 @@ begin
 
         for i:=nCur to nLine.FTrucks.Count-1 do
         begin
-          if i-nCur >= FRowNum-2 then
+          if (FStatusEnable and (i-nCur >= FRowNum-2)) or
+             ((not FStatusEnable) and (i-nCur >= FRowNum-1)) then
           begin
             nCur := i;
             Break;
