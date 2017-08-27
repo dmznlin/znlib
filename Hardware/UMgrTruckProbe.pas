@@ -679,7 +679,7 @@ var i,j,nIdx: Integer;
     nData: PProberFrameControl;
 begin
   Result := '';
-  if not Assigned(FReaders[0]) then Exit;
+  if (Length(FReaders) < 1) or (not Assigned(FReaders[0])) then Exit;
   nPTunnel := GetTunnel(nTunnel);
 
   if not Assigned(nPTunnel) then
