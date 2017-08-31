@@ -869,7 +869,7 @@ begin
       if nPT.FIn[nIdx] = cProber_NullASCII then Continue;
       //invalid addr
 
-      if nPT.FHost.FStatusI[nPT.FIn[nIdx] - 1] = nPT.FHost.FInSignalOn then Exit;
+      if nPT.FHost.FStatusI[nPT.FIn[nIdx] - 1] <> nPT.FHost.FInSignalOff then Exit;
       //某路输入有信号,认为车辆未停妥
     end;
 
@@ -1142,8 +1142,11 @@ begin
       FOwner.FSyncLock.Enter;
       BytesToRaw(nBuf, FQueryFrame, cSize_Prober_Control);
 
-      Move(FData[0], nHost.FStatusI[0], cSize_Prober_IOAddr);
-      Move(FData[cSize_Prober_IOAddr], nHost.FStatusO[0], cSize_Prober_IOAddr);
+      if FQueryFrame.FHeader.FType = cProber_Frame_QueryIO then
+      begin
+        Move(FData[0], nHost.FStatusI[0], cSize_Prober_IOAddr);
+        Move(FData[cSize_Prober_IOAddr], nHost.FStatusO[0], cSize_Prober_IOAddr);
+      end;
 
       nHost.FStatusL := GetTickCount;
       //更新时间
