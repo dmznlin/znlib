@@ -42,7 +42,7 @@ type
   end;
 
   POPCFolder = ^TOPCFolder;
-  TOPCFolder = record                   
+  TOPCFolder = record
     FID       : string;                 //节点编号
     FName     : string;                 //OPC目录名称
     FFolder   : TdOPCBrowseItem;        //OPC目录对象
@@ -700,7 +700,7 @@ begin
       Exit;
     end;
     
-    nItem := NewServiceData(10 * 1000); //10s
+    nItem := NewServiceData(3 * 1000); //3s
     nItem.FDataStr := nTunnel;
 
     nItem.FAction := saTunnelOK;
@@ -730,7 +730,7 @@ begin
   FItemList := TdOPCItemList.Create;
   
   FWaiter := TWaitObject.Create;
-  FWaiter.Interval := 1000;
+  FWaiter.Interval := 300;
 end;
 
 destructor TProberOPCService.Destroy;

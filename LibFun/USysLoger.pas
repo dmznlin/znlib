@@ -84,8 +84,14 @@ resourcestring
 
 //------------------------------------------------------------------------------
 constructor TSysLoger.Create(const nPath,nSyncLock: string);
+var nEvent: string;
 begin
-  FSyncLock := TCrossProcWaitObject.Create(PChar(nSyncLock));
+  nEvent := Trim(nSyncLock);
+  if nEvent = '' then
+    nEvent := 'loger_def_' + IntToStr(GetTickCount  + Random(8327));
+  //default event name
+  
+  FSyncLock := TCrossProcWaitObject.Create(PChar(nEvent));
   //for thread or process sync
   
   FReceiverIDBase := 0;
