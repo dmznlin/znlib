@@ -88,7 +88,7 @@ var nEvent: string;
 begin
   nEvent := Trim(nSyncLock);
   if nEvent = '' then
-    nEvent := 'loger_def_' + IntToStr(GetTickCount  + Random(8327));
+    nEvent := 'loger_def_' + IntToStr(GetTickCount) + IntToStr(Random(8327));
   //default event name
   
   FSyncLock := TCrossProcWaitObject.Create(PChar(nEvent));

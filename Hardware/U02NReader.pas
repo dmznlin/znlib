@@ -521,7 +521,7 @@ begin
     for nIdx:=FCards.Count - 1 downto 0 do
     begin
       nPCard := FCards[nIdx];
-      if nPCard.FOldOne then
+      if nPCard.FOldOne or (GetTickCount - nPCard.FLast > 5 * 60 * 1000) then
       begin
         gMemDataManager.UnLockData(nPCard);
         nPCard := nil;
