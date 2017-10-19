@@ -93,7 +93,7 @@ begin
   FEvent := CreateEvent(nil, False, False, nil);
 
   if FEvent = 0 then
-    raise Exception.Create('Create TCrossProcWaitObject.FEvent Failure');
+    raise Exception.Create('Create TWaitObject.FEvent Failure');
   //xxxxx
 end;
 

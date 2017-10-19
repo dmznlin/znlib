@@ -82,7 +82,6 @@ type
   TVoiceManager = class;
   TVoiceControler = class(TThread)
   private
-
     FOwner: TVoiceManager;
     //ÓµÓÐÕß
     FCMDStop: TVoiceBase;

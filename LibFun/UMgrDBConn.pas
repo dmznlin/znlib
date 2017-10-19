@@ -689,6 +689,8 @@ begin
         begin
           Result := FWorker[nIdx];
           Inc(Result.FCallNum);
+
+          WriteLog(Format('同线程[ %d ]匹配成功.', [Result.FThreadID]));
           Break;
         end;
       end; //优先扫描同线程链路

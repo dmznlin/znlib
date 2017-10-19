@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="gb2312"?>
+<!--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+节点: config
+*.enable: 启用LED驱动(1,开启;其它,关闭)
+
+节点: cards->item
+*.enable: 启用屏卡(1,开启;其它,关闭)
+*.id: 屏卡标识
+*.name: 屏卡描述
+*.ip,port: 通讯地址
+*.color: 颜色(1,单色;2,双色)
+*.width,height: 大小
+*.textkeep: 内容保持(单位秒)
+*.default: 默认文本内容
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-->
+<doorled>
+  <config>
+    <enable>1</enable>
+  </config>
+  <cards>
+    <item id="in" name="进厂小屏">
+      <enable>1</enable>
+      <ip>192.168.1.99</ip>
+      <port>8000</port>
+      <color>2</color>
+      <width>64</width>
+      <height>64</height>
+      <textkeep>20</textkeep>
+      <textspeed>5</textspeed>
+      <default>香格里拉鸿达水泥欢迎您</default>
+    </item>
+  </cards>
+</doorled>

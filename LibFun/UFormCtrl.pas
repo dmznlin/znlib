@@ -37,6 +37,8 @@ type
 
 function SF(const nField: string; const nValue: Variant;
  const nType: TSQLFieldType = sfStr): string;
+function SF_IF(const nData: array of string; const nIdx: Integer): string; overload;
+function SF_IF(const nData: array of string; const nFirst: Boolean): string; overload;
 //make sql field
 function IsStrInList(const nList: TStrings; const nStr: string;
  const nFrom: integer = 0; nTo: integer = -1): Boolean;
@@ -750,6 +752,30 @@ begin
     end
    else Result := '';
   end;
+end;
+
+//Date: 2017-09-27
+//Parm: 字段内容;索引
+//Desc: 使用nData的nIdx项内容
+function SF_IF(const nData: array of string; const nIdx: Integer): string;
+begin
+  if Length(nData) <= nIdx then
+    raise Exception.Create('数据字段内容无效.');
+  Result := nData[nIdx];
+end;
+
+//Date: 2017-09-27
+//Parm: 字段内容;选项
+//Desc: 依据nBool使用nData的内容
+function SF_IF(const nData: array of string; const nFirst: Boolean): string;
+begin
+  if Length(nData) < 2 then
+    raise Exception.Create('数据字段内容无效.');
+  //xxxxx
+
+  if nFirst then
+       Result := nData[0]
+  else Result := nData[1];
 end;
 
 //Date: 2007-11-15
