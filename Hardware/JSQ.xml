@@ -22,6 +22,7 @@
         <tunnel>1</tunnel>
         <delay>7</delay>
         <group>d1</group>
+        <switch>1</switch>
       </line>
       <line>
         <id>ZT002</id>

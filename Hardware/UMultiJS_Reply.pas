@@ -55,6 +55,9 @@ type
     //已装袋数
     FIsRun: Boolean;
     //运行标记
+    FUseBanDao: Boolean;
+    FBanDaoNum: Integer;
+    //扳道相关
     FLastBill: string;
     FLastSaveDai: Word;
     //上次保存
@@ -628,6 +631,13 @@ begin
     if not Assigned(nTunnel) then Continue;
 
     try
+      if nTunnel.FUseBanDao then
+      begin
+        nInt := StrToInt(FRecv.FData[nIdx].FDai[0]);
+        nTunnel.FBanDaoNum := nInt;
+        FRecv.FData[nIdx].FDai[0] := '0';
+      end;
+
       nInt := StrToInt(FRecv.FData[nIdx].FDai);
       //tunnel's num
       
@@ -919,6 +929,11 @@ begin
           if Assigned(nTN) then
                FGroup := nTN.ValueAsString
           else FGroup := '';
+
+          nTN := nNode.FindNode('switch');
+          if Assigned(nTN) then
+               FUseBanDao := nTN.ValueAsInteger = 1
+          else FUseBanDao := False;
         end;
       end;
     end;
