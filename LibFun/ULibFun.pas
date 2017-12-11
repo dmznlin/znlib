@@ -1461,7 +1461,7 @@ end;
 function DateTimeSerial: string;
 begin
   Sleep(1); //must be
-  Result := FormatDateTime('yyyymmddhhssnnzzz', Now());
+  Result := FormatDateTime('yyyymmddhhnnsszzz', Now());
 end;
 
 initialization
