@@ -15,7 +15,7 @@ interface
 
 uses
   ActiveX, ADODB, Classes, DB, Windows, SysUtils, SyncObjs, UMgrHashDict,
-  UWaitItem, USysLoger, UBaseObject;
+  UWaitItem, USysLoger, UBaseObject, UMemDataPool, ULibFun, UFormCtrl;
 
 const
   cErr_GetConn_NoParam     = $0001;            //无连接参数
@@ -64,6 +64,29 @@ type
     FWorker: array of PDBWorker;                //工作对象
   end;
 
+  TDBASyncType = (stSQLServer, stMySQL, stOracle, stPostgres);
+  //数据类型
+  TDBASyncRelation = (arGreater, arGE, arEqual, arLE, arLess, arSame);
+  //数据关系(>, >=, =, <=, <, 文本相同)
+
+  PDBASyncItem = ^TDBASyncItem;
+  TDBASyncItem = record
+    FSerialNo  : string;                        //流水号
+    FPairKey   : string;                        //业务标识
+    FSQL       : string;                        //待执行
+
+    FIfQuery   : string;                        //条件查询
+    FIfField   : string;                        //条件字段
+    FIfType    : TDBASyncRelation;              //比较关系
+    FIfValue   : string;                        //待比较内容
+    FIfSQL     : string;                        //满足后执行
+
+    FRecordID  : Int64;                         //记录号
+    FStartNow  : Boolean;                       //立即执行
+    FStatus    : string;                        //状态标识
+    FMemo      : string;                        //备注内容
+  end;
+
   PDBConnStatus = ^TDBConnStatus;
   TDBConnStatus = record
     FNumConnParam: Integer;                     //可连接数据库个数
@@ -84,6 +107,34 @@ type
     const nData: Pointer): Boolean of object;
   //回调函数
 
+  TDBConnManager = class;
+  TDBASyncWriter = class(TThread)
+  private
+    FOwner: TDBConnManager;
+    //拥有者
+    FWaiter: TWaitObject;
+    //等待对象
+    FBuffer: TList;
+    FDBWorker: PDBWorker;
+    //工作对象
+  protected
+    procedure ClearBuffer(const nFree: Boolean);
+    //清理缓冲
+    procedure DoExecute_SQLServer;
+    procedure Execute; override;
+    //执行线程
+    procedure WriteData_SQLServer(const nData: PDBASyncItem;
+      const nCombineSerial: Boolean = True);
+    //写入动作
+  public
+    constructor Create(AOwner: TDBConnManager);
+    destructor Destroy; override;
+    //创建释放
+    procedure Wakeup;
+    procedure StopMe;
+    //唤醒停止
+  end;
+
   TDBConnManager = class(TCommonObjectBase)
   private
     FWorkers: TList;
@@ -99,6 +150,10 @@ type
     //同步锁
     FStatus: TDBConnStatus;
     //运行状态
+    FIDASyncItem: Integer;
+    FASyncDBType: TDBASyncType;
+    FASyncWriter: TDBASyncWriter;
+    //异步数据库
   protected
     procedure DoFreeDict(const nType: Word; const nData: Pointer);
     //释放字典
@@ -122,6 +177,8 @@ type
     function GetMaxConn: Integer;
     procedure SetMaxConn(const nValue: Integer);
     //设置连接数
+    procedure RegisterDataType;
+    //注册数据
   public
     constructor Create;
     destructor Destroy; override;
@@ -148,6 +205,17 @@ type
       nID: string = ''): Boolean;
     function ExecSQL(const nSQL: string; nID: string = ''): Integer;
     //读写操作
+    procedure ASyncStart;
+    procedure ASyncStop;
+    //启停异步线程
+    procedure ASyncInitDB;
+    procedure ASyncInitItem(const nSQLItem: PDBASyncItem;
+      const nNewSerial: Boolean = False);
+    //异步初始化
+    procedure ASyncAdd(const nSQLItem: PDBASyncItem);
+    procedure ASyncAddSimple(const nSQL: string);
+    procedure ASyncApply(nSerialNo: string = '');
+    //异步写入
     function DBAction(const nAction: TDBActionCallback;
       const nData: Pointer = nil; nID: string = ''): Boolean; overload;
     function DBAction(const nAction: TDBActionCallbackObj;
@@ -155,6 +223,7 @@ type
     //读写回调模式
     procedure GetStatus(const nList: TStrings); override;
     //对象状态
+    property ASyncDBType: TDBASyncType read FASyncDBType write FASyncDBType;
     property Status: TDBConnStatus read GetRunStatus;
     property MaxConn: Integer read GetMaxConn write SetMaxConn;
     property DefaultConnection: string read FConnDef write FConnDef;
@@ -169,9 +238,18 @@ implementation
 
 const
   cTrue  = $1101;
-  cFalse = $1105;
-  //常量定义
+  cFalse = $1105; //常量定义
 
+  cR_Low  = Ord(Low(TDBASyncRelation));
+  cR_High = Ord(High(TDBASyncRelation));                   //数据关系临界
+
+  cS_Run    = 'R';
+  cS_Pause  = 'P';
+  cS_Done   = 'O';                                         //异步数据状态
+
+  cAsyncNum = 3;                                           //异步写入次数
+  cTable_ASync = 'Sys_DataASync';                          //异步数据表
+  
 resourcestring
   sNoAllowedWhenRequest = '连接池对象释放时收到请求,已拒绝.';
   sClosingWhenRequest   = '连接池对象关闭时收到请求,已拒绝.';
@@ -193,6 +271,9 @@ begin
   FConnClosing := cFalse;
   FAllowedRequest := cTrue;
 
+  FASyncWriter := nil;
+  FASyncDBType := stSQLServer;
+  
   FConnDef := '';
   FConnItems := TList.Create;
 
@@ -201,6 +282,9 @@ begin
   
   FParams := THashDictionary.Create(3);
   FParams.OnDataFree := DoFreeDict;
+
+  RegisterDataType;
+  //由内存管理数据
 end;
 
 destructor TDBConnManager.Destroy;
@@ -211,6 +295,37 @@ begin
   FParams.Free;
   FSyncLock.Free;
   inherited;
+end;
+
+procedure OnNew(const nFlag: string; const nType: Word; var nData: Pointer);
+var nItem: PDBASyncItem;
+begin
+  if nFlag = 'ASyncItem' then
+  begin
+    New(nItem);
+    nData := nItem;
+  end;
+end;
+
+procedure OnFree(const nFlag: string; const nType: Word; const nData: Pointer);
+begin
+  if nFlag = 'ASyncItem' then
+  begin
+    Dispose(PDBASyncItem(nData));
+  end;
+end;
+
+//Desc: 注册数据类型
+procedure TDBConnManager.RegisterDataType;
+begin
+  if not Assigned(gMemDataManager) then
+    raise Exception.Create('DBConnManager Needs MemDataManager Support.');
+  //xxxxx
+
+  with gMemDataManager do
+  begin
+    FIDASyncItem := RegDataType('ASyncItem', 'DBConnManager', OnNew, OnFree, 2);
+  end;
 end;
 
 //Desc: 获取最大连接数
@@ -1128,6 +1243,467 @@ begin
     nList.Add('NumObjWait: ' + #9 + IntToStr(FNumObjWait));
     nList.Add('NumWaitMax: ' + #9 + IntToStr(FNumWaitMax));
     nList.Add('NumMaxTime: ' + #9 + DateTimeToStr(FNumMaxTime));
+  end;
+end;
+
+//------------------------------------------------------------------------------
+procedure TDBConnManager.ASyncStart;
+begin
+  if not Assigned(FASyncWriter) then
+    FASyncWriter := TDBASyncWriter.Create(Self);
+  FASyncWriter.Wakeup;
+end;
+
+procedure TDBConnManager.ASyncStop;
+begin
+  if Assigned(FASyncWriter) then
+    FASyncWriter.StopMe;
+  FASyncWriter := nil;
+end;
+
+//Date: 2017-11-20
+//Parm: 待初始化项;更新流水号
+//Desc: 初始化异步写入数据项
+procedure TDBConnManager.ASyncInitItem(const nSQLItem: PDBASyncItem;
+  const nNewSerial: Boolean);
+var nDef: TDBASyncItem;
+begin
+  FillChar(nDef, SizeOf(TDBASyncItem), #0);
+  //init
+
+  with nDef do
+  begin
+    FStartNow := False;    
+    if nNewSerial then
+         FSerialNo := DateTimeSerial
+    else FSerialNo := nSQLItem.FSerialNo;
+  end;
+
+  nSQLItem^ := nDef;
+  //return default
+end;
+
+//Date: 2017-12-08
+//Parm: 数据库类型
+//Desc: 初始化异步写入所需数据库表和索引
+procedure TDBConnManager.ASyncInitDB;
+var nStr: string;
+    nList: TStrings;
+    nWorker: PDBWorker;
+begin
+  nWorker := nil;
+  nList := TStringList.Create;
+  try
+    if FASyncDBType = stSQLServer then
+    begin
+      nStr := 'Select * From dbo.SysObjects Where ID = object_id(' +
+              'N''[%s]'') And ObjectProperty(ID, ''IsTable'') = 1';
+      nStr := Format(nStr, [cTable_ASync]);
+
+      with SQLQuery(nStr, nWorker) do
+      if RecordCount > 0 then
+      begin
+        Exit;
+        //table exists
+      end;
+
+      nStr := 'Create Table $TB(' +
+        'R_ID Integer IDENTITY (1,1) PRIMARY KEY,' +
+        'A_SerialNo varChar(32),' +
+        'A_PairKey varChar(32),' +
+        'A_SQL varchar(max),' +
+        'A_IfQuery varchar(max),' +
+        'A_IfField varChar(32),' +
+        'A_IfType Integer,' +
+        'A_IfValue varChar(32),' +
+        'A_IfSQL varchar(max),' +
+
+        'A_Status Char(1) default ''U'',' + //unknown
+        'A_RunNum Integer default 0,' +
+        'A_TimeIn DateTime,A_TimeDone DateTime,' +
+        'A_Memo varchar(max));';
+      //sql
+
+      nStr := nStr +
+        'Create Index idx_no on $TB(A_SerialNo DESC);' +
+        'Create Index idx_status on $TB(A_Status ASC,A_RunNum ASC);';
+      //index
+
+      nStr := MacroValue(nStr, [MI('$TB', cTable_ASync)]);
+      WorkerExec(nWorker, nStr);
+      //create table
+    end;
+  finally
+    nList.Free;
+    ReleaseConnection(nWorker);
+  end;
+end;
+
+//Date: 2017-12-10
+//Parm: SQL;编码or解码
+//Desc: 处理nSQL中的特殊字符
+function EncodeSQL(const nSQL: string; const nEncode: Boolean = False): string;
+begin
+  if nEncode then
+  begin
+    Result := StringReplace(nSQL, '''', '\./', [rfReplaceAll]);
+  end else
+  begin
+    Result := StringReplace(nSQL, '\./', '''', [rfReplaceAll]);
+  end;
+end;
+
+//Date: 2017-12-08
+//Parm: 异步数据
+//Desc: 添加待异步处理的数据项
+procedure TDBConnManager.ASyncAdd(const nSQLItem: PDBASyncItem);
+var nStr: string;
+begin
+  if FASyncDBType = stSQLServer then
+  begin
+    nStr := MakeSQLByStr([
+      SF('A_SerialNo', nSQLItem.FSerialNo),
+      SF('A_PairKey', nSQLItem.FPairKey),
+      SF('A_SQL', EncodeSQL(nSQLItem.FSQL, True)),
+      SF('A_IfQuery', EncodeSQL(nSQLItem.FIfQuery, True)),
+      SF('A_IfField', nSQLItem.FIfField),
+      SF('A_IfType', Ord(nSQLItem.FIfType), sfVal),
+      SF('A_IfValue', nSQLItem.FIfValue),
+      SF('A_IfSQL', EncodeSQL(nSQLItem.FIfSQL, True)),
+
+      SF_IF([SF('A_Status', cS_Run),
+             SF('A_Status', cS_Pause)], nSQLItem.FStartNow),
+      //R,run;P,pause;O,over
+
+      SF('A_TimeIn', 'getdate()', sfVal)
+      ], cTable_ASync, '', True);
+    //xxxxx
+
+    ExecSQL(nStr);
+    //写入默认库 
+  end;
+end;
+
+//Date: 2017-12-11
+//Parm: 待执行语句
+//Desc: 添加nSQL到异步执行业务
+procedure TDBConnManager.ASyncAddSimple(const nSQL: string);
+var nItem: TDBASyncItem;
+begin
+  ASyncInitItem(@nItem, True);
+  nItem.FSQL := nSQL;
+  nItem.FStartNow := True;
+  ASyncAdd(@nItem);
+end;
+
+//Date: 2017-12-08
+//Parm: 流水号;数据
+//Desc: 设置nSeriaoNo开始运行
+procedure TDBConnManager.ASyncApply(nSerialNo: string);
+var nStr: string;
+begin
+  nSerialNo := Trim(nSerialNo);
+  //regular
+  
+  if FASyncDBType = stSQLServer then
+  begin
+    if nSerialNo <> '' then
+    begin
+      nStr := 'Update %s Set A_Status=''%s'',A_RunNum=0 ' +
+              'Where A_SerialNo=''%s''';
+      nStr := Format(nStr, [cTable_ASync, cS_Run, nSerialNo]);
+      ExecSQL(nStr);
+    end;
+  end;
+
+  if Assigned(FASyncWriter) then
+    FASyncWriter.Wakeup;
+  //set status then run
+end;
+
+//------------------------------------------------------------------------------
+constructor TDBASyncWriter.Create(AOwner: TDBConnManager);
+begin
+  inherited Create(False);
+  FreeOnTerminate := False;
+
+  FOwner := AOwner;
+  FBuffer := TList.Create;
+    
+  FWaiter := TWaitObject.Create;
+  FWaiter.Interval := 5 * 1000;
+end;
+
+destructor TDBASyncWriter.Destroy;
+begin
+  ClearBuffer(True);
+  FWaiter.Free;
+  inherited;
+end;
+
+procedure TDBASyncWriter.ClearBuffer(const nFree: Boolean);
+var nIdx: Integer;
+begin
+  if FBuffer.Count > 0 then
+  begin
+    for nIdx:=FBuffer.Count - 1 downto 0 do
+      gMemDataManager.UnLockData(FBuffer[nIdx]);
+    FBuffer.Clear;
+  end;
+
+  if nFree then
+    FreeAndNil(FBuffer);
+  //xxxxx
+end;
+
+procedure TDBASyncWriter.Wakeup;
+begin
+  FWaiter.Wakeup;
+end;
+
+procedure TDBASyncWriter.StopMe;
+begin
+  Terminate;
+  FWaiter.Wakeup;
+
+  WaitFor;
+  Free;
+end;
+
+procedure TDBASyncWriter.Execute;
+begin
+  while not Terminated do
+  try
+    FWaiter.EnterWait;
+    if Terminated then Exit;
+
+    FDBWorker := nil;
+    try
+      if FBuffer.Count > 0 then
+        ClearBuffer(False);
+      //clear first
+      
+      if FOwner.FASyncDBType = stSQLServer then
+        DoExecute_SQLServer;
+      //run sql server
+    finally
+      FOwner.ReleaseConnection(FDBWorker);
+      ClearBuffer(False);
+    end;
+  except
+    on E:Exception do
+    begin
+      WriteLog(E.Message);
+    end;
+  end;
+end;
+
+//Date: 2017-12-09
+//Desc: 执行SQLServer异步业务
+procedure TDBASyncWriter.DoExecute_SQLServer;
+var nStr: string;
+    nIdx: Integer;
+    nItem: PDBASyncItem;
+begin
+  nStr := 'Select * From %s ' +
+          'Where A_Status=''%s'' And A_RunNum<%d Order By R_ID ASC';
+  nStr := Format(nStr, [cTable_ASync, cS_Run, cAsyncNum]);
+  //first in,first run
+
+  with FOwner.SQLQuery(nStr, FDBWorker) do
+  begin
+    if RecordCount < 1 then
+      Exit;
+    //no async data
+
+    First;
+    while not Eof do
+    begin
+      nItem := gMemDataManager.LockData(FOwner.FIDASyncItem);
+      FBuffer.Add(nItem);
+
+      with nItem^ do
+      begin
+        FRecordID  := FieldByName('R_ID').AsInteger;
+        FSerialNo  := FieldByName('A_SerialNo').AsString;
+        FPairKey   := FieldByName('A_PairKey').AsString;
+        
+        FSQL       := EncodeSQL(FieldByName('A_SQL').AsString);
+        FIfQuery   := EncodeSQL(FieldByName('A_IfQuery').AsString);
+        FIfField   := FieldByName('A_IfField').AsString;
+
+        nIdx       := FieldByName('A_IfType').AsInteger;
+        FStartNow  := (nIdx >= cR_Low) and (nIdx <= cR_High);
+        
+        if FStartNow then
+        begin
+          FIfType  := TDBASyncRelation(nIdx);
+          FMemo    := '';
+          FStatus  := cS_Run;
+        end else
+        begin
+          FMemo    := '"A_IfType"越界';
+          FStatus  := cS_Pause;
+        end;
+
+        FIfValue   := FieldByName('A_IfValue').AsString;
+        FIfSQL     := EncodeSQL(FieldByName('A_IfSQL').AsString);
+      end;
+
+      Next;
+    end;
+  end;
+
+  //----------------------------------------------------------------------------
+  nStr := 'Update %s Set A_RunNum=A_RunNum+1 ' +
+          'Where A_Status=''%s'' And A_RunNum<%d';
+  //inc counter
+  
+  nStr := Format(nStr, [cTable_ASync, cS_Run, cAsyncNum]);
+  FOwner.WorkerExec(FDBWorker, nStr);
+
+  for nIdx:=0 to FBuffer.Count-1 do
+  begin
+    nItem := FBuffer[nIdx];
+    if not nItem.FStartNow then Continue;
+
+    try
+      WriteData_SQLServer(nItem);
+    except
+      on nErr: Exception do
+      begin
+        nItem.FMemo := nErr.Message;
+      end;
+    end;
+  end;
+
+  for nIdx:=FBuffer.Count-1 downto 0 do
+  begin
+    nItem := FBuffer[nIdx];
+    if nItem.FMemo = '' then Continue;
+
+    nStr := 'Update %s Set A_Memo=''%s'' Where R_ID=%d';
+    nStr := Format(nStr, [cTable_ASync, nItem.FMemo, nItem.FRecordID]);
+    FOwner.WorkerExec(FDBWorker, nStr);
+  end;
+end;
+
+//Date: 2017-12-10
+//Parm: 待写入数据;合并写入同流水号数据
+//Desc: 将nData写入数据库
+procedure TDBASyncWriter.WriteData_SQLServer(const nData: PDBASyncItem;
+ const nCombineSerial: Boolean);
+var nStr,nSQL: string;
+    nFVal,nIVal: Double;
+    nIdx: Integer;
+    nItem: PDBASyncItem;
+begin
+  if nCombineSerial then
+  begin
+    if nCombineSerial then
+    for nIdx:=FBuffer.Count - 1 downto 0 do
+    begin
+      nItem := FBuffer[nIdx];
+      if nItem.FStartNow and (nItem.FSerialNo = nData.FSerialNo) then
+        nItem.FStartNow := False;
+      //合并写入时,同流水号记录只能执行一次,先关闭执行标记
+    end;
+
+    FDBWorker.FConn.BeginTrans;
+    //trans start
+  end;  
+
+  try    
+    nSQL := 'Update %s Set A_Status=''%s'',A_TimeDone=getdate() ' +
+            'Where R_ID=%d';
+    nSQL := Format(nSQL, [cTable_ASync, cS_Done, nData.FRecordID]);
+    FOwner.WorkerExec(FDBWorker, nSQL);
+
+    nSQL := nData.FSQL;
+    if nData.FIfQuery <> '' then
+    begin
+      with FOwner.WorkerQuery(FDBWorker, nData.FIfQuery) do
+      if RecordCount > 0 then
+      begin
+        if not Assigned(FindField(nData.FIfField)) then
+        begin
+          nStr := Format('字段"%s"不存在', [nData.FIfField]);
+          raise Exception.Create(nStr);
+        end;
+
+        nFVal := 0;
+        nIVal := 0;
+        nStr := FieldByName(nData.FIfField).AsString;
+
+        if nData.FIfType <> arSame then
+        begin
+          nFVal := StrToFloat(nStr);
+          nIVal := StrToFloat(nData.FIfValue);
+        end;
+
+        case nData.FIfType of
+         arGreater:
+          begin
+            if FloatRelation(nFVal, nIVal, rtGreater) then
+              nSQL := nData.FIfSQL;
+            //>
+          end;  
+         arGE:
+          begin
+            if FloatRelation(nFVal, nIVal, rtGE) then
+              nSQL := nData.FIfSQL;
+            //>=
+          end;
+         arEqual:
+          begin
+            if FloatRelation(nFVal, nIVal, rtEqual) then
+              nSQL := nData.FIfSQL;
+            //=
+          end;
+         arLE:
+          begin
+            if FloatRelation(nFVal, nIVal, rtLE) then
+              nSQL := nData.FIfSQL;
+            //<=
+          end;
+         arLess:
+          begin
+            if FloatRelation(nFVal, nIVal, rtLess) then
+              nSQL := nData.FIfSQL;
+            //<
+          end;
+         arSame:
+          begin
+            if CompareText(nStr, nData.FIfValue) = 0 then
+              nSQL := nData.FIfSQL;
+            //ignor case
+          end;
+        end;
+      end;
+    end;
+
+    FOwner.WorkerExec(FDBWorker, nSQL);
+    //write data
+    
+    if nCombineSerial then
+    begin
+      for nIdx:=0 to FBuffer.Count - 1 do //必须顺序执行
+      begin
+        nItem := FBuffer[nIdx];
+        if nItem = nData then Continue;
+
+        if (nItem.FSerialNo = nData.FSerialNo) and (nItem.FStatus = cS_Run) then
+          WriteData_SQLServer(nItem, False);
+        //同流水
+      end;
+
+      FDBWorker.FConn.CommitTrans;
+      //apply data
+    end;
+  except
+    if nCombineSerial then
+      FDBWorker.FConn.RollbackTrans;
+    raise;
   end;
 end;
 

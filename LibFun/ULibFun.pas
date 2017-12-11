@@ -124,6 +124,20 @@ function GetPinYinOfStr(const nChinese: WideString): string;
 function MirrorStr(const nStr: WideString): WideString;
 //¾µÏñ·´×ªnStr×Ö·û´®
 
+function ANSI_Unicode(const nSrc: AnsiString): WideString;
+function Unicode_ANSI(const nSrc: WideString): AnsiString;
+//ansi - unicode
+function UTF8_Unicode(const nSrc: AnsiString): WideString;
+function Unicode_UTF8(const nSrc: WideString): AnsiString;
+//utf8 - unicode
+function ANSI_UTF8(const nSrc: AnsiString): AnsiString;
+function UTF8_ANSI(const nSrc: AnsiString): AnsiString;
+//ansi - utf8
+function ConvertStr_S2W(const nSrc: AnsiString; nCodePage: Integer): WideString;
+function ConvertStr_W2S(const nSrc: WideString; nCodePage: Integer): AnsiString;
+//single - widestring
+
+//------------------------------------------------------------------------------
 function Str2Date(const nStr: string): TDate;
 //change nStr to date value
 function Str2Time(const nStr: string): TTime;
@@ -142,6 +156,8 @@ function Time2CH(const nTime: string): string;
 //change nTime to chinese string
 function Date2Week(nPrefix: string = ''; nDate: TDateTime = 0): string;
 //get the week of nDate
+function DateTimeSerial: string;
+//serial id by date
 
 implementation
 
@@ -1268,6 +1284,61 @@ begin
   //convert
 end;
 
+//------------------------------------------------------------------------------
+//Date: 2017-11-03
+//Parm: µ¥×Ö·û´®;Ò³Âë
+//Desc: ½«nSrc±àÂëÎªnCodePage¿í×Ö·û´®
+function ConvertStr_S2W(const nSrc: AnsiString; nCodePage: Integer): WideString;
+var nLen: Integer;
+begin
+  nLen := MultiByteToWideChar(nCodePage, 0, PAnsiChar(nSrc), -1, nil, 0);
+  SetLength(Result, nLen - 1);
+  MultiByteToWideChar(nCodePage, 0, PAnsiChar(nSrc),-1,PWideChar(Result),nLen-1);
+end;
+
+//Date: 2017-11-03
+//Parm: ¿í×Ö·û´®;Ò³Âë
+//Desc: ½«nSrc±àÂëÎªnCodePageµ¥×Ö·û´®
+function ConvertStr_W2S(const nSrc: WideString; nCodePage: Integer): AnsiString;
+var nLen: Integer;
+begin
+  nLen := WideCharToMultiByte(nCodePage, 0, PWideChar(nSrc),-1,nil,0,nil,nil);
+  SetLength(Result, nLen - 1);
+  WideCharToMultiByte(nCodePage, 0, PWideChar(nSrc), -1, PAnsiChar(Result),
+                      nLen - 1, nil, nil);
+  //change codepage
+end;
+
+function ANSI_Unicode(const nSrc: AnsiString): WideString;
+begin
+  Result := ConvertStr_S2W(nSrc, CP_ACP);
+end;
+
+function Unicode_ANSI(const nSrc: WideString): AnsiString;
+begin
+  Result := ConvertStr_W2S(nSrc, CP_ACP);
+end;
+
+function UTF8_Unicode(const nSrc: AnsiString): WideString;
+begin
+  Result := ConvertStr_S2W(nSrc, CP_UTF8);
+end;
+
+function Unicode_UTF8(const nSrc: WideString): AnsiString;
+begin
+  Result := ConvertStr_W2S(nSrc, CP_UTF8);
+end;
+
+function ANSI_UTF8(const nSrc: AnsiString): AnsiString;
+begin
+  Result := Unicode_UTF8(ANSI_Unicode(nSrc));
+end;
+
+function UTF8_ANSI(const nSrc: AnsiString): AnsiString;
+begin
+  Result := Unicode_ANSI(UTF8_Unicode(nSrc));
+end;
+
 //------------------------------------------------------------------------------ 
 //Desc: ÈÕÆÚ×ª×Ö·û´®
 function Date2Str(const nDate: TDateTime; nSeparator: Boolean): string;
@@ -1383,6 +1454,14 @@ begin
   end;
 
   Result := nPrefix + Result;
+end;
+
+//Date: 2017-11-20
+//Desc: Ê¹ÓÃÈÕÆÚÉú²úÎ¨Ò»´®ºÅ
+function DateTimeSerial: string;
+begin
+  Sleep(1); //must be
+  Result := FormatDateTime('yyyymmddhhssnnzzz', Now());
 end;
 
 initialization
