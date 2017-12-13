@@ -923,7 +923,7 @@ begin
     except
       on E:Exception do
       begin
-        WriteLog(E.Message);
+        WriteLog('Release Error:' + E.Message);
       end;
     end;
 
@@ -1346,10 +1346,12 @@ function EncodeSQL(const nSQL: string; const nEncode: Boolean = False): string;
 begin
   if nEncode then
   begin
-    Result := StringReplace(nSQL, '''', '\./', [rfReplaceAll]);
+    //Result := StringReplace(nSQL, '''', '\./', [rfReplaceAll]);
+    Result := StringReplace(nSQL, '''', '''''', [rfReplaceAll]);
   end else
   begin
-    Result := StringReplace(nSQL, '\./', '''', [rfReplaceAll]);
+    //Result := StringReplace(nSQL, '\./', '''', [rfReplaceAll]);
+    Result := nSQL;
   end;
 end;
 
@@ -1493,7 +1495,7 @@ begin
   except
     on E:Exception do
     begin
-      WriteLog(E.Message);
+      WriteLog('ASync Error:' + E.Message);
     end;
   end;
 end;
