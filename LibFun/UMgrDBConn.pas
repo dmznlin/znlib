@@ -1473,6 +1473,7 @@ begin
 end;
 
 procedure TDBASyncWriter.Execute;
+var nInit: Int64;
 begin
   while not Terminated do
   try
@@ -1484,10 +1485,19 @@ begin
       if FBuffer.Count > 0 then
         ClearBuffer(False);
       //clear first
+
+      nInit := GetTickCount;
+      //init counter
       
       if FOwner.FASyncDBType = stSQLServer then
         DoExecute_SQLServer;
       //run sql server
+
+      if FBuffer.Count > 0 then
+      begin
+        nInit := GetTickCount - nInit;
+        WriteLog(Format('ASync Write %d Item(s) In %dms.', [FBuffer.Count, nInit]));
+      end; //time consuming
     finally
       FOwner.ReleaseConnection(FDBWorker);
       ClearBuffer(False);
@@ -1557,11 +1567,14 @@ begin
   end;
 
   //----------------------------------------------------------------------------
+  nItem := FBuffer[FBuffer.Count - 1];
+  //last item
+
   nStr := 'Update %s Set A_RunNum=A_RunNum+1 ' +
-          'Where A_Status=''%s'' And A_RunNum<%d';
+          'Where R_ID<=%d And (A_Status=''%s'' And A_RunNum<%d)';
   //inc counter
-  
-  nStr := Format(nStr, [cTable_ASync, cS_Run, cAsyncNum]);
+
+  nStr := Format(nStr, [cTable_ASync, nItem.FRecordID, cS_Run, cAsyncNum]);
   FOwner.WorkerExec(FDBWorker, nStr);
 
   for nIdx:=0 to FBuffer.Count-1 do
