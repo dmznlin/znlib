@@ -206,7 +206,9 @@ type
     FSyncLock: TCriticalSection;
     //同步锁定
     FChangeThread: TMultiJSEvent;
+    FChangeThreadProc: TMultiJSProc;
     FChangeSync: TMultiJSEvent;
+    FChangeSyncProc: TMultiJSProc;
     FSaveDataProc: TMultiJSProc;
     FSaveDataEvent: TMultiJSEvent;
     FGetTruck: TMultiJSGetTruck;
@@ -250,7 +252,9 @@ type
     property CountEnable: Boolean read FEnableCount write FEnableCount;
     property ChainEnable: Boolean read FEnableChain write FEnableChain;
     property ChangeSync: TMultiJSEvent read FChangeSync write FChangeSync;
+    property ChangeSyncProc: TMultiJSProc read FChangeSyncProc write FChangeSyncProc;
     property ChangeThread: TMultiJSEvent read FChangeThread write FChangeThread;
+    property ChangeThreadProc: TMultiJSProc read FChangeThreadProc write FChangeThreadProc;
     property SaveDataProc: TMultiJSProc read FSaveDataProc write FSaveDataProc;
     property SaveDataEvent: TMultiJSEvent read FSaveDataEvent write FSaveDataEvent;
     property GetTruckProc: TMultiJSGetTruck read FGetTruck write FGetTruck;
@@ -611,7 +615,13 @@ end;
 //Desc: 同步当前通道
 procedure TMultJSItem.SyncNowTunnel;
 begin
-  FOwner.FChangeSync(FNowTunnel);
+  if Assigned(FOwner.FChangeSync) then
+    FOwner.FChangeSync(FNowTunnel);
+  //xxxxx
+
+  if Assigned(FOwner.FChangeSyncProc) then
+    FOwner.FChangeSyncProc(FNowTunnel);
+  //xxxxx
 end;
 
 //Desc: 更新袋数变更情况
@@ -659,7 +669,11 @@ begin
           FOwner.FChangeThread(nTunnel);
         //thread event
 
-        if Assigned(FOwner.FChangeSync) then
+        if Assigned(FOwner.FChangeThreadProc) then
+          FOwner.FChangeThreadProc(nTunnel);
+        //thread proc
+
+        if Assigned(FOwner.FChangeSync) or Assigned(FOwner.FChangeSyncProc) then
         begin
           FNowTunnel := nTunnel;
           Synchronize(SyncNowTunnel);

@@ -1515,6 +1515,7 @@ end;
 procedure TDBASyncWriter.DoExecute_SQLServer;
 var nStr: string;
     nIdx: Integer;
+    nFirst,nLast: Int64;
     nItem: PDBASyncItem;
 begin
   nStr := 'Select * From %s ' +
@@ -1567,14 +1568,15 @@ begin
   end;
 
   //----------------------------------------------------------------------------
-  nItem := FBuffer[FBuffer.Count - 1];
-  //last item
+  nFirst := PDBASyncItem(FBuffer[0]).FRecordID;
+  nLast := PDBASyncItem(FBuffer[FBuffer.Count - 1]).FRecordID;
+  //record range
 
   nStr := 'Update %s Set A_RunNum=A_RunNum+1 ' +
-          'Where R_ID<=%d And (A_Status=''%s'' And A_RunNum<%d)';
+          'Where (R_ID>=%d And R_ID<=%d) And (A_Status=''%s'' And A_RunNum<%d)';
   //inc counter
 
-  nStr := Format(nStr, [cTable_ASync, nItem.FRecordID, cS_Run, cAsyncNum]);
+  nStr := Format(nStr, [cTable_ASync, nFirst, nLast, cS_Run, cAsyncNum]);
   FOwner.WorkerExec(FDBWorker, nStr);
 
   for nIdx:=0 to FBuffer.Count-1 do
