@@ -8,7 +8,9 @@ unit ULibFun;
 interface
 
 uses
-  System.Classes, System.SysUtils, System.NetEncoding, System.Hash; 
+  System.Classes, System.SysUtils, System.NetEncoding, System.Hash,
+  {$IFDEF JsonSerializers}System.JSON.Serializers, System.JSON.Types,{$ENDIF}
+  System.Variants;
 
 type
   TStringHelper = class
@@ -26,7 +28,7 @@ type
       //字符串动态数组
   
     class function Combine(const nList: TStrings; 
-      nFlag: string = '';      
+      nFlag: string = '';
       const nFlagEnd: Boolean = True): string; overload; static;
     class function Combine(const nStrArray: array of string; 
       nFlag: string = '';      
@@ -58,9 +60,27 @@ type
     //获取nChinese的拼音简写
     class function MirrorStr(const nStr: string): string; static;
     //镜像反转nStr字符串
-    class function IsNumber(const nStr: string; 
+    class function IsNumber(const nStr: string;
       const nFloat: Boolean = True): Boolean; static;
     //是否数值
+  end;
+
+  TSQLBuilder = class
+    type
+      TFieldType = (sfStr, sfVal, sfDate, sfTime, sfDateTime);
+      //string, date, time, value
+
+    class function SF(const nField: string; const nValue: Variant;
+      const nType: TFieldType = sfStr): string; static;
+    class function SF_IF(const nData: array of string;
+      const nIdx: Integer): string; overload; static;
+    class function SF_IF(const nData: array of string;
+      const nFirst: Boolean): string; overload; static;
+    //make sql field
+    class function MakeSQLByStr(const nData: array of string;
+      const nTable: string; const nWhere: string = '';
+      const nIsNew: Boolean = True): string; static;
+    //make insert,update sql
   end;
 
   TFloatHelper = class
@@ -90,8 +110,13 @@ type
     //base64
     class function EncodeMD5(const nData: string): string; static;
     //md5
+    {$IFDEF JsonSerializers}
+    class function EncodeRecord<T: record>(const nRecord: T): string; static;
+    class function DecodeRecord<T: record>(const nRecord: string): T; static;
+    //serialize record
+    {$ENDIF}
   end;
-  
+
   TDateTimeHelper = class
   public
     class function Str2Date(const nStr: string): TDate; static;
@@ -117,6 +142,8 @@ type
     //get the week of nDate
     class function TimeLong2CH(const nTime: Int64): string; static;
     //change time long to chinese string
+    class function DateTimeSerial: string; static;
+    //serial id by date
   end;
 
 implementation
@@ -587,6 +614,127 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+//Date: 2017-12-19
+//Parm: 字段;值;类型
+//Desc: 构建MakeSQLByStr所需的数据
+class function TSQLBuilder.SF(const nField: string; const nValue: Variant;
+  const nType: TFieldType): string;
+var nVal: string;
+begin
+  if nType = sfDateTime then
+  begin
+    Result := FormatDateTime('yyyy-mm-dd hh:nn:ss:zzz', nValue);
+    Result := Format('%s=''%s''', [nField, Result]);
+    Exit;
+  end;
+
+  nVal := VarToStr(nValue);
+  //convert type
+
+  with TDateTimeHelper do
+  begin
+    case nType of
+     sfStr:
+      Result := Format('%s=''%s''', [nField, nVal]);
+     sfDate:
+      Result := Format('%s=''%s''', [nField, Date2Str(Str2DateTime(nVal))]);
+     sfTime:
+      Result := Format('%s=''%s''', [nField, Time2Str(Str2DateTime(nVal))]);
+     sfVal:
+      begin
+        if nVal = '' then
+             Result := Format('%s=%d', [nField, 0])
+        else Result := Format('%s=%s', [nField, nVal]);
+      end
+     else Result := '';
+    end;
+  end;
+end;
+
+//Date: 2017-12-19
+//Parm: 字段内容;索引
+//Desc: 使用nData的nIdx项内容
+class function TSQLBuilder.SF_IF(const nData: array of string;
+  const nIdx: Integer): string;
+begin
+  if (nIdx > High(nData)) or (nIdx < Low(nData)) then
+    raise Exception.Create('function "SF_IF" out of range.');
+  Result := nData[nIdx];
+end;
+
+//Date: 2017-12-19
+//Parm: 字段内容;选项
+//Desc: 依据nBool使用nData的内容
+class function TSQLBuilder.SF_IF(const nData: array of string;
+  const nFirst: Boolean): string;
+begin
+    if Length(nData) < 2 then
+    raise Exception.Create('function "SF_IF" out of range.');
+  //xxxxx
+
+  if nFirst then
+       Result := nData[0]
+  else Result := nData[1];
+end;
+
+//Date: 2017-12-19
+//Parm: 字段内容;表名;条件;Insert or Update
+//Desc: 构建SQL语句
+class function TSQLBuilder.MakeSQLByStr(const nData: array of string;
+  const nTable, nWhere: string; const nIsNew: Boolean): string;
+var nIdx,nPos: integer;
+    nStr,nTmp,nPrefix,nMain,nPostfix: string;
+begin
+  Result := '';
+  //init
+
+  if nIsNew then
+  begin
+    nPrefix := 'Insert into ' + nTable + '(';
+    nPostfix := '';
+  end else
+  begin
+    nPrefix := 'Update ' + nTable + ' Set ';
+    nPostfix := ' Where ' + nWhere;
+  end;
+
+  for nIdx := Low(nData) to High(nData) do
+  begin
+    nPos := Pos('=', nData[nIdx]);
+    if nPos < 2 then Continue;
+    nStr := nData[nIdx];
+
+    if nIsNew then
+    begin
+      nTmp := Copy(nStr, 1, nPos - 1);
+      System.Delete(nStr, 1, nPos);
+
+      if nMain = '' then
+           nMain := nTmp
+      else nMain := nMain + ',' + nTmp;
+
+      if nPostfix = '' then
+           nPostfix := nStr
+      else nPostfix := nPostfix + ',' + nStr;
+    end else
+    begin
+      if nMain = '' then
+           nMain := nStr
+      else nMain := nMain + ',' + nStr;
+    end;
+  end;
+
+  if nIsNew then
+  begin
+    nMain := nMain + ') Values(';
+    nPostfix := nPostfix + ')';
+  end;
+
+  Result := nPrefix + nMain + nPostfix;
+  //full sql
+end;
+
+//------------------------------------------------------------------------------
 //Date: 2017-03-17
 //Parm: 值;精度;四舍五入
 //Desc: 将nValue放大nPrecision,然后取整,小数位四舍五入
@@ -660,7 +808,8 @@ end;
 //------------------------------------------------------------------------------
 //Date: 2017-03-17
 //Parm: 待编码数据;是否换行
-//Desc: 对nData执行base64编码 
+//Desc: 对nData执行base64编码
+
 class function TEncodeHelper.EncodeBase64(const nData: string;
   const nLineBreak: Boolean): string;
 var nCoder: TBase64Encoding;
@@ -697,6 +846,56 @@ class function TEncodeHelper.EncodeMD5(const nData: string): string;
 begin
   Result := THashMD5.GetHashString(nData);
 end;
+
+{$IFDEF JsonSerializers}
+//Date: 2017-12-20
+//Parm: 结构数据
+//Desc: 序列化nRecord为json字符串
+class function TEncodeHelper.EncodeRecord<T>(const nRecord: T): string;
+var nSeriallizer: TJsonSerializer;
+begin
+  nSeriallizer := nil;
+  try
+    nSeriallizer := TJsonSerializer.Create;
+    with nSeriallizer do
+    begin
+      Formatting := TJsonFormatting.None;
+      DateParseHandling := TJsonDateParseHandling.None;
+      DateTimeZoneHandling := TJsonDateTimeZoneHandling.Utc;
+      DateFormatHandling := TJsonDateFormatHandling.FormatSettings;
+    end;
+
+    Result := nSeriallizer.Serialize<T>(nRecord);
+    //do serial
+  finally
+    nSeriallizer.Free;
+  end;
+end;
+
+//Date: 2017-12-20
+//Parm: 序列化json字符串
+//Desc: 将nRecord反序列化为T结构
+class function TEncodeHelper.DecodeRecord<T>(const nRecord: string): T;
+var nSeriallizer: TJsonSerializer;
+begin
+  nSeriallizer := nil;
+  try
+    nSeriallizer := TJsonSerializer.Create;
+    with nSeriallizer do
+    begin
+      Formatting := TJsonFormatting.None;
+      DateParseHandling := TJsonDateParseHandling.None;
+      DateTimeZoneHandling := TJsonDateTimeZoneHandling.Utc;
+      DateFormatHandling := TJsonDateFormatHandling.FormatSettings;
+    end;
+
+    Result := nSeriallizer.Deserialize<T>(nRecord);
+    //do serial
+  finally
+    nSeriallizer.Free;
+  end;
+end;
+{$ENDIF}
 
 //------------------------------------------------------------------------------
 //Desc: 本地化格式
@@ -831,6 +1030,14 @@ begin
   nS := Trunc(nMS / 1000);
   nMS := nMS - nS * 1000;   
   Result := Format('%d 天 %d 时 %d 分 %d 秒 %d 毫秒', [nD, nH, nM, nS, nMS]);
+end;
+
+//Date: 2017-11-20
+//Desc: 使用日期生产唯一串号
+class function TDateTimeHelper.DateTimeSerial: string;
+begin
+  Sleep(1); //must be
+  Result := FormatDateTime('yyyymmddhhnnsszzz', Now());
 end;
 
 end.

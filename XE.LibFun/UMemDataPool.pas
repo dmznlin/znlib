@@ -403,12 +403,10 @@ var nIdx: Integer;
 begin
   SyncEnter;
   try
-    Result := nil;
     if FSrvClosed = cYes then
       raise Exception.Create(ClassName + ': Not Support "Lock" When Closing.');
     //pool will close
-    
-    
+
     nIdx := FindDataMain(nType);
     if nIdx < 0 then
       raise Exception.Create(ClassName + ': Invalid Data Type.');
@@ -426,7 +424,6 @@ var nIdx: Integer;
 begin
   SyncEnter;
   try
-    Result := nil;
     if FSrvClosed = cYes then
       raise Exception.Create(ClassName + ': Not Support "Lock" When Closing.');
     //pool will close
