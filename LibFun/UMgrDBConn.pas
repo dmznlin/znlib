@@ -87,6 +87,13 @@ type
     FMemo      : string;                        //备注内容
   end;
 
+  TDBASyncWaitItem = record
+    FEnabled   : Boolean;                       //是否启用
+    FSerialNo  : string;                        //流水号
+    FWaiter    : TWaitObject;                   //等待对象
+  end;
+  TDBASyncWaitItems = array of TDBASyncWaitItem;
+
   PDBConnStatus = ^TDBConnStatus;
   TDBConnStatus = record
     FNumConnParam: Integer;                     //可连接数据库个数
@@ -153,6 +160,7 @@ type
     FIDASyncItem: Integer;
     FASyncDBType: TDBASyncType;
     FASyncWriter: TDBASyncWriter;
+    FASyncWaiter: TDBASyncWaitItems;
     //异步数据库
   protected
     procedure DoFreeDict(const nType: Word; const nData: Pointer);
@@ -178,7 +186,11 @@ type
     procedure SetMaxConn(const nValue: Integer);
     //设置连接数
     procedure RegisterDataType;
-    //注册数据
+    //注册数据 
+    function ASyncWaiteFor(const nSerial: string; nWaitFor: Word): TWaitObject;
+    procedure ASyncWaiteOver(const nSerial: string);
+    procedure ASyncClearWaiters;
+    //异步等待对象
   public
     constructor Create;
     destructor Destroy; override;
@@ -212,9 +224,11 @@ type
     procedure ASyncInitItem(const nSQLItem: PDBASyncItem;
       const nNewSerial: Boolean = False);
     //异步初始化
-    procedure ASyncAdd(const nSQLItem: PDBASyncItem);
+    procedure ASyncAdd(const nItem: PDBASyncItem);
     procedure ASyncAddSimple(const nSQL: string);
-    procedure ASyncApply(nSerialNo: string = '');
+    procedure ASyncAddItem(const nItem: PDBASyncItem; const nSQL: string;
+      const nPair: string = '');
+    procedure ASyncApply(nSerialNo: string = ''; const nWaitFor: Word = 0);
     //异步写入
     function DBAction(const nAction: TDBActionCallback;
       const nData: Pointer = nil; nID: string = ''): Boolean; overload;
@@ -273,6 +287,7 @@ begin
 
   FASyncWriter := nil;
   FASyncDBType := stSQLServer;
+  SetLength(FASyncWaiter, 0);
   
   FConnDef := '';
   FConnItems := TList.Create;
@@ -289,6 +304,9 @@ end;
 
 destructor TDBConnManager.Destroy;
 begin
+  ASyncStop;
+  ASyncClearWaiters;
+
   ClearConnItems(True);
   ClearWorkers(True);
 
@@ -1261,6 +1279,100 @@ begin
   FASyncWriter := nil;
 end;
 
+//Date: 2017-12-27
+//Parm: 流水号;等待超时时长(ms)
+//Desc: 获取或释放nSerialNo指定的等待对象
+function TDBConnManager.ASyncWaiteFor(const nSerial: string;
+  nWaitFor: Word): TWaitObject;
+var nIdx,nInt: Integer;
+begin
+  Result := nil;
+  //init
+
+  FSyncLock.Enter;
+  try
+    if nWaitFor < 1 then
+    begin
+      for nIdx:=Low(FASyncWaiter) to High(FASyncWaiter) do
+       with FASyncWaiter[nIdx] do
+        if CompareText(nSerial, FSerialNo) = 0 then
+        begin
+          FEnabled := False;
+          Break;
+        end;
+
+      Exit;
+    end; //解除等待对象
+
+    nInt := -1;
+    //default
+
+    for nIdx:=Low(FASyncWaiter) to High(FASyncWaiter) do
+     with FASyncWaiter[nIdx] do
+      if CompareText(nSerial, FSerialNo) = 0 then
+      begin
+        nInt := nIdx;
+        Break;
+      end; //同流水号多次调用,使用相同对象
+
+    for nIdx:=Low(FASyncWaiter) to High(FASyncWaiter) do
+     with FASyncWaiter[nIdx] do
+      if not FEnabled then
+      begin
+        nInt := nIdx;
+        Break;
+      end; //返回未使用的对象
+
+    if nInt < 0 then
+    begin
+      nInt := Length(FASyncWaiter);
+      SetLength(FASyncWaiter, nInt + 1);
+      FASyncWaiter[nInt].FWaiter := TWaitObject.Create;
+    end; //新对象
+
+    with FASyncWaiter[nInt] do
+    begin
+      FEnabled := True;
+      FSerialNo := nSerial;
+
+      Result := FWaiter;
+      Result.Interval := nWaitFor;
+    end;
+  finally
+    FSyncLock.Leave;
+  end;
+end;
+
+//Date: 2017-12-27
+//Parm: 流水号
+//Desc: 唤醒nSerial等待
+procedure TDBConnManager.ASyncWaiteOver(const nSerial: string);
+var nIdx: Integer;
+begin
+  FSyncLock.Enter;
+  try
+    for nIdx:=Low(FASyncWaiter) to High(FASyncWaiter) do
+     with FASyncWaiter[nIdx] do
+      if FEnabled and (CompareText(nSerial, FSerialNo) = 0) then
+      begin
+        FWaiter.Wakeup();
+        Break;
+      end;
+  finally
+    FSyncLock.Leave;
+  end;   
+end;
+
+//Date: 2017-12-27
+//Desc: 释放等待对象
+procedure TDBConnManager.ASyncClearWaiters;
+var nIdx: Integer;
+begin
+  for nIdx:=Low(FASyncWaiter) to High(FASyncWaiter) do
+    FreeAndNil(FASyncWaiter[nIdx].FWaiter);
+  SetLength(FASyncWaiter, 0);
+end;
+
 //Date: 2017-11-20
 //Parm: 待初始化项;更新流水号
 //Desc: 初始化异步写入数据项
@@ -1358,23 +1470,23 @@ end;
 //Date: 2017-12-08
 //Parm: 异步数据
 //Desc: 添加待异步处理的数据项
-procedure TDBConnManager.ASyncAdd(const nSQLItem: PDBASyncItem);
+procedure TDBConnManager.ASyncAdd(const nItem: PDBASyncItem);
 var nStr: string;
 begin
   if FASyncDBType = stSQLServer then
   begin
     nStr := MakeSQLByStr([
-      SF('A_SerialNo', nSQLItem.FSerialNo),
-      SF('A_PairKey', nSQLItem.FPairKey),
-      SF('A_SQL', EncodeSQL(nSQLItem.FSQL, True)),
-      SF('A_IfQuery', EncodeSQL(nSQLItem.FIfQuery, True)),
-      SF('A_IfField', nSQLItem.FIfField),
-      SF('A_IfType', Ord(nSQLItem.FIfType), sfVal),
-      SF('A_IfValue', nSQLItem.FIfValue),
-      SF('A_IfSQL', EncodeSQL(nSQLItem.FIfSQL, True)),
+      SF('A_SerialNo', nItem.FSerialNo),
+      SF('A_PairKey', nItem.FPairKey),
+      SF('A_SQL', EncodeSQL(nItem.FSQL, True)),
+      SF('A_IfQuery', EncodeSQL(nItem.FIfQuery, True)),
+      SF('A_IfField', nItem.FIfField),
+      SF('A_IfType', Ord(nItem.FIfType), sfVal),
+      SF('A_IfValue', nItem.FIfValue),
+      SF('A_IfSQL', EncodeSQL(nItem.FIfSQL, True)),
 
       SF_IF([SF('A_Status', cS_Run),
-             SF('A_Status', cS_Pause)], nSQLItem.FStartNow),
+             SF('A_Status', cS_Pause)], nItem.FStartNow),
       //R,run;P,pause;O,over
 
       SF('A_TimeIn', 'getdate()', sfVal)
@@ -1398,15 +1510,29 @@ begin
   ASyncAdd(@nItem);
 end;
 
+//Date: 2017-12-20
+//Parm: 异步数据;SQL语句;业务标识
+//Desc: 添加nItem异步业务
+procedure TDBConnManager.ASyncAddItem(const nItem: PDBASyncItem;
+  const nSQL, nPair: string);
+begin
+  nItem.FSQL := nSQL;
+  nItem.FPairKey := nPair;
+  ASyncAdd(nItem);
+end;
+
 //Date: 2017-12-08
-//Parm: 流水号;数据
+//Parm: 流水号;等待执行时间(毫秒)
 //Desc: 设置nSeriaoNo开始运行
-procedure TDBConnManager.ASyncApply(nSerialNo: string);
+procedure TDBConnManager.ASyncApply(nSerialNo: string; const nWaitFor: Word);
 var nStr: string;
+    nInt: Integer;
+    nWaiter: TWaitObject;
 begin
   nSerialNo := Trim(nSerialNo);
   //regular
-  
+  nWaiter := nil;
+
   if FASyncDBType = stSQLServer then
   begin
     if nSerialNo <> '' then
@@ -1414,13 +1540,27 @@ begin
       nStr := 'Update %s Set A_Status=''%s'',A_RunNum=0 ' +
               'Where A_SerialNo=''%s''';
       nStr := Format(nStr, [cTable_ASync, cS_Run, nSerialNo]);
-      ExecSQL(nStr);
+
+      nInt := ExecSQL(nStr);
+      if (nInt > 0) and (nWaitFor > 0) then
+        nWaiter := ASyncWaiteFor(nSerialNo, nWaitFor);
+      //wait for when have record
     end;
   end;
 
-  if Assigned(FASyncWriter) then
-    FASyncWriter.Wakeup;
-  //set status then run
+  try
+    if Assigned(FASyncWriter) then
+      FASyncWriter.Wakeup;
+    //set status then run
+
+    if Assigned(nWaiter) then
+      nWaiter.EnterWait;
+    //lock and wait
+  finally
+    if Assigned(nWaiter) then
+      ASyncWaiteFor(nSerialNo, 0);
+    //unlock
+  end;
 end;
 
 //------------------------------------------------------------------------------
@@ -1716,6 +1856,9 @@ begin
 
       FDBWorker.FConn.CommitTrans;
       //apply data
+
+      FOwner.ASyncWaiteOver(nData.FSerialNo);
+      //wakeup wait item
     end;
   except
     if nCombineSerial then
