@@ -34,6 +34,8 @@ type
     constructor Create;
     destructor Destroy; override;
     {*创建释放*}
+    procedure InitStatus(const nWakeup: Boolean);
+    {*初始状态*}
     function EnterWait: Cardinal;
     procedure Wakeup(const nForce: Boolean = False);
     {*等待.唤醒*}
@@ -125,6 +127,13 @@ begin
   if IsWaiting then
        Result := False
   else Result := FWaitResult = WAIT_OBJECT_0;
+end;
+
+procedure TWaitObject.InitStatus(const nWakeup: Boolean);
+begin
+  if nWakeup then
+       SetEvent(FEvent)
+  else ResetEvent(FEvent);
 end;
 
 function TWaitObject.EnterWait: Cardinal;

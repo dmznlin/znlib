@@ -1308,20 +1308,21 @@ begin
     //default
 
     for nIdx:=Low(FASyncWaiter) to High(FASyncWaiter) do
-     with FASyncWaiter[nIdx] do
-      if CompareText(nSerial, FSerialNo) = 0 then
-      begin
-        nInt := nIdx;
-        Break;
-      end; //同流水号多次调用,使用相同对象
+    if CompareText(nSerial, FASyncWaiter[nIdx].FSerialNo) = 0 then
+    begin
+      nInt := nIdx;
+      Break;
+    end; //同流水号多次调用,使用相同对象
 
-    for nIdx:=Low(FASyncWaiter) to High(FASyncWaiter) do
-     with FASyncWaiter[nIdx] do
-      if not FEnabled then
+    if nInt < 0 then
+    begin
+      for nIdx:=Low(FASyncWaiter) to High(FASyncWaiter) do
+      if not FASyncWaiter[nIdx].FEnabled then
       begin
         nInt := nIdx;
         Break;
-      end; //返回未使用的对象
+      end;
+    end; //返回未使用的对象
 
     if nInt < 0 then
     begin
@@ -1337,6 +1338,7 @@ begin
 
       Result := FWaiter;
       Result.Interval := nWaitFor;
+      Result.InitStatus(False);
     end;
   finally
     FSyncLock.Leave;
@@ -1355,7 +1357,7 @@ begin
      with FASyncWaiter[nIdx] do
       if FEnabled and (CompareText(nSerial, FSerialNo) = 0) then
       begin
-        FWaiter.Wakeup();
+        FWaiter.Wakeup(True);
         Break;
       end;
   finally
