@@ -225,7 +225,7 @@ type
       const nNewSerial: Boolean = False);
     //异步初始化
     procedure ASyncAdd(const nItem: PDBASyncItem);
-    procedure ASyncAddSimple(const nSQL: string);
+    procedure ASyncAddSimple(const nSQL: string; const nPair: string = '');
     procedure ASyncAddItem(const nItem: PDBASyncItem; const nSQL: string;
       const nPair: string = '');
     procedure ASyncApply(nSerialNo: string = ''; const nWaitFor: Word = 0);
@@ -1501,14 +1501,17 @@ begin
 end;
 
 //Date: 2017-12-11
-//Parm: 待执行语句
+//Parm: 待执行语句;业务标识
 //Desc: 添加nSQL到异步执行业务
-procedure TDBConnManager.ASyncAddSimple(const nSQL: string);
+procedure TDBConnManager.ASyncAddSimple(const nSQL,nPair: string);
 var nItem: TDBASyncItem;
 begin
   ASyncInitItem(@nItem, True);
   nItem.FSQL := nSQL;
   nItem.FStartNow := True;
+
+  if nPair <> '' then
+    nItem.FPairKey := nPair;
   ASyncAdd(@nItem);
 end;
 
@@ -1518,6 +1521,10 @@ end;
 procedure TDBConnManager.ASyncAddItem(const nItem: PDBASyncItem;
   const nSQL, nPair: string);
 begin
+  if nItem.FSerialNo = '' then
+    raise Exception.Create('ASyncAddItem.SerialNo(Null) Is Invalid.');
+  //xxxxx
+
   nItem.FSQL := nSQL;
   nItem.FPairKey := nPair;
   ASyncAdd(nItem);
