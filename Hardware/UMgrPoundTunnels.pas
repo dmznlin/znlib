@@ -602,44 +602,47 @@ begin
       FConnector.WakupMe; //启动链接器
                                   
       nPT.FPort.FClientActive := True;
-      Exit;
-    end; //套接字链路
+      //套接字链路
+    end else
 
-    if not Assigned(nPT.FPort.FCOMPort) then
+    if nPT.FPort.FConn = ctCOM then
     begin
-      nPT.FPort.FCOMPort := TComPort.Create(nil);
-      with nPT.FPort.FCOMPort do
+      if not Assigned(nPT.FPort.FCOMPort) then
       begin
-        Tag := FPorts.IndexOf(nPT.FPort);
-        OnRxChar := OnComData;
-
-        with Timeouts do
+        nPT.FPort.FCOMPort := TComPort.Create(nil);
+        with nPT.FPort.FCOMPort do
         begin
-          ReadTotalConstant := 100;
-          ReadTotalMultiplier := 10;
-        end;
+          Tag := FPorts.IndexOf(nPT.FPort);
+          OnRxChar := OnComData;
 
-        with Parity do
-        begin
-          Bits := nPT.FPort.FParitybit;
-          Check := nPT.FPort.FParityCheck;
-        end;
+          with Timeouts do
+          begin
+            ReadTotalConstant := 100;
+            ReadTotalMultiplier := 10;
+          end;
 
-        Port := nPT.FPort.FPort;
-        BaudRate := nPT.FPort.FRate;
-        DataBits := nPT.FPort.FDatabit;
-        StopBits := nPT.FPort.FStopbit;
+          with Parity do
+          begin
+            Bits := nPT.FPort.FParitybit;
+            Check := nPT.FPort.FParityCheck;
+          end;
+
+          Port := nPT.FPort.FPort;
+          BaudRate := nPT.FPort.FRate;
+          DataBits := nPT.FPort.FDatabit;
+          StopBits := nPT.FPort.FStopbit;
+        end;
       end;
-    end;
 
-    try
-      if nOpenPort then
-        nPT.FPort.FCOMPort.Open;
-      //开启端口
-    except
-      on E: Exception do
-      begin
-        WriteLog(E.Message);
+      try
+        if nOpenPort then
+          nPT.FPort.FCOMPort.Open;
+        //开启端口
+      except
+        on E: Exception do
+        begin
+          WriteLog(E.Message);
+        end;
       end;
     end;
 
