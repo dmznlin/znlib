@@ -90,6 +90,7 @@ type
     FOut     : TProberIOAddress;     //输出地址
     FAutoOFF : Integer;              //自动关闭
     FLastOn  : Int64;                //上次打开
+    FScreen  : Integer;              //显示屏号
     FEnable  : Boolean;              //是否启用
   end;
 
@@ -193,6 +194,8 @@ type
     function CloseTunnel(const nTunnel: string): Boolean;
     function TunnelOC(const nTunnel: string; nOC: Boolean): string;
     //开合通道
+    procedure ShowTxt(const nTunnel,nTxt: string; nNo: Integer = -1);
+    //显示内容
     function GetTunnel(const nTunnel: string): PProberTunnel;
     procedure EnableTunnel(const nTunnel: string; const nEnabled: Boolean);
     function QueryStatus(const nHost: PProberHost;
@@ -305,14 +308,14 @@ begin
 end;
 
 {$IFDEF DEBUG}
-procedure LogHex(const nData: TIdBytes);
+procedure LogHex(const nData: TIdBytes; const nPrefix: string = '');
 var nStr: string;
     nIdx: Integer;
 begin
   nStr := '';
   for nIdx:=Low(nData) to High(nData) do
     nStr := nStr + IntToHex(nData[nIdx], 1) + ' ';
-  WriteLog(nStr);
+  WriteLog(nPrefix + nStr);
 end;
 {$ENDIF}
 
@@ -644,6 +647,11 @@ begin
           if Assigned(nTmp) then
                FAutoOFF := nTmp.ValueAsInteger
           else FAutoOFF := 0;
+
+          nTmp := nNode.FindNode('screen_no');
+          if Assigned(nTmp) then
+               FScreen := nTmp.ValueAsInteger
+          else FScreen := -1;
         end;
       end
     end;
@@ -733,7 +741,7 @@ begin
 
     WakeupReaders;
     //wake up thread
-  finally  
+  finally
     FSyncLock.Leave;
   end;
 end;
@@ -874,6 +882,53 @@ begin
     end;
 
     Result := True;
+  finally
+    FSyncLock.Leave;
+  end;
+end;
+
+//Date: 2018-02-24
+//Parm: 通道号;显示文本;屏号
+//Desc: 在nTunnel通道的显示屏上显示nTxt文本
+procedure TProberManager.ShowTxt(const nTunnel, nTxt: string; nNo: Integer);
+var nPTunnel: PProberTunnel;
+    nCmd: PProberTunnelCommand;
+    nData: PProberFrameDataForward;
+begin
+  if Trim(nTunnel) = '' then
+       nPTunnel := nil
+  else nPTunnel := GetTunnel(nTunnel);
+
+  if not Assigned(nPTunnel) then
+  begin
+    WriteLog(Format('通道[ %s ]无效.',  [nTunnel]));
+    Exit;
+  end;
+
+  if nNo < 0 then
+    nNo := nPTunnel.FScreen;
+  if nNo < 0 then Exit;
+
+  FSyncLock.Enter;
+  try
+    nCmd := gMemDataManager.LockData(FIDCommand);
+    FCommand.Add(nCmd);
+    nCmd.FTunnel := nPTunnel;
+    nCmd.FCommand := cProber_Frame_DataForward;
+
+    nData := gMemDataManager.LockData(FIDForward);
+    nCmd.FData := nData;
+    FillChar(nData^, cSize_Prober_Display, cProber_NullASCII);
+
+    with nData.FHeader do
+    begin
+      FBegin := cProber_Flag_Begin;
+      FLength := ConvertStr(Char($40) + Char(nNo) + nTxt + #13, nData.FData) + 4;
+      FType := cProber_Frame_DataForward;
+    end;
+
+    WakeupReaders;
+    //wake up thread
   finally
     FSyncLock.Leave;
   end;
@@ -1155,6 +1210,7 @@ begin
     end;
   end;
 
+  nSize := 0; //init
   for nIdx:=FBuffer.Count - 1 downto 0 do
   begin
     nCmd := FBuffer[nIdx];
@@ -1162,8 +1218,9 @@ begin
 
     if nCmd.FCommand = cProber_Frame_DataForward then
     begin
-      nSize := cSize_Prober_Display;
+      nSize := PProberFrameDataForward(nCmd.FData).FHeader.FLength + 1;
       nBuf := RawToBytes(PProberFrameDataForward(nCmd.FData)^, nSize);
+      nSize := 0;
     end else
     begin
       if (nCmd.FTunnel.FLastOn > 0) and
@@ -1178,7 +1235,7 @@ begin
       nBuf := RawToBytes(PProberFrameControl(nCmd.FData)^, nSize);
     end;
 
-    nStr := SendData(nHost, nBuf, cSize_Prober_Control);
+    nStr := SendData(nHost, nBuf, nSize);
     if nStr <> '' then
     begin
       WriteLog(nStr);

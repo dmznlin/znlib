@@ -15,6 +15,7 @@
 *.out: 输出通道编号(1-8)
 *.enable: 0为关闭
 *.auto_off: 输出自动关闭
+*.screen_no: 显示屏485地址
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-->
 <probers>
   <config>
@@ -31,7 +32,9 @@
       <tunnel id="T1" name="1号进">
         <in>1</in>
         <out>1</out>
+        <enable>1</enable>
         <auto_off>5000</auto_off>
+        <screen_no>1</screen_no>
       </tunnel>
     </tunnels>
   </prober>
