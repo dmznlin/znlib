@@ -12,6 +12,7 @@ uses
 type
   TZnBitmapButton = class(TGraphicControl)
   private
+    FCaption: string;
     FBitmap: TBitmap;
     FLighter: TBitmap;
     FDarker: Tbitmap;
@@ -20,6 +21,7 @@ type
     FLatching: boolean;
     FDown: boolean;
     FHotTrack: boolean;
+    procedure SetCaption(const nText: string);
     procedure SetBitmap(const Value: TBitmap);
     procedure MakeDarker;
     procedure MakeLighter;
@@ -43,10 +45,12 @@ type
     procedure   Paint; override;
   published
     { Published declarations }
+    property Caption: string read FCaption write SetCaption;
     property Bitmap:TBitmap read FBitmap write SetBitmap;
     property Down:boolean read FDown write SetDown;
     property Latching:boolean read FLatching write SetLatching;
     property HotTrack:boolean read FHotTrack write SetHotTrack;
+    property Font;
     property OnClick;
     property OnMouseDown;
     property OnMouseUp;
@@ -204,13 +208,23 @@ begin
   //xxxxx
 end;
 
+procedure TZnBitmapButton.SetCaption(const nText: string);
+begin
+  if FCaption <> nText then
+  begin
+    FCaption := nText;
+    Invalidate;
+  end;
+end;
+
 procedure TZnBitmapButton.SetBitmap(const Value: TBitmap);
 begin
   FBitmap.assign(Value);
   FBitmap.transparent := True;
   FBitmap.TransparentColor  := FBitmap.Canvas.pixels[0,FBitmap.Height-1];
-  width := FBitmap.Width ;
-  height := FBitmap.Height ;
+  
+  Width := FBitmap.Width ;
+  Height := FBitmap.Height ;
   MakeLighter;
   MakeDarker;
 end;
@@ -293,6 +307,7 @@ end;
 
 procedure TZnBitmapButton.Paint;
 var Acolor:TColor;
+    nL,nT: Integer;
 begin
   inherited;
   if Assigned(FBitmap) then
@@ -317,6 +332,18 @@ begin
            Canvas.Draw(0,0,FLighter)
       else Canvas.Draw(0,0,FBitmap);
     end;
+  end;
+
+  if Trim(FCaption) <> '' then
+  begin
+    Canvas.Font.Assign(Font);
+    nL := Canvas.TextWidth(FCaption);
+    nT := Canvas.TextHeight(FCaption);
+
+    nL := Trunc((ClientWidth - nL) / 2);
+    nT := Trunc((ClientHeight - nT) / 2);
+    SetBkMode(Canvas.Handle, TRANSPARENT);
+    Canvas.TextOut(nL, nT, FCaption);
   end;
 end;
 
