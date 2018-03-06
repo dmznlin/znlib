@@ -13,6 +13,7 @@ type
   TZnBitmapButton = class(TGraphicControl)
   private
     FCaption: string;
+    FInvalid: string;
     FBitmap: TBitmap;
     FLighter: TBitmap;
     FDarker: Tbitmap;
@@ -46,11 +47,17 @@ type
   published
     { Published declarations }
     property Caption: string read FCaption write SetCaption;
+    property Invalid: string read FInvalid write FInvalid;
     property Bitmap:TBitmap read FBitmap write SetBitmap;
     property Down:boolean read FDown write SetDown;
     property Latching:boolean read FLatching write SetLatching;
     property HotTrack:boolean read FHotTrack write SetHotTrack;
+    property Anchors;
+    property Enabled;
     property Font;
+    property ShowHint;
+    property Hint;
+    property Tag;
     property OnClick;
     property OnMouseDown;
     property OnMouseUp;
@@ -106,8 +113,11 @@ end;
 
 procedure TZnBitmapButton.CMMouseLeave(var Message: TMessage);
 begin
-  FMouseOver := False;
-  Invalidate;
+  if Enabled then
+  begin
+    FMouseOver := False;
+    Invalidate;
+  end;
 end;
 
 procedure TZnBitmapButton.Loaded;
@@ -306,7 +316,8 @@ begin
 end;
 
 procedure TZnBitmapButton.Paint;
-var Acolor:TColor;
+var nStr: string;
+    Acolor:TColor;
     nL,nT: Integer;
 begin
   inherited;
@@ -334,16 +345,20 @@ begin
     end;
   end;
 
-  if Trim(FCaption) <> '' then
+  if Enabled then
+       nStr := FCaption
+  else nStr := FInvalid;
+
+  if Trim(nStr) <> '' then
   begin
     Canvas.Font.Assign(Font);
-    nL := Canvas.TextWidth(FCaption);
-    nT := Canvas.TextHeight(FCaption);
+    nL := Canvas.TextWidth(nStr);
+    nT := Canvas.TextHeight(nStr);
 
     nL := Trunc((ClientWidth - nL) / 2);
     nT := Trunc((ClientHeight - nT) / 2);
     SetBkMode(Canvas.Handle, TRANSPARENT);
-    Canvas.TextOut(nL, nT, FCaption);
+    Canvas.TextOut(nL, nT, nStr);
   end;
 end;
 
