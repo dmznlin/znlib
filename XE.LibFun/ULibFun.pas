@@ -10,9 +10,31 @@ interface
 uses
   System.Classes, System.SysUtils, System.NetEncoding, System.Hash,
   {$IFDEF JsonSerializers}System.JSON.Serializers, System.JSON.Types,{$ENDIF}
-  System.Variants;
+  System.Variants, System.IniFiles;
 
 type
+  TApplicationHelper = class
+  strict private
+  const
+    sVerifyCode = ';Verify:';
+    //id verify
+  type
+     TCPUID = array[1..4] of Longint;
+    //id record
+
+  public
+    class function GetCPUIDStr: string; static;
+    //处理器标识
+    class procedure AddExpireDate(const nFile,nDate: string;
+      const nInit: Boolean); static;
+    class function IsSystemExpire(const nFile: string): Boolean; static;
+    //系统日期限制
+    class procedure AddVerifyData(const nFile,nSeed: string); static;
+    //为nFile添加校验信息
+    class function IsValidConfigFile(const nFile,nSeed: string): Boolean; static;
+    //校验nFile是否合法配置文件
+  end;
+
   TStringHelper = class
   public
     const
@@ -27,7 +49,7 @@ type
       TStringArray = array of string;
       //字符串动态数组
   
-    class function Combine(const nList: TStrings; 
+    class function Combine(const nList: TStrings;
       nFlag: string = '';
       const nFlagEnd: Boolean = True): string; overload; static;
     class function Combine(const nStrArray: array of string; 
@@ -147,6 +169,205 @@ type
   end;
 
 implementation
+
+//------------------------------------------------------------------------------
+//Date: 2018-03-15
+//Desc: CPU标识字符串
+class function TApplicationHelper.GetCPUIDStr: string;
+var nIdx: Integer;
+    nCPU: TCPUID;
+
+    function GetCPUID: TCPUID; assembler; register;
+    asm
+      PUSH    EBX         {Save affected register}
+      PUSH    EDI
+      MOV     EDI,EAX     {@Resukt}
+      MOV     EAX,1
+      DW      $A20F       {CPUID Command}
+      STOSD                {CPUID[1]}
+      MOV     EAX,EBX
+      STOSD               {CPUID[2]}
+      MOV     EAX,ECX
+      STOSD               {CPUID[3]}
+      MOV     EAX,EDX
+      STOSD               {CPUID[4]}
+      POP     EDI         {Restore registers}
+      POP     EBX
+    end;
+begin
+  try
+    for nIdx:=Low(nCPU) to High(nCPU) do
+      nCPU[nIdx] := -1;
+    //xxxxx
+
+    nCPU := GetCPUID;
+    Result := Format('%.8x', [nCPU[1]]);
+  except
+    Result := 'unknown';
+  end;
+end;
+
+//Date: 2018-03-15
+//Parm: 配置文件;日期;是否初始化
+//Desc: 添加过期日期限制
+class procedure TApplicationHelper.AddExpireDate(const nFile, nDate: string;
+  const nInit: Boolean);
+var nStr,nEn: string;
+begin
+  with TEncodeHelper,TDateTimeHelper,TIniFile.Create(nFile) do
+  try
+    if nInit then
+    begin
+      nStr := ReadString('System', 'Local', '');
+      if nStr = '' then
+           nEn := 'N'
+      else nEn := 'Y';
+
+      WriteString('System', 'Unlock', nEn);
+      //has id,then unlock
+
+      nStr := EncodeBase64(nDate);
+      WriteString('System', 'Expire', nStr);
+
+      nEn := TEncodeHelper.EncodeBase64(Date2Str(Now));
+      nStr := nStr + nEn;
+      WriteString('System', 'DateBase', nEn);
+      WriteString('System', 'DateUpdate', nEn);
+
+      nStr := 'run_' + nStr + ReadString('System', 'Unlock', '');
+      WriteString('System', 'DateVerify', EncodeMD5(nStr));
+    end else
+    begin
+      nEn := ReadString('System', 'Local', '');
+      if nEn = '' then
+      begin
+        nEn := EncodeMD5('id:' + GetCPUIDStr);
+        WriteString('System', 'Unlock', 'N');
+        WriteString('System', 'Local', nEn);
+      end; //no id,add them
+
+      nEn := ReadString('System', 'DateBase', '');
+      nEn := DecodeBase64(nEn);
+
+      if Date2Str(Now) <> nEn then
+      begin
+        if Date() < Str2Date(nEn) then
+        begin
+          nStr := ReadString('System', 'DateUpdate', '');
+          nStr := DecodeBase64(nStr);
+
+          if Date() = Str2Date(nStr) then Exit;
+          nEn := Date2Str(Str2Date(nEn) + 1)
+        end else nEn := Date2Str(Now);
+
+        nEn := EncodeBase64(nEn);
+        WriteString('System', 'DateBase', nEn);
+
+        nStr := ReadString('System', 'Expire', '') + nEn +
+                ReadString('System', 'Unlock', '');
+        WriteString('System', 'DateVerify', EncodeMD5('run_' + nStr));
+
+        nEn := EncodeBase64(Date2Str(Now));
+        WriteString('System', 'DateUpdate', nEn);
+      end;
+    end;
+  finally
+    Free;
+  end;
+end;
+
+//Date: 2018-03-15
+//Parm: 配置文件
+//Desc: 验证nFile文件配置的日期是否过期s
+class function TApplicationHelper.IsSystemExpire(const nFile: string): Boolean;
+var nStr,nEn,nLock: string;
+begin
+  with TEncodeHelper,TDateTimeHelper,TIniFile.Create(nFile) do
+  try
+    Result := True;
+    AddExpireDate(nFile, '', False);
+
+    nStr := EncodeMD5('id:' + GetCPUIDStr);
+    if nStr <> ReadString('System', 'Local', '') then Exit;
+    //id invalid
+
+    nLock := ReadString('System', 'Unlock', '');
+    if nLock <> 'Y' then Exit;
+    //unlock version
+
+    nStr := ReadString('System', 'Expire', '');
+    nEn := ReadString('System', 'DateBase', '');
+
+    if ReadString('System', 'DateVerify', '') =
+       EncodeMD5('run_' + nStr + nEn + nLock) then
+    begin
+      nStr := DecodeBase64(nStr);
+      nEn := DecodeBase64(nEn);
+      Result := Str2Date(nStr) <= Str2Date(nEn);
+    end;
+  finally
+    Free;
+  end;
+end;
+
+//Date: 2018-03-15
+//Parm: 文件全路径;加密种子
+//Desc: 为nFile添加校验信息
+class procedure TApplicationHelper.AddVerifyData(const nFile, nSeed: string);
+var nStr: string;
+    nList: TStrings;
+begin
+  if not FileExists(nFile) then Exit;
+  nList := TStringList.Create;
+  try
+    nList.LoadFromFile(nFile);
+    if (nList.Count > 0) and (Pos(sVerifyCode, nList[0]) = 1) then
+         nList[0] := nSeed
+    else nList.Insert(0, nSeed);
+
+    nStr := TEncodeHelper.EncodeMD5(nList.Text);
+    nStr := sVerifyCode + nStr;
+    nList[0] := nStr;
+    nList.SaveToFile(nFile);
+  finally
+    nList.Free;
+  end;
+end;
+
+//Date: 2018-03-15
+//Parm: 文件全路径;加密种子
+//Desc: 校验nFile是否合法配置文件
+class function TApplicationHelper.IsValidConfigFile(const nFile,
+  nSeed: string): Boolean;
+var nStr: string;
+    nList: TStrings;
+begin
+  Result := False;
+  if not FileExists(nFile) then Exit;
+
+  nStr := ExtractFilePath(nFile);
+  nStr := nStr + nSeed + '.run';
+
+  if FileExists(nStr) then
+  begin
+    AddVerifyData(nFile, nSeed); Result := True; Exit;
+  end;
+
+  nList := TStringList.Create;
+  try
+    nList.LoadFromFile(nFile);
+    if (nList.Count > 0) and (Pos(sVerifyCode, nList[0]) = 1) then
+    begin
+      nStr := nList[0];
+      System.Delete(nStr, 1, Length(sVerifyCode));
+
+      nList[0] := nSeed;
+      Result := TEncodeHelper.EncodeMD5(nList.Text) = nStr;
+    end;
+  finally
+    nList.Free;
+  end;
+end;
 
 //------------------------------------------------------------------------------
 //Date: 2017-03-17
@@ -809,7 +1030,6 @@ end;
 //Date: 2017-03-17
 //Parm: 待编码数据;是否换行
 //Desc: 对nData执行base64编码
-
 class function TEncodeHelper.EncodeBase64(const nData: string;
   const nLineBreak: Boolean): string;
 var nCoder: TBase64Encoding;
