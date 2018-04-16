@@ -41,6 +41,7 @@ type
     FTunnel : string;          //通道号
     FEnable : Boolean;         //是否启用
     FLocked : Boolean;         //是否锁定
+    FCardLast: Int64;          //有卡时间
     FLastActive: Int64;        //上次活动
 
     FVirtual: Boolean;         //虚拟读头
@@ -51,7 +52,7 @@ type
     FKeepOnce: Integer;        //单次保持
     FKeepPeer: Boolean;        //保持模式
     FKeepLast: Int64;          //上次活动
-    
+
     FRelayConn: Boolean;       //是否吸合
     FConnLast: Int64;          //上次吸合
     FConnKeep: Integer;        //吸合保持
@@ -149,6 +150,8 @@ type
     //启停读头
     procedure OpenDoor(const nReader: string);
     //打开道闸
+    function GetLastCard(const nReader: string): string;
+    //获取卡号
     property Readers: TList read FReaders;
     property OnCardProc: THYReaderProc read FOnProc write FOnProc;
     property OnCardEvent: THYReaderEvent read FOnEvent write FOnEvent;
@@ -367,6 +370,28 @@ begin
   ConnRelay(nReader, True);
 end;
 
+//Date: 2018-04-16
+//Parm: 读头标识
+//Desc: 获取nReader读头20秒以内的有效卡号
+function THYReaderManager.GetLastCard(const nReader: string): string;
+var nIdx: Integer;
+    nItem: PHYReaderItem;
+begin
+  FSyncLock.Enter;
+  try
+    Result := '';
+    nIdx := FindReader(nReader);
+    if nIdx < 0 then Exit;
+
+    nItem := FReaders[nIdx];
+    if GetTickCount - nItem.FCardLast <= 20 * 1000 then
+      Result := nItem.FCard;
+    //valid card
+  finally
+    FSyncLock.Leave;
+  end;
+end;
+
 procedure THYReaderManager.LoadConfig(const nFile: string);
 var nIdx,nKeep: Integer;
     nXML: TNativeXml;  
@@ -444,6 +469,10 @@ begin
         FKeepLast := 0;
         FLastActive := GetTickCount;
 
+        FCard := '';
+        FCardLast := 0;
+        //card
+        
         FConnLast := 0;
         FRelayConn := True;
         //默认吸合时,会发送断开指令
@@ -960,8 +989,14 @@ begin
       //同卡号连刷压缩
     end;
 
-    nReader.FCard := CombinStr(FEPCList, ',', False);
-    //multi card
+    FOwner.FSyncLock.Enter;
+    try
+      nReader.FCardLast := GetTickCount;
+      nReader.FCard := CombinStr(FEPCList, ',', False);
+      //multi card
+    finally
+      FOwner.FSyncLock.Leave;
+    end;
     
     if Assigned(FOwner.FOnProc) then
       FOwner.FOnProc(nReader);
