@@ -17,7 +17,9 @@
 *.invalidbegin: 需截除的首长度
 *.invalidend: 需截除的尾长度
 *.datamirror: 数据头尾镜像(反向)
+*.databytehex: 使用数据每个字节的16进制拼接
 *.dataenlarge: 数据放大倍数,用于吨-公斤互换
+*.dataprecision: 数据精度,两位小数为100
 *.hostip: 网络通讯时主机
 *.hostport: 网络通讯时端口
 *.minval: 地磅下限;enable为是否启用(y/n)
@@ -62,7 +64,9 @@
 		<invalidbegin>0</invalidbegin>
 		<invalidend>2</invalidend>
 		<datamirror>0</datamirror>
+        <databytehex>0</databytehex>
 		<dataenlarge>0.001</dataenlarge>
+        <dataprecision>100</dataprecision>
 		<hostip>127.0.0.1</hostip>
 		<hostport>8000</hostport>
 		<minval enable="n">80</minval>

@@ -87,7 +87,9 @@ type
     FInvalidBegin: Integer;          //截首长度
     FInvalidEnd: Integer;            //截尾长度
     FDataMirror: Boolean;            //镜像数据
+    FDataByteHex: Boolean;           //16进制值
     FDataEnlarge: Single;            //放大倍数
+    FDataPrecision: Integer;         //数据精度
     FMaxValue: Double;               //磅站上限
     FMaxValid: Double;               //上限取值
     FMinValue: Double;               //磅站下限
@@ -369,6 +371,16 @@ begin
         FSplitPos := NodeByName('splitpos').ValueAsInteger;
         FDataMirror := NodeByName('datamirror').ValueAsInteger = 1;
         FDataEnlarge := NodeByName('dataenlarge').ValueAsFloat;
+
+        nTmp := FindNode('databytehex');
+        if Assigned(nTmp) then
+             FDataByteHex := nTmp.ValueAsInteger = 1
+        else FDataByteHex := False;
+
+        nTmp := FindNode('dataprecision');
+        if Assigned(nTmp) then
+             FDataPrecision := nTmp.ValueAsInteger
+        else FDataPrecision := 100;
 
         nTmp := FindNode('maxval');
         if Assigned(nTmp) and (nTmp.AttributeByName['enable'] = 'y') then
@@ -708,8 +720,12 @@ begin
       if ParseWeight(nPort) then
       begin
         nVal := StrToFloat(nPort.FCOMData) * nPort.FDataEnlarge;
+        nVal := Float2Float(nVal, nPort.FDataPrecision, False);
+        //精度调整
+
         nPort.FEventTunnel.FOnData(nVal);
         nPort.FCOMData := '';
+        //do event
 
         if Assigned(nPort.FEventTunnel.FOnDataEx) then
           nPort.FEventTunnel.FOnDataEx(nVal, nPort);
@@ -736,8 +752,9 @@ end;
 //Parm: 端口
 //Desc: 解析nPort上的称重数据
 function TPoundTunnelManager.ParseWeight(const nPort: PPTPortItem): Boolean;
-var nIdx,nPos,nEnd: Integer;
+var nStr: string;
     nVal: Double;
+    i,nIdx,nPos,nEnd: Integer;
 begin
   Result := False;
   if Length(nPort.FCOMData) < nPort.FPackLen then Exit;
@@ -792,6 +809,14 @@ begin
     if nPort.FDataMirror then
       nPort.FCOMData := MirrorStr(nPort.FCOMData);
     //数据反转
+
+    if nPort.FDataByteHex then
+    begin
+      nStr := '';
+      for i:=1 to Length(nPort.FCOMData) do
+        nStr := nStr + IntToHex(Ord(nPort.FCOMData[i]), 2);
+      nPort.FCOMData := nStr;
+    end; //每字节16进制拼接
 
     nPort.FCOMData := Trim(nPort.FCOMData);
     Result := IsNumber(nPort.FCOMData, True);
@@ -931,10 +956,12 @@ begin
      Assigned(FActivePort.FEventTunnel.FOnData) then
   begin
     nVal := StrToFloat(FActivePort.FCOMData) * FActivePort.FDataEnlarge;
+    nVal := Float2Float(nVal, FActivePort.FDataPrecision, False);
     //pound data
 
     FActiveTunnel.FOnData(nVal);
     FActiveTunnel.FPort.FCOMData := '';
+    //do event
 
     if Assigned(FActiveTunnel.FOnDataEx) then
       FActiveTunnel.FOnDataEx(nVal, FActivePort);
