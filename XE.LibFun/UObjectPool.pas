@@ -14,12 +14,15 @@ uses
   System.Classes, System.SysUtils, System.SyncObjs, UBaseObject, ULibFun;
 
 type
-  TObjectNewOne = reference to function(): TObject;
+  TObjectNewOne = reference to function(var nData: Pointer): TObject;
+  TObjectFreeOne = reference to procedure(const nObject: TObject;
+    const nData: Pointer);
   //对象生成方法
-    
+
   PObjectPoolItem = ^TObjectPoolItem;
-  TObjectPoolItem = record    
+  TObjectPoolItem = record
     FObject: TObject;             //对象
+    FData: Pointer;               //附加
     FUsed: Boolean;               //使用中
   end;
 
@@ -27,11 +30,16 @@ type
   TObjectPoolClass = record 
     FClass: TClass;               //类名
     FNewOne: TObjectNewOne;       //生成
+    FFreeOne: TObjectFreeOne;     //释放
       
     FNumLocked: Integer;          //已锁定
     FNumLockAll: Int64;           //请求次数
     FItems: TList;                //对象列表
   end;
+
+  TObjectLockFilter = reference to function(const nObject: TObject;
+    const nData: Pointer): Boolean;
+  //锁定时筛选
 
   TObjectPoolManager = class(TManagerBase)
   private
@@ -53,12 +61,19 @@ type
     //创建释放
     class procedure RegistMe(const nReg: Boolean); override;
     //注册管理器
-    function NewClass(const nClass: TClass; const nNew: TObjectNewOne): Integer;
+    function NewClass(const nClass: TClass; const nNew: TObjectNewOne;
+      const nFree: TObjectFreeOne = nil): Integer;
     procedure NewNormalClass;
     //注册类型
-    function Lock(const nClass: TClass; const nNew: TObjectNewOne=nil): TObject;
+    function Lock(const nClass: TClass; const nNew: TObjectNewOne = nil;
+      const nData: PPointer = nil;
+      const nFilter: TObjectLockFilter = nil): TObject;
     procedure Release(const nObject: TObject);
     //锁定释放
+    function GetData(const nClass: TClass; const nObj: TObject): Pointer;
+    function SetData(const nClass: TClass; const nObj: TObject;
+      const nData: Pointer): Boolean;
+    //扩展数据
     procedure GetStatus(const nList: TStrings;
       const nFriendly: Boolean = True); override;
     function GetHealth(const nList: TStrings = nil): TObjectHealth; override;
@@ -138,7 +153,16 @@ begin
       for i := FItems.Count - 1 downto 0 do
       begin
         nItem := FItems[i];
-        FreeAndNil(nItem.FObject);
+        if Assigned(FFreeOne) then
+        begin
+          FFreeOne(nItem.FObject, nItem.FData);
+          nItem.FObject := nil;
+          nItem.FData := nil;
+        end else
+        begin
+          FreeAndNil(nItem.FObject);
+          //free default
+        end;
 
         Dispose(nItem);
         FItems.Delete(i);
@@ -170,10 +194,10 @@ begin
 end;
 
 //Date: 2017-03-23
-//Parm: 类型;创建方法
+//Parm: 类型;创建方法;释放方法
 //Desc: 注册nClass类到对象池
 function TObjectPoolManager.NewClass(const nClass: TClass;
-  const nNew: TObjectNewOne): Integer;
+  const nNew: TObjectNewOne; const nFree: TObjectFreeOne): Integer;
 begin
   SyncEnter;
   try
@@ -189,6 +213,7 @@ begin
     begin
       FClass := nClass;
       FNewOne := nNew;
+      FFreeOne := nFree;
     end;
   finally
     SyncLeave;
@@ -200,22 +225,26 @@ end;
 procedure TObjectPoolManager.NewNormalClass;
 var nNewOne: TObjectNewOne; 
 begin
-  nNewOne := function():TObject begin Result := TStringList.Create; end;
+  nNewOne :=
+   function(var nData: Pointer):TObject begin Result := TStringList.Create; end;
+  //xxxxx
   NewClass(TStrings, nNewOne);
   NewClass(TStringList, nNewOne);
 
-  nNewOne := function():TObject begin Result := TList.Create; end;
+  nNewOne :=
+   function(var nData: Pointer):TObject begin Result := TList.Create; end;
+  //xxxxx
   NewClass(TList, nNewOne);
 end;
 
 //Date: 2017-03-23
-//Parm: 对象类型;创建方法
+//Parm: 对象类型;创建方法;扩展数据;筛选策略
 //Desc: 返回nClass的对象指针
-function TObjectPoolManager.Lock(const nClass: TClass;
-  const nNew: TObjectNewOne): TObject;
+function TObjectPoolManager.Lock(const nClass:TClass; const nNew:TObjectNewOne;
+  const nData: PPointer; const nFilter: TObjectLockFilter): TObject;
 var nIdx,i: Integer;
-    nItem: PObjectPoolItem;    
-begin  
+    nItem: PObjectPoolItem;
+begin
   SyncEnter;
   try    
     Result := nil; 
@@ -223,7 +252,7 @@ begin
       raise Exception.Create(ClassName + ': Not Support "Lock" When Closing.');
     //pool will close
                                 
-    nIdx := FindPool(nClass);          
+    nIdx := FindPool(nClass);
     if (not Assigned(nNew)) and ((nIdx < 0) or 
        (not Assigned(FPool[nIdx].FNewOne))) then
       raise Exception.Create(ClassName + ': Lock Object Need "Create" Method.');
@@ -232,7 +261,7 @@ begin
     if nIdx < 0 then
       nIdx := NewClass(nClass, nNew);
     //xxxxx
-    
+
     with FPool[nIdx] do
     begin
       if not Assigned(FItems) then
@@ -246,10 +275,14 @@ begin
       for i := FItems.Count - 1 downto 0 do
       begin
         nItem := FItems[i];
-        if not nItem.FUsed then
+        if (not nItem.FUsed) and (
+           (not Assigned(nFilter)) or nFilter(nItem.FObject, nItem.FData)) then
         begin
           Result := nItem.FObject;
           nItem.FUsed := True;
+
+          if Assigned(nData) then
+            nData^ := nItem.FData;
           Break;
         end;
       end;
@@ -257,14 +290,19 @@ begin
       if not Assigned(Result) then
       begin
         New(nItem);
-        FItems.Add(nItem);         
+        FItems.Add(nItem);
+        FillChar(nItem^, SizeOf(TObjectPoolItem), #0);
         
         if Assigned(nNew) then         
-             nItem.FObject := nNew()
-        else nItem.FObject := FNewOne();
+             nItem.FObject := nNew(nItem.FData)
+        else nItem.FObject := FNewOne(nItem.FData);
 
         Result := nItem.FObject;
         nItem.FUsed := True;
+
+        if Assigned(nData) then
+          nData^ := nItem.FData;
+        //xxxxx
       end;
     end;
 
@@ -323,6 +361,69 @@ begin
   end;
 end;
 
+//Date: 2018-05-31
+//Parm: 对象类型;对象实例
+//Desc: 获取nClass.nObj的扩展数据
+function TObjectPoolManager.GetData(const nClass: TClass;
+  const nObj: TObject): Pointer;
+var nIdx,i: Integer;
+    nItem: PObjectPoolItem;
+begin
+  SyncEnter;
+  try
+    Result := nil;
+    nIdx := FindPool(nClass);
+    if nIdx < 0 then Exit;
+
+    with FPool[nIdx] do
+    begin
+      for i := FItems.Count - 1 downto 0 do
+      begin
+        nItem := FItems[i];
+        if nItem.FObject = nObj then
+        begin
+          Result := nItem.FData;
+          Break;
+        end;
+      end;
+    end;
+  finally
+    SyncLeave;
+  end;
+end;
+
+//Date: 2018-05-31
+//Parm: 对象类型;对象实例;扩展数据
+//Desc: 设置nClass.nObj的扩展数据
+function TObjectPoolManager.SetData(const nClass: TClass; const nObj: TObject;
+  const nData: Pointer): Boolean;
+var nIdx,i: Integer;
+    nItem: PObjectPoolItem;
+begin
+  SyncEnter;
+  try
+    Result := False;
+    nIdx := FindPool(nClass);
+    if nIdx < 0 then Exit;
+
+    with FPool[nIdx] do
+    begin
+      for i := FItems.Count - 1 downto 0 do
+      begin
+        nItem := FItems[i];
+        if nItem.FObject = nObj then
+        begin
+          nItem.FData := nData;
+          Result := True;
+          Break;
+        end;
+      end;
+    end;
+  finally
+    SyncLeave;
+  end;
+end;
+
 //Date: 2017-04-15
 //Parm: 列表;是否友好显示
 //Desc: 将管理器状态数据存入nList中
@@ -365,7 +466,7 @@ begin
 end;
 
 //Date: 2017-04-16
-//Desc: 获取管理器健康度 
+//Desc: 获取管理器健康度
 function TObjectPoolManager.GetHealth(const nList: TStrings): TObjectHealth;
 var nStr: string;
 begin

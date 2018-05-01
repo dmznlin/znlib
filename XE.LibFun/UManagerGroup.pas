@@ -7,7 +7,7 @@ unit UManagerGroup;
 interface
 
 uses
-  System.Rtti, System.SysUtils, UBaseObject, UObjectPool, UMemDataPool, 
+  System.Rtti, System.SysUtils, UBaseObject, UObjectPool, UMemDataPool,
   ULibFun;
 
 type

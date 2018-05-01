@@ -48,7 +48,20 @@ type
       //填充位置:左,中间,右
       TStringArray = array of string;
       //字符串动态数组
-  
+
+      PMacroItem = ^TMacroItem;
+      TMacroItem = record
+        FMacro: string;                                  //宏定义
+        FValue: string;                                  //宏取值
+      end;
+
+      TDynamicMacroArray = array of TMacroItem;
+      //宏定义数组
+
+    class function MI(const nMacro,nValue: string): TMacroItem; static;
+    class function MacroValue(const nData: string;
+      const nMacro: TDynamicMacroArray): string; static;
+    //处理宏定义
     class function Combine(const nList: TStrings;
       nFlag: string = '';
       const nFlagEnd: Boolean = True): string; overload; static;
@@ -370,6 +383,30 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+//Desc: 宏定义项
+class function TStringHelper.MI(const nMacro,nValue: string): TMacroItem;
+begin
+  Result.FMacro := nMacro;
+  Result.FValue := nValue;
+end;
+
+//Date: 2008-8-8
+//Parm: 带宏的字符串;宏内容
+//Desc: 依据nMacro的数据,替换nData中所有的宏定义
+class function TStringHelper.MacroValue(const nData: string;
+  const nMacro: TDynamicMacroArray): string;
+var nIdx,nLen: integer;
+begin
+  Result := nData;
+  nLen := High(nMacro);
+
+  for nIdx:=Low(nMacro) to nLen do
+  begin
+    Result := StringReplace(Result, nMacro[nIdx].FMacro,
+                            nMacro[nIdx].FValue, [rfReplaceAll, rfIgnoreCase]);
+  end;
+end;
+
 //Date: 2017-03-17
 //Parm: 字符串数组;分隔符; 
 //Desc: 使用nFlag将nStrArray合并为字符串
