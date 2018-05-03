@@ -7,7 +7,7 @@ unit UBusinessPacker;
 interface
 
 uses
-  Windows, Classes, SyncObjs, SysUtils, NativeXml, UBase64, ULibFun;
+  Windows, Classes, SyncObjs, SysUtils, UBase64, ULibFun;
 
 type
   PBWWorkerInfo = ^TBWWorkerInfo;
@@ -44,8 +44,6 @@ type
     //可用标记
     FStrBuilder: TStrings;
     //字符构建器
-    FXMLBuilder: TNativeXml;
-    //XML构建器
     FCodeEnable: Boolean;
     //启用编码
     procedure DoInitIn(const nData: Pointer); virtual;
@@ -62,7 +60,7 @@ type
     procedure PackerDecode(const nStr: string; var nValue: Boolean); overload;
     procedure PackerDecode(const nStr: string; var nValue: Integer); overload;
     procedure PackerDecode(const nStr: string; var nValue: Cardinal); overload;
-    procedure PackerDecode(const nStr: string; var nValue: NativeInt); overload;
+    procedure PackerDecode(const nStr: string; var nValue: Int64); overload;
     procedure PackerDecode(const nStr: string; var nValue: Double); overload;
     procedure PackerDecode(const nStr: string; var nValue: TDateTime); overload;
     //打包函数
@@ -87,7 +85,6 @@ type
       nCode: Boolean = True);
     //出参处理
     property StrBuilder: TStrings read FStrBuilder;
-    property XMLBuilder: TNativeXml read FXMLBuilder;
     //属性相关
   end;
 
@@ -112,13 +109,11 @@ constructor TBusinessPackerBase.Create;
 begin
   FEnabled := True;
   FStrBuilder := TStringList.Create;
-  FXMLBuilder := TNativeXml.Create;
 end;
 
 destructor TBusinessPackerBase.Destroy;
 begin
   FStrBuilder.Free;
-  FXMLBuilder.Free;
   inherited;
 end;
 
@@ -299,11 +294,11 @@ end;
 
 //Desc: 64符号整数
 procedure TBusinessPackerBase.PackerDecode(const nStr: string;
- var nValue: NativeInt);
+ var nValue: Int64);
 begin
   if nStr = '' then
        nValue := 0
-  else nValue := StrToInt64Def(nStr, 0)
+  else nValue := StrToIntDef(nStr, 0)
 end;
 
 //Desc: 浮点数

@@ -17,7 +17,10 @@ type
   TObjectNewOne = reference to function(var nData: Pointer): TObject;
   TObjectFreeOne = reference to procedure(const nObject: TObject;
     const nData: Pointer);
-  //对象生成方法
+  //对象创建释放
+  TObjectResetOne = reference to procedure(const nObject: TObject;
+    const nData: Pointer);
+  //对象重置数据
 
   PObjectPoolItem = ^TObjectPoolItem;
   TObjectPoolItem = record
@@ -31,6 +34,7 @@ type
     FClass: TClass;               //类名
     FNewOne: TObjectNewOne;       //生成
     FFreeOne: TObjectFreeOne;     //释放
+    FResetOne: TObjectResetOne;   //重置
       
     FNumLocked: Integer;          //已锁定
     FNumLockAll: Int64;           //请求次数
@@ -62,13 +66,14 @@ type
     class procedure RegistMe(const nReg: Boolean); override;
     //注册管理器
     function NewClass(const nClass: TClass; const nNew: TObjectNewOne;
-      const nFree: TObjectFreeOne = nil): Integer;
+      const nFree: TObjectFreeOne = nil;
+      const nReset: TObjectResetOne = nil): Integer;
     procedure NewNormalClass;
     //注册类型
     function Lock(const nClass: TClass; const nNew: TObjectNewOne = nil;
       const nData: PPointer = nil;
       const nFilter: TObjectLockFilter = nil): TObject;
-    procedure Release(const nObject: TObject);
+    procedure Release(const nObject: TObject; const nReset: Boolean = True);
     //锁定释放
     function GetData(const nClass: TClass; const nObj: TObject): Pointer;
     function SetData(const nClass: TClass; const nObj: TObject;
@@ -194,10 +199,11 @@ begin
 end;
 
 //Date: 2017-03-23
-//Parm: 类型;创建方法;释放方法
+//Parm: 类型;创建方法;释放方法;重置方法
 //Desc: 注册nClass类到对象池
 function TObjectPoolManager.NewClass(const nClass: TClass;
-  const nNew: TObjectNewOne; const nFree: TObjectFreeOne): Integer;
+  const nNew: TObjectNewOne; const nFree: TObjectFreeOne;
+  const nReset: TObjectResetOne): Integer;
 begin
   SyncEnter;
   try
@@ -214,6 +220,7 @@ begin
       FClass := nClass;
       FNewOne := nNew;
       FFreeOne := nFree;
+      FResetOne := nReset;
     end;
   finally
     SyncLeave;
@@ -223,13 +230,25 @@ end;
 //Date: 2017-03-23
 //Desc: 注册常用类 
 procedure TObjectPoolManager.NewNormalClass;
-var nNewOne: TObjectNewOne; 
+var nNewOne: TObjectNewOne;
+    nResetOne: TObjectResetOne;
 begin
   nNewOne :=
-   function(var nData: Pointer):TObject begin Result := TStringList.Create; end;
-  //xxxxx
-  NewClass(TStrings, nNewOne);
-  NewClass(TStringList, nNewOne);
+    function(var nData: Pointer):TObject
+    begin
+      Result := TStringList.Create;
+    end;
+  //create
+
+  nResetOne :=
+    procedure(const nObject: TObject; const nData: Pointer)
+    begin
+      TStringList(nObject).Clear;
+    end;
+  //init
+
+  NewClass(TStrings, nNewOne, nil, nResetOne);
+  NewClass(TStringList, nNewOne, nil, nResetOne);
 
   nNewOne :=
    function(var nData: Pointer):TObject begin Result := TList.Create; end;
@@ -323,9 +342,10 @@ begin
 end;
 
 //Date: 2017-03-23
-//Parm: 对象
+//Parm: 对象;重置
 //Desc: 释放对象
-procedure TObjectPoolManager.Release(const nObject: TObject);
+procedure TObjectPoolManager.Release(const nObject: TObject;
+  const nReset: Boolean);
 var nIdx,i: Integer;
     nItem: PObjectPoolItem; 
 begin
@@ -346,11 +366,13 @@ begin
         begin
           nItem := FItems[i];
           if nItem.FObject = nObject then
-          begin             
+          begin
             Dec(FPool[nIdx].FNumLocked);
             Dec(Self.FNumLocked);
-
             nItem.FUsed := False;
+
+            if nReset and Assigned(FResetOne) then
+              FResetOne(nItem.FObject, nItem.FData);
             Exit;
           end;
         end;

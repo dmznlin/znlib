@@ -62,6 +62,8 @@ type
     class function MacroValue(const nData: string;
       const nMacro: TDynamicMacroArray): string; static;
     //处理宏定义
+    class function StrListIndex(const nStr: string; const nList: TStrings;
+      const nSection: Integer; const nFlag: string = ''): Integer;
     class function StrArrayIndex(const nStr: string; const nArray: TStringArray;
       const nIgnoreCase: Boolean = True): integer; static;
     //字符串索引
@@ -407,6 +409,34 @@ begin
   begin
     Result := StringReplace(Result, nMacro[nIdx].FMacro,
                             nMacro[nIdx].FValue, [rfReplaceAll, rfIgnoreCase]);
+  end;
+end;
+
+//Date: 2018-05-03
+//Parm: 字符串;列表;分段位置;分隔符
+//Desc: 检索使用nFlag分割的nList列表的nSection中是否有nStr字符串
+class function TStringHelper.StrListIndex(const nStr: string;
+  const nList: TStrings; const nSection: Integer; const nFlag: string): Integer;
+var nTmp: TStrings;
+    nIdx: Integer;
+begin
+  nTmp := nil;
+  try
+    Result := -1;
+    nTmp := TStringList.Create;
+
+    for nIdx := nList.Count-1 downto 0 do
+    begin
+      Split(nList[nIdx], nTmp, 0, nFlag);
+      if (nTmp.Count > nSection) and 
+         (CompareText(nStr, nTmp[nSection]) = 0) then
+      begin
+        Result := nIdx;
+        Exit;
+      end;      
+    end;
+  finally
+    nTmp.Free;
   end;
 end;
 
