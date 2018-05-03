@@ -4,10 +4,12 @@
 *******************************************************************************}
 unit UManagerGroup;
 
+{$I LibFun.Inc}
 interface
 
 uses
   System.Rtti, System.SysUtils, UBaseObject, UObjectPool, UMemDataPool,
+  {$IFDEF EnableChannelManager}UMgrChannel,{$ENDIF}
   ULibFun;
 
 type
@@ -26,6 +28,10 @@ type
     //对象缓冲池
     FMemDataManager: TMemDataManager;
     //内存管理器
+    {$IFDEF EnableChannelManager}
+    FChannelManager: TChannelManager;
+    //RemObjects通道管理器
+    {$ENDIF}
   public
     procedure RegistAll(const nReg: Boolean);
     //注册所有

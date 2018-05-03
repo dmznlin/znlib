@@ -62,6 +62,9 @@ type
     class function MacroValue(const nData: string;
       const nMacro: TDynamicMacroArray): string; static;
     //处理宏定义
+    class function StrArrayIndex(const nStr: string; const nArray: TStringArray;
+      const nIgnoreCase: Boolean = True): integer; static;
+    //字符串索引
     class function Combine(const nList: TStrings;
       nFlag: string = '';
       const nFlagEnd: Boolean = True): string; overload; static;
@@ -404,6 +407,29 @@ begin
   begin
     Result := StringReplace(Result, nMacro[nIdx].FMacro,
                             nMacro[nIdx].FValue, [rfReplaceAll, rfIgnoreCase]);
+  end;
+end;
+
+//Date: 2018-05-03
+//Parm: 字符串;数组;忽略大小写
+//Desc: 检索nStr在nArray中的索引位置
+class function TStringHelper.StrArrayIndex(const nStr: string;
+  const nArray: TStringArray; const nIgnoreCase: Boolean): integer;
+var nIdx: integer;
+    nRes: Boolean;
+begin
+  Result := -1;
+  for nIdx:=Low(nArray) to High(nArray) do
+  begin
+    if nIgnoreCase then
+         nRes := CompareText(nStr, nArray[nIdx]) = 0
+    else nRes := nStr = nArray[nIdx];
+
+    if nRes then
+    begin
+      Result := nIdx;
+      Exit;
+    end;
   end;
 end;
 
