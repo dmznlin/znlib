@@ -19,7 +19,12 @@ type
   //对象状态
 
   TObjectStatusHelper = class
-  public  
+  public
+    class var
+      shTitle: Word;
+      shData: Word;
+      //标题,数据长度
+
     class procedure AddTitle(const nList: TStrings;
       const nClass: string);  static;
     //添加标题   
@@ -148,7 +153,7 @@ begin
       nList.Add('');
   //xxxxx
   
-  nLen := Trunc((85 - Length(nClass)) / 2);
+  nLen := Trunc((shTitle - Length(nClass)) / 2);
   nList.Add(StringOfChar('+', nLen) + ' ' + nClass + ' ' +
             StringOfChar('+', nLen));
   //title
@@ -159,7 +164,7 @@ end;
 //Desc: 格式化数据,格式为: nTitle(定长) nData
 class function TObjectStatusHelper.FixData(const nTitle, nData: string): string;
 begin
-  Result := ULibFun.TStringHelper.FixWidth(nTitle, 32) + nData;
+  Result := ULibFun.TStringHelper.FixWidth(nTitle, shData) + nData;
 end;
 
 class function TObjectStatusHelper.FixData(const nTitle: string;
@@ -463,7 +468,8 @@ begin
 end;
 
 initialization
-  //nothing
+  TObjectStatusHelper.shTitle := 85;
+  TObjectStatusHelper.shData  := 32;
 finalization
   //nothing
 end.

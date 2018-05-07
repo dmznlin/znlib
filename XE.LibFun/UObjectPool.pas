@@ -234,26 +234,25 @@ var nNewOne: TObjectNewOne;
     nResetOne: TObjectResetOne;
 begin
   nNewOne :=
-    function(var nData: Pointer):TObject
-    begin
-      Result := TStringList.Create;
-    end;
+   function(var nData: Pointer):TObject begin Result := TStringList.Create; end;
   //create
 
-  nResetOne :=
-    procedure(const nObject: TObject; const nData: Pointer)
-    begin
-      TStringList(nObject).Clear;
-    end;
-  //init
+  nResetOne := procedure(const nObject: TObject; const nData: Pointer)
+    begin TStringList(nObject).Clear; end;
+  //reset
 
   NewClass(TStrings, nNewOne, nil, nResetOne);
   NewClass(TStringList, nNewOne, nil, nResetOne);
 
+  //----------------------------------------------------------------------------
   nNewOne :=
    function(var nData: Pointer):TObject begin Result := TList.Create; end;
   //xxxxx
-  NewClass(TList, nNewOne);
+
+  nResetOne := procedure(const nObject: TObject; const nData: Pointer)
+    begin TList(nObject).Clear; end;
+  //reset
+  NewClass(TList, nNewOne, nil, nResetOne);
 end;
 
 //Date: 2017-03-23

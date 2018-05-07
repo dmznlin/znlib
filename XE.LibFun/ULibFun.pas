@@ -8,7 +8,7 @@ unit ULibFun;
 interface
 
 uses
-  System.Classes, System.SysUtils, System.NetEncoding, System.Hash,
+  System.Classes, System.SysUtils, System.NetEncoding, System.Hash, Vcl.Controls,
   {$IFDEF JsonSerializers}System.JSON.Serializers, System.JSON.Types,{$ENDIF}
   System.Variants, System.IniFiles;
 
@@ -31,8 +31,11 @@ type
     //系统日期限制
     class procedure AddVerifyData(const nFile,nSeed: string); static;
     //为nFile添加校验信息
-    class function IsValidConfigFile(const nFile,nSeed: string): Boolean; static;
+    class function IsValidConfigFile(const nFile,nSeed: string):Boolean;static;
     //校验nFile是否合法配置文件
+    class procedure EnumSubCtrlList(const nPCtrl: TWinControl;
+      const nList: TList); static;
+    //枚举nPCtrl的所有子控件
   end;
 
   TStringHelper = class
@@ -384,6 +387,23 @@ begin
     end;
   finally
     nList.Free;
+  end;
+end;
+
+//Date: 2018-05-07
+//Parm: 父容器控件;列表
+//Desc: 枚举nPCtrl的所有子控件,放入nList中
+class procedure TApplicationHelper.EnumSubCtrlList(const nPCtrl: TWinControl;
+  const nList: TList);
+var i,nCount: integer;
+begin
+  nCount := nPCtrl.ControlCount - 1;
+  for i:=0 to nCount do
+  begin
+    nList.Add(nPCtrl.Controls[i]);
+    if nPCtrl.Controls[i] is TWinControl then
+      EnumSubCtrlList(nPCtrl.Controls[i] as TWinControl, nList);
+    //enum sub ctrls
   end;
 end;
 
