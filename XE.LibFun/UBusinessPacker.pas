@@ -96,12 +96,12 @@ implementation
 
 function PackerEncodeStr(const nStr: string): string;
 begin
-  Result := EncodeBase64(nStr);
+  Result := string(EncodeBase64(AnsiString(nStr)));
 end;
 
 function PackerDecodeStr(const nStr: string): string;
 begin
-  Result := DecodeBase64(nStr);
+  Result := string(DecodeBase64(AnsiString(nStr)));
 end;
 
 //------------------------------------------------------------------------------

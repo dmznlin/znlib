@@ -57,9 +57,15 @@ type
         FMacro: string;                                  //宏定义
         FValue: string;                                  //宏取值
       end;
+      TDynamicMacroArray = array of TMacroItem;          //宏定义数组
 
-      TDynamicMacroArray = array of TMacroItem;
-      //宏定义数组
+      PDictionaryItem = ^TDictionaryItem;
+      TDictionaryItem = record
+        FKey     : string;                               //标识
+        FValue   : string;                               //取值
+        FParam   : string;                               //附加
+      end;
+      TDictionaryItems = array of TDictionaryItem;       //字典列表
 
     class function MI(const nMacro,nValue: string): TMacroItem; static;
     class function MacroValue(const nData: string;

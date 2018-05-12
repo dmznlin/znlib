@@ -6,26 +6,26 @@ unit UBase64;
 
 interface
 
-function EncodeBase64(const nStr:string):string;
-function DecodeBase64(const nStr:string):string;
+function EncodeBase64(const nStr:AnsiString):AnsiString;
+function DecodeBase64(const nStr:AnsiString):AnsiString;
 //入口函数
 
 implementation
 
 const
-  gBaseTable:string='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  gBaseTable:AnsiString='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
   //BASE64码表
 
-function FindInTable(const nStr: string):integer;
+function FindInTable(const nStr: AnsiString):integer;
 begin
   Result := Pos(nStr, gBaseTable) - 1;
 end;
 
 //编码函数
-function EncodeBase64(const nStr:string):string;
+function EncodeBase64(const nStr:AnsiString):AnsiString;
 var
   Times,LenSrc,i:integer;
-  x1,x2,x3,x4:char;
+  x1,x2,x3,x4:AnsiChar;
   xt:byte;
 begin
   result:='';
@@ -68,7 +68,7 @@ begin
 end;
 
 //解码函数
-function DecodeBase64(const nStr:string):string;
+function DecodeBase64(const nStr:AnsiString):AnsiString;
 var
   SrcLen,Times,i:integer;
   x1,x2,x3,x4,xt:byte;
@@ -86,15 +86,15 @@ begin
     xt:=x2 shr 4;
     x1:=x1 or xt;
     x2:=x2 shl 4;
-    result:=result+chr(x1);
+    result:=result+AnsiChar(x1);
     if x3= 64 then break;
     xt:=x3 shr 2;
     x2:=x2 or xt;
     x3:=x3 shl 6;
-    result:=result+chr(x2);
+    result:=result+AnsiChar(x2);
     if x4=64 then break;
     x3:=x3 or x4;
-    result:=result+chr(x3);
+    result:=result+AnsiChar(x3);
   end;
 end;
 
