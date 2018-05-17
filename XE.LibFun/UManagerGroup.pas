@@ -20,18 +20,20 @@ type
       sAllManager = 'ALLManager';
       {*常量定义*}
   public
-    FSerialIDManager: TSerialIDManager;
-    //编号管理器
-    FObjectManager: TCommonObjectManager;
-    //对象管理器
     FObjectPool: TObjectPoolManager;
     //对象缓冲池
     FMemDataManager: TMemDataManager;
     //内存管理器
+
     {$IFDEF EnableChannelManager}
     FChannelManager: TChannelManager;
     //RemObjects通道管理器
     {$ENDIF}
+
+    FSerialIDManager: TSerialIDManager;
+    //编号管理器
+    FObjectManager: TCommonObjectManager;
+    //对象管理器
   public
     procedure RegistAll(const nReg: Boolean);
     //注册所有
