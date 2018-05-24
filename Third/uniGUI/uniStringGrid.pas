@@ -772,7 +772,7 @@ begin
   begin
     JSConfig('menuDisabled', [True], Col);
     JSConfig('sortable', [False], Col);
-    JSConfig('resizable', [goColSizing in FOptions], Col);
+    JSConfig('resizable', [(goColSizing in FOptions) and (FColWidths[Index]>0)], Col);
 
     if FHeaders.Count>Index then
     begin
