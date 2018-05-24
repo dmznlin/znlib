@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<field_info>
+<fields>
+<field id="F1" required="no" type="text">
+<caption>Text</caption>
+<metadata type="text" />
+</field>
+<field id="F2" required="always" type="text">
+<caption>Text Req</caption>
+<metadata type="text" />
+</field>
+<field id="F3" required="no" type="textarea">
+<caption>Text ML</caption>
+<metadata type="text" />
+</field>
+<field id="F4" required="always" type="textarea">
+<caption>Text ML Req</caption>
+<metadata type="text" />
+</field>
+<field id="F5" required="no" type="enum">
+<caption>DL</caption>
+<metadata type="enum">
+<enumeration>
+<enumvalue id="1">
+<caption>1</caption>
+</enumvalue>
+<enumvalue id="2">
+<caption>2</caption>
+</enumvalue>
+<enumvalue id="3">
+<caption>3</caption>
+</enumvalue>
+<enumvalue id="4">
+<caption>4</caption>
+</enumvalue>
+</enumeration>
+</metadata>
+</field>
+<field id="F6" required="always" type="enum">
+<caption>DL Req</caption>
+<metadata type="enum">
+<enumeration>
+<enumvalue id="1">
+<caption>1</caption>
+</enumvalue>
+<enumvalue id="2">
+<caption>2</caption>
+</enumvalue>
+<enumvalue id="3">
+<caption>3</caption>
+</enumvalue>
+<enumvalue id="4">
+<caption>4</caption>
+</enumvalue>
+</enumeration>
+</metadata>
+</field>
+<field dependsfield="F1" id="F7" required="always" type="password">
+<caption>PW Req</caption>
+<metadata type="hashtable">
+<hashtable>
+<code id="John">d4da4238b0b923820dcc509a6f75849b</code>
+<code id="Test">c61e738d9d4a2f636f067f89cc14862c</code>
+</hashtable>
+</metadata>
+</field>
+</fields>
+</field_info>
