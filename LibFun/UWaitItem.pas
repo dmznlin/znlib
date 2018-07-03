@@ -12,7 +12,7 @@ unit UWaitItem;
 interface
 
 uses
-  Windows, Classes, SysUtils;
+  Windows, Classes, SysUtils, ULibFun;
 
 type
   TWaitObject = class(TObject)
@@ -26,7 +26,7 @@ type
     FWaitResult: Cardinal;
     {*等待结果*}
   public
-    constructor Create;
+    constructor Create(nEventName: string = '');
     destructor Destroy; override;
     {*创建释放*}
     procedure InitStatus(const nWakeup: Boolean);
@@ -49,7 +49,7 @@ type
     FLockStatus: Boolean;
     {*锁定状态*}
   public
-    constructor Create(const nEventName: PChar);
+    constructor Create(nEventName: string = '');
     destructor Destroy; override;
     {*创建释放*}
     function SyncLockEnter(const nWaitFor: Boolean = False): Boolean;
@@ -86,13 +86,15 @@ const
   cIsIdle    = $02;
   cIsWaiting = $27;
 
-constructor TWaitObject.Create;
+constructor TWaitObject.Create(nEventName: string);
 begin
   inherited Create;
   FStatus := cIsIdle;
-
   FInterval := INFINITE;
-  FEvent := CreateEvent(nil, False, False, nil);
+
+  if Trim(nEventName) = '' then
+    nEventName := 'evt_waitobj_' + DateTimeSerial;
+  FEvent := CreateEvent(nil, False, False, PChar(nEventName));
 
   if FEvent = 0 then
     raise Exception.Create('Create TWaitObject.FEvent Failure');
@@ -149,16 +151,15 @@ begin
 end;
 
 //------------------------------------------------------------------------------
-constructor TCrossProcWaitObject.Create(const nEventName: PChar);
+constructor TCrossProcWaitObject.Create(nEventName: string);
 var nStr: string;
 begin
-  if nEventName = nil then
-    raise Exception.Create('TCrossProcWaitObject must have event name.');
-  //xxxxx
-
   inherited Create;
   FLockStatus := False;
-  FEvent := CreateEvent(nil, False, True, nEventName);
+
+  if Trim(nEventName) = '' then
+    nEventName := 'evt_crosswait_' + DateTimeSerial;
+  FEvent := CreateEvent(nil, False, True, PChar(nEventName));
 
   if FEvent = 0 then
   begin
