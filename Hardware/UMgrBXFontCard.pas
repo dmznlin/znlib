@@ -17,15 +17,15 @@ const
 type
   PBXHeader = ^TBXHeader;
   TBXHeader = packed record
-    FDstAddr       : array[0..1] of Byte;         //屏地址
-    FSrcAddr       : array[0..1] of Byte;         //源地址
+    FDstAddr       : Word;                        //屏地址
+    FSrcAddr       : Word;                        //源地址
     FReserved      : array[0..2] of Byte;         //保留
     FOption        : Byte;                        //选项
     FCheckMode     : Byte;                        //校验模式
     FDisplayMode   : Byte;                        //显示模式
     FDeviceType    : Byte;                        //设备类型
     FProtocol      : Byte;                        //协议版本
-    FDataLen       : array[0..1] of Byte;         //数据长度
+    FDataLen       : Word;                        //数据长度
   end;
 
   PBXData = ^TBXData;
@@ -40,14 +40,14 @@ type
   PBXArea = ^TBXArea;
   TBXArea = packed record
     FAreaType      : Byte;                        //区域类型
-    FAreaX         : array[0..1] of Byte;         //区域X坐标,字节(8像素)单位
-    FAreaY         : array[0..1] of Byte;         //区域Y坐标,像素点单位
-    FAreaWidth     : array[0..1] of Byte;         //区域宽度,字节(8像素)单位
-    FAreaHeight    : array[0..1] of Byte;         //区域高度,像素点单位
+    FAreaX         : Word;                        //区域X坐标,字节(8像素)单位
+    FAreaY         : Word;                        //区域Y坐标,像素点单位
+    FAreaWidth     : Word;                        //区域宽度,字节(8像素)单位
+    FAreaHeight    : Word;                        //区域高度,像素点单位
     FDynamicAreaLoc: Byte;                        //动态区域编号
     FLine_sizes    : Byte;                        //行间距
     FRunMode       : Byte;                        //运行模式
-    FTimeout       : array[0..1] of Byte;         //数据超时
+    FTimeout       : Word;                        //数据超时
     FReserved      : array[0..2] of Byte;         //保留
     FSingleLine    : Byte;                        //单行显示
     FNewLine       : Byte;                        //自动换行
@@ -55,7 +55,7 @@ type
     FExitMode      : Byte;                        //退出方式
     FSpeed         : Byte;                        //显示速度
     FStayTime      : Byte;                        //停留时间,单位为0.5s
-    FDataLen       : array[0..3] of Byte;         //数据长度
+    FDataLen       : Integer;                     //数据长度
     FData          : array[0..cBXDataMax-1] of Byte;//数据
   end;
 
@@ -68,7 +68,7 @@ type
     FReserved      : Byte;                        //保留
     FDeleteAreaNum : Byte;                        //要删除的区域
     FAreaNum       : Byte;                        //本次更新的区域个数
-    FAreaDataLen   : array[0..1] of Byte;         //数据长度
+    FAreaDataLen   : Word;                        //数据长度
     FData          : array[0..cBXDataMax-1] of Byte;//数据
   end;
 
@@ -347,9 +347,8 @@ begin
     FillChar(nData, cSizeData, #0);
     FillChar(FFrameBegin, SizeOf(FFrameBegin), $A5);
 
-    Int2LHBuf($8000, FHead.FDstAddr);
-    Int2LHBuf($8000, FHead.FSrcAddr);
-
+    FHead.FDstAddr      := $8000;
+    FHead.FSrcAddr      := $8000;
     FHead.FCheckMode    := $00;
     FHead.FDisplayMode  := $00;
     FHead.FDeviceType   := BX_Any;
@@ -400,18 +399,17 @@ class function TBXFontCardManager.Data2Bytes(const nArea: PBXArea;
 var nSize,nStart,nEnd: Integer;
 begin
   Result := False;
-  nSize := cSizeArea - (cBXDataMax - LHBuf2Int(nArea.FDataLen));
-  
+  nSize := cSizeArea - (cBXDataMax - nArea.FDataLen);  
   if nSize > cBXDataMax then
   begin
     WriteLog('区域内容超长,已丢弃');
     Exit;
   end;
 
+  nRequest.FAreaDataLen := nSize;
   Move(nArea^, nRequest.FData[0], nSize);
-  Int2LHBuf(nSize, nRequest.FAreaDataLen);
 
-  nSize := cSizeRequst - (cBXDataMax - LHBuf2Int(nRequest.FAreaDataLen));
+  nSize := cSizeRequst - (cBXDataMax - nRequest.FAreaDataLen);
   if nSize > cBXDataMax then
   begin
     WriteLog('请求内容超长,已丢弃');
@@ -419,8 +417,8 @@ begin
   end;
 
   Result := True;
+  nData.FHead.FDataLen := nSize;
   Move(nRequest^, nData.FData[0], nSize);
-  Int2LHBuf(nSize, nData.FHead.FDataLen);
 
   nSize := cSizeData - (cBXDataMax - nSize); //有效数据
   nBuf := RawToBytes(nData^, nSize);
@@ -428,7 +426,7 @@ begin
   if nCRC then
   begin
     nStart := SizeOf(nData.FFrameBegin) + 1; //包头开始位置
-    nEnd := nStart + SizeOf(nData.FHead) + LHBuf2Int(nData.FHead.FDataLen) - 2;
+    nEnd := nStart + SizeOf(nData.FHead) + nData.FHead.FDataLen - 2;
     //包头 + 数据
 
     Int2LHBuf(CRC16(nBuf, nStart, nEnd), nData.FVerify); //CRC
@@ -494,7 +492,9 @@ end;
 //Desc: 在nID卡上显示nTitle.nData内容
 procedure TBXFontCardManager.Display(const nTitle, nData, nID: string);
 var nIdx: Integer;
+    nBool: Boolean;
 begin
+  nBool := False;
   FSyncLock.Enter;
   try
     nIdx := FindCard(nID);
@@ -518,6 +518,7 @@ begin
         FText         := nTitle;
         FTextSend     := True;
         FLastSend     := 0;
+        nBool         := True;
       end;
 
       if nData <> cBXDataNull then //title
@@ -526,10 +527,14 @@ begin
         FText         := nData;
         FTextSend     := True;
         FLastSend     := 0;
+        nBool         := True;
       end;
     end;
   finally
     FSyncLock.Leave;
+    if nBool and Assigned(FSender) then
+      FSender.WakupMe;
+    //xxxxx
   end;   
 end;
 
@@ -745,10 +750,10 @@ var nStr: string;
       InitRequest(nReq);
       nArea.FDynamicAreaLoc := nCardArea.FAreaLoc;
 
-      Int2LHBuf(nCardArea.FRect.Left div 8, nArea.FAreaX);
-      Int2LHBuf(nCardArea.FRect.Top, nArea.FAreaY);
-      Int2LHBuf(nCardArea.FRect.Right div 8, nArea.FAreaWidth);
-      Int2LHBuf(nCardArea.FRect.Bottom, nArea.FAreaHeight);
+      nArea.FAreaX := nCardArea.FRect.Left div 8;
+      nArea.FAreaY := nCardArea.FRect.Top;
+      nArea.FAreaWidth := nCardArea.FRect.Right div 8;
+      nArea.FAreaHeight := nCardArea.FRect.Bottom;
 
       if nCardArea.FTextSend then //发送正文
       begin
@@ -782,7 +787,7 @@ var nStr: string;
         //xxxxx
       end;
 
-      Int2LHBuf(nInt, nArea.FDataLen);
+      nArea.FDataLen := nInt;
       StrPCopy(@nArea.FData, nStr);
       if not Data2Bytes(@nArea, @nReq, @nData, nBuf) then Exit; //并入发送缓存
 
@@ -821,7 +826,7 @@ var nStr: string;
     except
       on nErr: Exception do
       begin
-        nStr := '屏卡[ %s.%s ]发送错误,描述: %s';
+        nStr := '屏卡[ %s.%d ]发送错误,描述: %s';
         nStr := Format(nStr, [nHost, nPort, nErr.Message]);
         WriteLog(nStr);
       end;
