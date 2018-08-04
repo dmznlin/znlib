@@ -696,7 +696,7 @@ begin
      nFlag := ';';
   nSLen := Length(nSymbol);
 
-  if nAdd and (not nListYet) then
+  if not nListYet then
     nBak := nList.Text;
   //备份内容
 
@@ -717,7 +717,7 @@ begin
     end else
     begin
       if Copy(nStr, 1, nSLen) = nSymbol then
-        nStr := Copy(nStr, 2, nLen - 1);
+        nStr := Copy(nStr, nSLen + 1, nLen - nSLen);
       //xxxxx
 
       if Copy(nStr, nLen - nSLen + 1, nSLen) = nSymbol then
@@ -732,7 +732,7 @@ begin
   Result := Combine(nList, nFlag, nFlagEnd);
   //合并
 
-  if nAdd and (not nListYet) then
+  if not nListYet then
     nList.Text := nBak;
   //还原内容
 end;

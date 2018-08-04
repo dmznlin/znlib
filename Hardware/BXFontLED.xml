@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="gb2312"?>
+<!--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+节点: card
+*.enable: 是否启用,0为禁用;其它为启用
+*.ip,port: 屏卡地址
+*.title_rect: 标题区域大小
+*.title_mode: 标题显示模式
+*.title_default: 标识默认值(Timeout,单位秒)
+*.data_rect: 标题区域大小
+*.data_mode: 标题显示模式
+*.data_default: 标识默认值(Timeout,单位秒)
+
+属性: Speed
+取值0-24,越大速度越慢
+
+属性: Display
+DisplayMode_01          = $01;  //静止显示
+DisplayMode_02          = $02;  //快速打出
+DisplayMode_03          = $03;  //向左移动
+DisplayMode_04          = $04;  //向右移动
+DisplayMode_05          = $05;  //向上移动
+DisplayMode_06          = $06;  //向下移动
+
+属性: 时间显示
+\DX: X定义(S,秒;M,分;H,24时;h,12时;D,日;L,月;Y,年;W,星期)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-->
+<cards>
+  <card ID="in" Name="大厅">
+    <enable>1</enable>
+    <ip>192.168.0.66</ip>
+    <port>5005</port>
+    <title_rect Left="0" Top="0" Width="64" Height="16" />
+    <title_mode Display="2" Speed="1" StayTime="4" />
+    <title_default Text=" 欢迎光临" Timeout="60" Display="5" Speed="1" StayTime="20" />
+    <data_rect Left="0" Top="16" Width="64" Height="16" />
+    <data_mode Display="2" Speed="1" StayTime="4" />
+    <data_default Text="⊙\DH:\DM:\DS" Timeout="10" Display="1" Speed="24" StayTime="2" />
+  </card>
+</cards>
