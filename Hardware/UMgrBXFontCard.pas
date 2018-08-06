@@ -8,11 +8,32 @@ interface
 
 uses
   Windows, Classes, SysUtils, SyncObjs, IdGlobal, IdTCPClient, NativeXml,
-  UWaitItem, USysLoger;
+  ULibFun, UWaitItem, USysLoger;
 
 const
-  cBXDataMax        = 1024; //数据上限,字节单位
-  cBXDataNull       = #0#0; //空字符串,不会发送
+  BX_Any                  = $FE;
+  BX_5K1                  = $51;
+  BX_5K2                  = $58;
+  BX_5MK2                 = $53;
+  BX_5MK1                 = $54;
+  BX_5K1Q_YY              = $5c;
+  BX_6K1                  = $61;
+  BX_6K2                  = $62;
+  BX_6K3                  = $63;
+  BX_6K1_YY               = $64;
+  BX_6K2_YY               = $65;
+  BX_6K3_YY               = $66;
+
+  BX_DisplayMode_01       = $01;  //静止显示
+  BX_DisplayMode_02       = $02;  //快速打出
+  BX_DisplayMode_03       = $03;  //向左移动
+  BX_DisplayMode_04       = $04;  //向右移动
+  BX_DisplayMode_05       = $05;  //向上移动
+  BX_DisplayMode_06       = $06;  //向下移动
+
+const
+  cBXDataMax              = 1024; //数据上限,字节单位
+  cBXDataNull             = #0#0; //空字符串,不会发送
 
 type
   PBXHeader = ^TBXHeader;
@@ -37,6 +58,16 @@ type
     FFrameEnd      : Byte;                        //帧尾
   end;
 
+  PBXDisplayMode = ^TBXDisplayMode;
+  TBXDisplayMode = packed record
+    FSingleLine    : Byte;                        //单行显示
+    FNewLine       : Byte;                        //自动换行
+    FDisplayMode   : Byte;                        //显示方式
+    FExitMode      : Byte;                        //退出方式
+    FSpeed         : Byte;                        //显示速度
+    FStayTime      : Byte;                        //停留时间,单位为0.5s
+  end;
+
   PBXArea = ^TBXArea;
   TBXArea = packed record
     FAreaType      : Byte;                        //区域类型
@@ -49,12 +80,7 @@ type
     FRunMode       : Byte;                        //运行模式
     FTimeout       : Word;                        //数据超时
     FReserved      : array[0..2] of Byte;         //保留
-    FSingleLine    : Byte;                        //单行显示
-    FNewLine       : Byte;                        //自动换行
-    FDisplayMode   : Byte;                        //显示方式
-    FExitMode      : Byte;                        //退出方式
-    FSpeed         : Byte;                        //显示速度
-    FStayTime      : Byte;                        //停留时间,单位为0.5s
+    FDisplayMode   : TBXDisplayMode;              //显示模式
     FDataLen       : Integer;                     //数据长度
     FData          : array[0..cBXDataMax-1] of Byte;//数据
   end;
@@ -86,17 +112,17 @@ type
     FAreaLoc       : Byte;                        //区域编号
     FRect          : TRect;                       //区域
     FText          : string;                      //显示内容
-    FDisplayMode   : Byte;                        //显示方式
-    FSpeed         : Byte;                        //显示速度
-    FStayTime      : Byte;                        //停留时间,单位为0.5s
+    FTextMode      : TBXDisplayMode;              //显示方式
     FTextSend      : Boolean;                     //是否需要发送
     FLastSend      : Int64;                       //最后发送时间
 
+    FUserTimeout   : Integer;                     //自定义超时
+    FUserMode      : TBXDisplayMode;              //自定义模式
+    FUserEnable    : Boolean;                     //启用自定义模式
+
     FDefaultText   : string;                      //默认内容
     FDefaultTimeout: Integer;                     //超时转为默认
-    FDefaultMode   : Byte;                        //显示方式
-    FDefaultSpeed  : Byte;                        //显示速度
-    FDefaultStayTime: Byte;                       //停留时间,单位为0.5s
+    FDefaultMode   : TBXDisplayMode;              //显示方式
     FDefaultSend   : Boolean;                     //是否需要发送
   end;
 
@@ -121,6 +147,8 @@ type
     //等待对象
     FClient: TIdTCPClient;
     //网络对象
+    FListA: TStrings;
+    //列表对象
   protected
     procedure Execute; override;
     procedure Doexecute;
@@ -157,15 +185,15 @@ type
     procedure StartService;
     procedure StopService;
     //起停服务
-    procedure Display(const nTitle,nData: string; const nID: string = '');
+    procedure Display(const nTitle,nData: string; const nID: string = '';
+      const nTitleKeep: Integer = 0; const nDataKeep: Integer = 0;
+      const nTitleMode: PBXDisplayMode = nil;
+      const nDataMode: PBXDisplayMode = nil);
     //显示内容
-    class procedure Int2LHBuf(const nInt: Integer; var nData: array of Byte);
-    class function LHBuf2Int(const nData: array of Byte): Integer;
-    class function CRC16(const nData: TIdBytes; nStart,nEnd: Integer): ULONG;
-    //数据计算
     class procedure InitData(var nData: TBXData);
     class procedure InitArea(var nArea: TBXArea);
     class procedure InitRequest(var nRequest: TBXRequest);
+    class procedure InitDisplayMode(var nMode: TBXDisplayMode);
     //初始化数据
     class function Data2Bytes(const nArea: PBXArea; const nRequest: PBXRequest;
       const nData: PBXData; var nBuf: TIdBytes;
@@ -206,32 +234,15 @@ const
 	ERR_SHOULDREPEAT	      = 106; //需要重复上次数据包
 	ERR_FILE			          = 107; //无效文件
 
-  BX_Any                  = $FE;
-  BX_5K1                  = $51;
-  BX_5K2                  = $58;
-  BX_5MK2                 = $53;
-  BX_5MK1                 = $54;
-  BX_5K1Q_YY              = $5c;
-  BX_6K1                  = $61;
-  BX_6K2                  = $62;
-  BX_6K3                  = $63;
-  BX_6K1_YY               = $64;
-  BX_6K2_YY               = $65;
-  BX_6K3_YY               = $66;
-
-  DisplayMode_01          = $01;  //静止显示
-  DisplayMode_02          = $02;  //快速打出
-  DisplayMode_03          = $03;  //向左移动
-  DisplayMode_04          = $04;  //向右移动
-  DisplayMode_05          = $05;  //向上移动
-  DisplayMode_06          = $06;  //向下移动
-
 const
   cSizeData        = SizeOf(TBXData);
   cSizeArea        = SizeOf(TBXArea);
   cSizeRequst      = SizeOf(TBXRequest);
   cSizeResponse    = SizeOf(TBXResponse);
+  cSizeDisplayMode = SizeOf(TBXDisplayMode);
+
   cSizeFontCard    = SizeOf(TBXFontCard);
+  cSizeCardArea    = SizeOf(TBXFontCardArea);
 
   cCRCTable: array [0..255] of ULONG = (
     $0000, $C0C1, $C181, $0140, $C301, $03C0, $0280, $C241,
@@ -276,8 +287,7 @@ end;
 //Date: 2018-07-31
 //Parm: 数据;起始;结束
 //Desc: 计算nData在nStart-nEnd区间内的CRC值
-class function TBXFontCardManager.CRC16(const nData: TIdBytes; nStart,
-  nEnd: Integer): ULONG;
+function CRC16(const nData: TIdBytes; nStart,nEnd: Integer): ULONG;
 var nIdx: Integer;
 begin
   Result := 0;
@@ -316,8 +326,7 @@ begin
   else Result := 0;
 end;
 
-class procedure TBXFontCardManager.Int2LHBuf(const nInt: Integer;
-  var nData: array of Byte);
+procedure Int2LHBuf(const nInt: Integer; var nData: array of Byte);
 begin
   if Length(nData) >= 2 then
   begin
@@ -330,7 +339,7 @@ begin
   end;
 end;
 
-class function TBXFontCardManager.LHBuf2Int(const nData: array of Byte): Integer;
+function LHBuf2Int(const nData: array of Byte): Integer;
 begin
   if Length(nData) >= 2 then
        Result := nData[0] +  nData[1] * 256
@@ -362,15 +371,8 @@ end;
 //Desc: 初始化区域数据
 class procedure TBXFontCardManager.InitArea(var nArea: TBXArea);
 begin
-  with nArea do
-  begin
-    FillChar(nArea, cSizeArea, #0);
-    FSingleLine    := $02;                        //多行显示
-    FNewLine       := $01;                        //不自动换行
-    FDisplayMode   := DisplayMode_02;             //快速打出
-    FSpeed         := $01;                        //显示速度,最快
-    FStayTime      := $04;                        //2s
-  end;
+  FillChar(nArea, cSizeArea, #0);
+  InitDisplayMode(nArea.FDisplayMode);
 end;
 
 //Date: 2018-08-03
@@ -387,6 +389,22 @@ begin
     FProcessMode    := $00;
     FDeleteAreaNum  := $00;
     FAreaNum        := $01;
+  end;
+end;
+
+//Date: 2018-08-06
+//Parm: 显示模式
+//Desc: 默认显示模式
+class procedure TBXFontCardManager.InitDisplayMode(var nMode: TBXDisplayMode);
+begin
+  with nMode do
+  begin
+    FillChar(nMode, cSizeDisplayMode, #0);
+    FSingleLine    := $02;                        //多行显示
+    FNewLine       := $01;                        //不自动换行
+    FDisplayMode   := BX_DisplayMode_02;          //快速打出
+    FSpeed         := $01;                        //显示速度,最快
+    FStayTime      := $04;                        //2s
   end;
 end;
 
@@ -416,18 +434,18 @@ begin
     Exit;
   end;
 
-  Result := True;
   nData.FHead.FDataLen := nSize;
   Move(nRequest^, nData.FData[0], nSize);
 
   nSize := cSizeData - (cBXDataMax - nSize); //有效数据
   nBuf := RawToBytes(nData^, nSize);
+  Result := True;
 
   if nCRC then
   begin
-    nStart := SizeOf(nData.FFrameBegin) + 1; //包头开始位置
-    nEnd := nStart + SizeOf(nData.FHead) + nData.FHead.FDataLen - 2;
-    //包头 + 数据
+    nStart := SizeOf(nData.FFrameBegin);
+    nEnd := nSize - SizeOf(nData.FVerify) - SizeOf(nData.FFrameEnd) - 1;
+    //不包含校验位和帧尾
 
     Int2LHBuf(CRC16(nBuf, nStart, nEnd), nData.FVerify); //CRC
     nBuf[nSize - 3] := nData.FVerify[0];
@@ -488,9 +506,10 @@ begin
 end;
 
 //Date: 2018-08-02
-//Parm: 标题;内容;卡标识
+//Parm: 标题;内容;卡标识;保持时长;显示模式
 //Desc: 在nID卡上显示nTitle.nData内容
-procedure TBXFontCardManager.Display(const nTitle, nData, nID: string);
+procedure TBXFontCardManager.Display(const nTitle, nData, nID: string;
+  const nTitleKeep,nDataKeep: Integer; const nTitleMode,nDataMode: PBXDisplayMode);
 var nIdx: Integer;
     nBool: Boolean;
 begin
@@ -512,22 +531,33 @@ begin
         Exit;
       end;
 
-      if nTitle <> cBXDataNull then //title
       with FAreaTitle do
+      if nTitle <> cBXDataNull then //title
       begin
         FText         := nTitle;
         FTextSend     := True;
         FLastSend     := 0;
-        nBool         := True;
+
+        FUserTimeout  := nTitleKeep;
+        FUserEnable   := Assigned(nTitleMode);
+        
+        if FUserEnable then
+          FUserMode := nTitleMode^;
+        nBool := True;
       end;
 
-      if nData <> cBXDataNull then //title
       with FAreaData do
+      if nData <> cBXDataNull then //data
       begin
         FText         := nData;
         FTextSend     := True;
         FLastSend     := 0;
-        nBool         := True;
+
+        FUserTimeout  := nDataKeep;
+        FUserEnable   := Assigned(nDataMode);
+        if FUserEnable then
+          FUserMode := nDataMode^;
+        nBool := True;
       end;
     end;
   finally
@@ -541,11 +571,13 @@ end;
 //Desc: 载入配置
 procedure TBXFontCardManager.LoadConfig(const nFile: string);
 var nIdx,nInt: Integer;
+    nDefCard: TBXFontCard;
     nXML: TNativeXml;
     nNode,nTmp: TXmlNode;
 begin
   nXML := TNativeXml.Create;
   try
+    FillChar(nDefCard, cSizeFontCard, #0);
     SetLength(FCards, 0);
     nXML.LoadFromFile(nFile);
 
@@ -556,7 +588,7 @@ begin
 
       nInt := Length(FCards);
       SetLength(FCards, nInt + 1);
-      //new card
+      FCards[nInt] := nDefCard; //init
       
       with FCards[nInt],nNode do
       begin
@@ -569,8 +601,10 @@ begin
         with FAreaTitle do
         begin
           FAreaLoc := $00;
-          nTmp := NodeByName('title_rect');
+          FTextSend := False;
+          FUserEnable := False;
 
+          nTmp := NodeByName('title_rect');
           with nTmp do
           FRect := Rect(StrToInt(AttributeByName['Left']),
                         StrToInt(AttributeByName['Top']),
@@ -579,10 +613,10 @@ begin
           //xxxxx
 
           nTmp := NodeByName('title_mode');
-          with nTmp do
+          with nTmp,FTextMode do
           begin
-            FTextSend := False;
-            FLastSend := 0;
+            InitDisplayMode(FTextMode);
+            //init
 
             FDisplayMode := StrToInt(AttributeByName['Display']);
             FSpeed       := StrToInt(AttributeByName['Speed']);
@@ -590,23 +624,28 @@ begin
           end;
 
           nTmp := NodeByName('title_default');
-          with nTmp do
+          with nTmp,FDefaultMode do
           begin
             FDefaultText := AttributeByName['Text'];
             FDefaultSend := FDefaultText <> '';
-
             FDefaultTimeout := StrToInt(AttributeByName['Timeout']);
-            FDefaultMode    := StrToInt(AttributeByName['Display']);
-            FDefaultSpeed   := StrToInt(AttributeByName['Speed']);
-            FDefaultStayTime:= StrToInt(AttributeByName['StayTime']);
+
+            InitDisplayMode(FDefaultMode);
+            //init
+            
+            FDisplayMode := StrToInt(AttributeByName['Display']);
+            FSpeed       := StrToInt(AttributeByName['Speed']);
+            FStayTime    := StrToInt(AttributeByName['StayTime']);
           end;
         end;
 
         with FAreaData do
         begin
           FAreaLoc := $01;
+          FTextSend := False;
+          FUserEnable := False;
+
           nTmp := NodeByName('data_rect');
-          
           with nTmp do
           FRect := Rect(StrToInt(AttributeByName['Left']),
                         StrToInt(AttributeByName['Top']),
@@ -615,26 +654,29 @@ begin
           //xxxxx
 
           nTmp := NodeByName('data_mode');
-          with nTmp do
+          with nTmp,FTextMode do
           begin
-            FTextSend := False;
-            FLastSend := 0;
-
+            InitDisplayMode(FTextMode);
+            //init
+            
             FDisplayMode := StrToInt(AttributeByName['Display']);
             FSpeed       := StrToInt(AttributeByName['Speed']);
             FStayTime    := StrToInt(AttributeByName['StayTime']);
           end;
 
           nTmp := NodeByName('data_default');
-          with nTmp do
+          with nTmp,FDefaultMode do
           begin
             FDefaultText := AttributeByName['Text'];
             FDefaultSend := FDefaultText <> '';
-
             FDefaultTimeout := StrToInt(AttributeByName['Timeout']);
-            FDefaultMode    := StrToInt(AttributeByName['Display']);
-            FDefaultSpeed   := StrToInt(AttributeByName['Speed']);
-            FDefaultStayTime:= StrToInt(AttributeByName['StayTime']);
+
+            InitDisplayMode(FDefaultMode);
+            //init
+            
+            FDisplayMode := StrToInt(AttributeByName['Display']);
+            FSpeed       := StrToInt(AttributeByName['Speed']);
+            FStayTime    := StrToInt(AttributeByName['StayTime']);
           end;
         end;
       end;
@@ -651,6 +693,7 @@ begin
   FreeOnTerminate := False;
   
   FOwner := AOwner;
+  FListA := TStringList.Create;
   FWaiter := TWaitObject.Create;
   FWaiter.Interval := 1000;
 
@@ -665,6 +708,7 @@ begin
   FClient.Free;
 
   FWaiter.Free;
+  FListA.Free;
   inherited;
 end;
 
@@ -717,15 +761,37 @@ var nStr: string;
     nReq: TBXRequest;
 
   //Desc: 处理转义字符
-  procedure TextEncode(const nText: string);
+  procedure TextEncode(const nFrameBegin,nFrameEnd: Integer);
+  var i: Integer;
   begin
-    nStr := StringReplace(nText, Chr($A5), Chr($A6) + Chr($02), [rfReplaceAll]);
-    nStr := StringReplace(nStr,  Chr($A6), Chr($A6) + Chr($01), [rfReplaceAll]);
+    nStr := '';
+    nInt := Length(nBuf) - nFrameEnd - 1;      
+    for i:=nFrameBegin to nInt do //掐头去尾
+    begin
+      if i = nInt then
+           nStr := nStr + IntToHex(nBuf[i], 2)
+      else nStr := nStr + IntToHex(nBuf[i], 2) + ' ';
+    end;
+
+    nStr := StringReplace(nStr, 'A6', 'A6 01', [rfReplaceAll]);
+    nStr := StringReplace(nStr, 'A5', 'A6 02', [rfReplaceAll]);
     //遇到A5,转义为A6 02;遇到A6,转义为A6 01
 
-    nStr := StringReplace(nStr, Chr($5A), Chr($5B) + Chr($02), [rfReplaceAll]);
-    nStr := StringReplace(nStr, Chr($5B), Chr($5B) + Chr($01), [rfReplaceAll]);
+    nStr := StringReplace(nStr, '5B', '5B 01', [rfReplaceAll]);
+    nStr := StringReplace(nStr, '5A', '5B 02', [rfReplaceAll]); 
     //遇到5A,转义为5B 02;遇到5B,转义为5B 01
+
+    SplitStr(nStr, FListA, 0, ' ');
+    nInt := nFrameBegin + FListA.Count + nFrameEnd; //新缓存大小
+    SetLength(nBuf, nInt);
+
+    for i:=0 to FListA.Count-1 do
+      nBuf[nFrameBegin+i] := StrToInt('$' + FListA[i]);
+    //xxxxx
+
+    FillChar(nBuf[0], nFrameBegin, $A5);
+    FillChar(nBuf[nInt-nFrameEnd], nFrameEnd, $5A);
+    //填充头尾
   end;
 
   //Desc: 构建发送缓存
@@ -737,8 +803,12 @@ var nStr: string;
       FSyncLock.Enter;
       //lock first
 
-      if (nCardArea.FLastSend > 0) and (GetTickCount - nCardArea.FLastSend >=
-          nCardArea.FDefaultTimeout * 1000) then
+      if nCardArea.FUserTimeout > 0 then
+           nInt := nCardArea.FUserTimeout
+      else nInt := nCardArea.FDefaultTimeout;
+
+      if (nCardArea.FLastSend > 0) and
+         (GetTickCount - nCardArea.FLastSend >= nInt * 1000) then
         nCardArea.FDefaultSend := True;
       //timeout,send default
       
@@ -747,32 +817,32 @@ var nStr: string;
 
       InitData(nData);
       InitArea(nArea);
-      InitRequest(nReq);
-      nArea.FDynamicAreaLoc := nCardArea.FAreaLoc;
+      InitRequest(nReq); //init
 
+      nArea.FDynamicAreaLoc := nCardArea.FAreaLoc;
       nArea.FAreaX := nCardArea.FRect.Left div 8;
       nArea.FAreaY := nCardArea.FRect.Top;
       nArea.FAreaWidth := nCardArea.FRect.Right div 8;
       nArea.FAreaHeight := nCardArea.FRect.Bottom;
 
-      if nCardArea.FTextSend then //发送正文
+      if nCardArea.FTextSend then //text
       begin
-        nArea.FDisplayMode    := nCardArea.FDisplayMode;
-        nArea.FSpeed          := nCardArea.FSpeed;
-        nArea.FStayTime       := nCardArea.FStayTime;
-
         nStr := nCardArea.FText;
-        nCardArea.FTextSend := False;
-        nCardArea.FLastSend := GetTickCount;
-      end else //发送默认
-      begin 
-        nArea.FDisplayMode    := nCardArea.FDefaultMode;
-        nArea.FSpeed          := nCardArea.FDefaultSpeed;
-        nArea.FStayTime       := nCardArea.FDefaultStayTime;
+        if nCardArea.FUserEnable then
+             nArea.FDisplayMode := nCardArea.FUserMode
+        else nArea.FDisplayMode := nCardArea.FTextMode;
 
-        nStr := nCardArea.FDefaultText;
+        nCardArea.FUserEnable := False;
+        nCardArea.FTextSend := False;
+        nCardArea.FLastSend := GetTickCount; 
+      end else //default
+      begin
+        nStr := nCardArea.FDefaultText; 
+        nArea.FDisplayMode := nCardArea.FDefaultMode;
+
         nCardArea.FDefaultSend := False;
         nCardArea.FLastSend := 0;
+        nCardArea.FUserTimeout := 0;
       end;
 
       //------------------------------------------------------------------------
@@ -791,15 +861,8 @@ var nStr: string;
       StrPCopy(@nArea.FData, nStr);
       if not Data2Bytes(@nArea, @nReq, @nData, nBuf) then Exit; //并入发送缓存
 
-      nInt := SizeOf(nData.FFrameBegin);
-      nStr := BytesToString(nBuf, Indy8BitEncoding());
-      nStr := Copy(nStr, nInt + 1, Length(nStr) - nInt - 1); //掐头去尾
-
-      TextEncode(nStr); //转义特殊字符
-      nStr := StringOfChar(Char($A5), nInt) + nStr + Char($5A);
-      //还原头,尾
-
-      nBuf := ToBytes(nStr, Indy8BitEncoding());
+      TextEncode(SizeOf(nData.FFrameBegin), SizeOf(nData.FFrameEnd));
+      //转义特殊字符
       Result := True;
     finally
       FSyncLock.Leave;
