@@ -1220,7 +1220,7 @@ begin
     begin
       nSize := PProberFrameDataForward(nCmd.FData).FHeader.FLength + 1;
       nBuf := RawToBytes(PProberFrameDataForward(nCmd.FData)^, nSize);
-      nSize := 0;
+      nSize := cSize_Prober_Control;
     end else
     begin
       if (nCmd.FTunnel.FLastOn > 0) and
@@ -1274,7 +1274,7 @@ begin
   while nIdx < FOwner.FRetry do
   try
     {$IFDEF DEBUG}
-    LogHex(nBuf);
+    LogHex(nBuf, '--> ');
     {$ENDIF}
 
     Inc(nIdx);
@@ -1287,11 +1287,12 @@ begin
     if nRecvLen < 1 then Exit;
     //no data to receive
 
+    SetLength(nData, 0);
     nHost.FClient.IOHandler.ReadBytes(nData, nRecvLen, False);
     //read respond
       
     {$IFDEF DEBUG}
-    LogHex(nData);
+    LogHex(nData, '<-- ');
     {$ENDIF}
 
     nLen := Length(nData);
