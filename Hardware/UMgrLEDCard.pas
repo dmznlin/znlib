@@ -142,6 +142,11 @@ type
     FEffect: Integer;       //特效
   end;
 
+  TDrawDataStyle = (dsColDisp, dsRowDisp);
+  //数据域绘制方法:
+  //1.列方式显示: 车辆以列方式排列,突出先后顺序.
+  //2.行方式显示: 每车一行,突出车辆附加信息.
+
   PCardItem = ^TCardItem;
   TCardItem = record
     FType: Integer;         //类型(4m,4m1)
@@ -164,6 +169,7 @@ type
 
     FDataEnable: Boolean;
     FStatusEnable: Boolean;
+    FDrawStyle: TDrawDataStyle;
     FColWidth: array of Integer;
     FRowNum: Integer;
     FRowHeight: Integer;
@@ -553,10 +559,11 @@ var nStr: string;
     nLine: PLineItem;
     nTruck: PTruckItem;
     i,nI,nIdx,nCur: Integer;
-    nL,nT,nML,nMT: Integer;
+    nL,nT: Integer;
 
     //Desc: 在当前参数的中间位置绘制nText字符
     procedure MidDrawText(const nText: string; nSAdjust,nLAdjust: Integer);
+    var nML,nMT: Integer;
     begin
       with nBmp,FNowItem^ do
       begin
@@ -600,6 +607,58 @@ var nStr: string;
         SetBkMode(Handle, Windows.TRANSPARENT);
         Canvas.TextOut(nML, nMT, nText);
         Inc(nT, FRowHeight);
+      end;
+    end;
+
+    //Date: 2018-10-09
+    //Parm: 待显示内容;第几列;若超长截取尾部
+    //Desc: 在当前列的中间位置绘制nText字符
+    procedure MidDrawText2(nText: WideString; const nCol: Integer;
+      const nCutEnd: Boolean = True);
+    var j,nML,nMT: Integer;
+    begin
+      with nBmp,FNowItem^ do
+      begin
+        j := Length(FColWidth);
+        if j<= nCol then
+        begin
+          nStr := '无法在[ %d ]列表格显示[ %d ]列数据.';
+          WriteLog(Format(nStr, [j, nCol]));
+          Exit;
+        end;
+
+        with Canvas do
+        begin
+          Font.Name := FDataFont.FFontName;
+          Font.Size := FDataFont.FFontSize;
+          Font.Color := clRed;
+
+          if FDataFont.FFontBold then
+               Font.Style := Font.Style + [fsBold]
+          else Font.Style := Font.Style - [fsBold];
+        end;
+
+        nL := 1;
+        for j:=0 to nCol-1 do
+          nL := nL + FColWidth[j];
+        //累加左边界
+
+        nML := Canvas.TextWidth(nText);
+        while nML > FColWidth[nCol] do //超长则截取
+        begin
+          if nCutEnd then
+               nText := Copy(nText, 1, Length(nText) - 1)
+          else nText := Copy(nText, 2, Length(nText) - 1);
+
+          nML := Canvas.TextWidth(nText);
+        end;
+
+        nML := nL + Trunc((FColWidth[nCol] - nML) / 2); 
+        nMT := Canvas.TextHeight(nText);
+        nMT := nT + Trunc((FRowHeight - nMT) / 2);
+
+        SetBkMode(Handle, Windows.TRANSPARENT);
+        Canvas.TextOut(nML, nMT, nText);
       end;
     end;
 begin
@@ -671,10 +730,16 @@ begin
           nT := 1;
           nI := Low(FColWidth);
           //每屏起始位置
+
+          if FDrawStyle = dsRowDisp then
+            nI := 0;
+          //行显时,nI为已绘制的行数
         end; 
       end;
-      
+
+      //------------------------------------------------------------------------
       with nBmp do
+      if FDrawStyle = dsColDisp then //列显示模式: 绘制队列
       begin
         nLine := Lines[nIdx];
         MidDrawText(nLine.FName, FFontHeadSAdjust, FFontHeadLAdjust);
@@ -732,8 +797,63 @@ begin
           FreeAndNil(nBmp);
         end;
       end;
-    end;
 
+      //------------------------------------------------------------------------
+      with nBmp do
+      if FDrawStyle = dsRowDisp then //行显示模式: 绘制细节
+      begin
+        if nLine.FTrucks.Count < 1 then
+          Inc(nIdx);
+        //no truck,next line
+
+        for i:=nCur to nLine.FTrucks.Count-1 do
+        begin
+          if i-nCur >= FRowNum then
+          begin
+            nCur := i;
+            Break;
+          end;
+          //row isn't enough to fill truck
+
+          if nI >= FRowNum then
+            Break;
+          //page is full
+
+          nTruck := nLine.FTrucks[i];
+          MidDrawText2(nTruck.FTruck, 0);
+          MidDrawText2(nTruck.FStockName, 1, False);
+          MidDrawText2(nTruck.FCusName, 2);
+
+          Inc(nI); //row counter
+          nT := nT + FRowHeight;
+
+          if (i = nLine.FTrucks.Count - 1) or
+             ((FDataItemNum > 0) and (FDataItemNum <= i+1)) then
+          begin
+            Inc(nIdx);
+            nCur := 0;
+            Break;
+          end; //next line
+        end;
+
+        if nI >= FRowNum then
+        begin
+          nStr := GetBMPFile(FGroup, FPicNum + nFileBase);
+          if FileExists(nStr) then
+            DeleteFile(nStr);
+          Sleep(500); //wait io
+
+          SaveToFile(nStr);
+          Canvas.Unlock;
+          //绘制完毕,解锁
+
+          Sleep(500); //wait io
+          FreeAndNil(nBmp);
+        end;
+      end;
+    end; 
+
+    //------------------------------------------------------------------------
     if Assigned(nBmp) then
     begin
       nStr := GetBMPFile(FGroup, FPicNum + nFileBase);
@@ -1341,6 +1461,11 @@ begin
       if not Assigned(nNode) then Continue;
       FDataEnable := nNode.AttributeByName['use_data'] <> 'N';
       FStatusEnable := nNode.AttributeByName['use_status'] <> 'N';
+
+      nStr := nNode.AttributeByName['drawstyle'];
+      if CompareText(nStr, 'detail') = 0 then
+           FDrawStyle := dsRowDisp
+      else FDrawStyle := dsColDisp;
 
       FRowNum := nNode.NodeByName('rownum').ValueAsInteger;
       FRowHeight := nNode.NodeByName('rowheight').ValueAsInteger;
