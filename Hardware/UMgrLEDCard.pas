@@ -1320,7 +1320,7 @@ end;
 //------------------------------------------------------------------------------
 function TCardManager.GetErrorDesc(const nErr: Integer): string;
 begin
-  Result := '未定义的错误.';
+  Result := Format('未定义的错误(Code: %d).', [nErr]);
 
   case nErr of
    RETURN_ERROR_NO_USB_DISK:

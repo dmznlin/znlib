@@ -8,9 +8,12 @@ unit ULibFun;
 interface
 
 uses
-  System.Classes, System.SysUtils, System.NetEncoding, System.Hash, Vcl.Controls,
   {$IFDEF JsonSerializers}System.JSON.Serializers, System.JSON.Types,{$ENDIF}
-  System.Variants, System.IniFiles;
+  {$IFDEF MSWINDOWS}Winapi.Windows,{$ENDIF MSWINDOWS}
+  {$IFDEF HasVCL}Vcl.Forms, Vcl.Controls,{$ENDIF}
+  {$IFDEF HasFMX}FMX.Forms, FMX.Controls,{$ENDIF}
+  System.Classes, System.UITypes, System.SysUtils, System.NetEncoding,
+  System.Hash, System.Variants, System.IniFiles;
 
 type
   TApplicationHelper = class
@@ -23,6 +26,15 @@ type
     //id record
 
   public
+  class var
+    gPath: string;
+    //系统所在路径
+    gFormConfig: string;
+    //窗体配置文件
+    gDBConfig: string;
+    //数据库配置文件
+
+  public
     class function GetCPUIDStr: string; static;
     //处理器标识
     class procedure AddExpireDate(const nFile,nDate: string;
@@ -33,9 +45,17 @@ type
     //为nFile添加校验信息
     class function IsValidConfigFile(const nFile,nSeed: string):Boolean;static;
     //校验nFile是否合法配置文件
+    {$IFDEF HasVCL}
     class procedure EnumSubCtrlList(const nPCtrl: TWinControl;
       const nList: TList); static;
     //枚举nPCtrl的所有子控件
+    {$ENDIF}
+    class procedure LoadFormConfig(const nForm: TForm;
+      const nIniF: TIniFile = nil; const nFile: string = '');
+    //载入窗体信息
+    class procedure SaveFormConfig(const nForm: TForm;
+      const nIniF: TIniFile = nil; const nFile: string = '');
+    //存储窗体信息
   end;
 
   TStringHelper = class
@@ -396,6 +416,7 @@ begin
   end;
 end;
 
+{$IFDEF HasVCL}
 //Date: 2018-05-07
 //Parm: 父容器控件;列表
 //Desc: 枚举nPCtrl的所有子控件,放入nList中
@@ -410,6 +431,166 @@ begin
     if nPCtrl.Controls[i] is TWinControl then
       EnumSubCtrlList(nPCtrl.Controls[i] as TWinControl, nList);
     //enum sub ctrls
+  end;
+end;
+{$ENDIF}
+
+//Date: 2018-10-31
+//Parm: 窗体;文件对象;文件名
+//Desc: 从nIniF或nFile中载入nForm的配置信息
+class procedure TApplicationHelper.LoadFormConfig(const nForm: TForm;
+  const nIniF: TIniFile; const nFile: string);
+var nStr: string;
+    nIni: TIniFile;
+    nValue,nMax: integer;
+begin
+  if not Assigned(nIniF) then
+  begin
+    if nFile = '' then
+         nStr := gFormConfig
+    else nStr := nFile;
+
+    if not FileExists(nStr) then Exit;
+    nIni := TIniFile.Create(nStr);
+  end else nIni := nIniF;
+
+  try
+    {$IFDEF HasFMX}
+    with nForm do
+    begin
+      nMax := High(integer);
+      nValue := nIni.ReadInteger(Name, 'FormTop', nMax);
+
+      if nValue < nMax then
+      begin
+        Top := nValue;
+      end else
+      begin
+        if Position = TFormPosition.Designed then
+          Position := TFormPosition.DesktopCenter;
+        //初次加载时居中,避免设计时分辨率不同越界
+      end;
+
+      nValue := nIni.ReadInteger(Name, 'FormLeft', nMax);
+      if nValue < nMax then Left := nValue;
+
+      if BorderStyle = BorderStyle.bsSizeable then
+      begin
+        nValue := nIni.ReadInteger(Name, 'FormWidth', nMax);
+        if nValue < nMax then Width := nValue;
+
+        nValue := nIni.ReadInteger(Name, 'FormHeight', nMax);
+        if nValue < nMax then Height := nValue;
+      end; //载入窗体位置和宽高
+
+      if nIni.ReadBool(Name, 'Maximized', False) = True then
+         WindowState := TWindowState.wsMaximized;
+      //最大化状态
+    end;
+    //--------------------------------------------------------------------------
+    {$ELSE}
+    with nForm do
+    begin
+      nMax := High(integer);
+      nValue := nIni.ReadInteger(Name, 'FormTop', nMax);
+
+      if nValue < nMax then
+      begin
+        Top := nValue;
+      end else
+      begin
+        if Position = poDesigned then
+          Position := poDesktopCenter;
+        //初次加载时居中,避免设计时分辨率不同越界
+      end;
+
+      nValue := nIni.ReadInteger(Name, 'FormLeft', nMax);
+      if nValue < nMax then Left := nValue;
+
+      if BorderStyle = bsSizeable then
+      begin
+        nValue := nIni.ReadInteger(Name, 'FormWidth', nMax);
+        if nValue < nMax then Width := nValue;
+
+        nValue := nIni.ReadInteger(Name, 'FormHeight', nMax);
+        if nValue < nMax then Height := nValue;
+      end; //载入窗体位置和宽高
+
+      if nIni.ReadBool(Name, 'Maximized', False) = True then
+         WindowState := wsMaximized;
+      //最大化状态
+    end;
+    {$ENDIF}
+  finally
+    if not Assigned(nIniF) then nIni.Free;
+  end;
+end;
+
+class procedure TApplicationHelper.SaveFormConfig(const nForm: TForm;
+  const nIniF: TIniFile; const nFile: string);
+var nStr: string;
+    nIni: TIniFile;
+    nBool: Boolean;
+begin
+  if not Assigned(nIniF) then
+  begin
+    if nFile = '' then
+         nStr := gFormConfig
+    else nStr := nFile;
+
+    if nStr = '' then
+         raise Exception.Create('Invalidate ConfigFile!')
+    else nIni := TIniFile.Create(nStr);
+  end else nIni := nIniF;
+
+  nBool := False;
+  try
+    with nForm do
+    begin
+      {$IFDEF HasFMX}
+      nBool := WindowState = TWindowState.wsMaximized;
+      {$ELSE}
+      nBool := WindowState = wsMaximized;
+      {$ENDIF}
+
+      if nBool then
+      begin
+        {$IFDEF HasVCL}
+        LockWindowUpdate(nForm.Handle);
+        {$ENDIF}
+
+        {$IFDEF HasFMX}
+        WindowState := TWindowState.wsNormal;
+        {$ELSE}
+        WindowState := wsNormal;
+        {$ENDIF}
+        //还原,记录正常位置宽高
+      end;
+
+      nIni.WriteInteger(Name, 'FormTop', Top);
+      nIni.WriteInteger(Name, 'FormLeft', Left);
+      nIni.WriteInteger(Name, 'FormWidth', Width);
+      nIni.WriteInteger(Name, 'FormHeight', Height);
+      nIni.WriteBool(Name, 'Maximized', nBool);
+      //保存窗体位置和宽高
+    end;
+  finally
+    if nBool then
+    begin
+      {$IFDEF HasFMX}
+      nForm.WindowState := TWindowState.wsMaximized;
+      {$ELSE}
+      nForm.WindowState := wsMaximized;
+      {$ENDIF}
+
+      {$IFDEF HasVCL}
+      LockWindowUpdate(0);
+      {$ENDIF}
+    end;
+
+    if not Assigned(nIniF) then
+      nIni.Free;
+    //xxxxx
   end;
 end;
 

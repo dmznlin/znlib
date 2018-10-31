@@ -20,3 +20,8 @@
   {$DEFINE EnableChannelManager}
   //启用通道管理器
 {$ENDIF}
+
+{$IFNDEF HasFMX}
+  {$DEFINE HasVCL}
+{$ENDIF}
+//组件类别.由于Delphi没有足够信息区分FMX和VCL,所以需要在项目中手工添加编译条件.

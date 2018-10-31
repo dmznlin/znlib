@@ -807,7 +807,16 @@ begin
     begin
       nMax := High(integer);
       nValue := nIni.ReadInteger(Name, 'FormTop', nMax);
-      if nValue < nMax then Top := nValue;
+
+      if nValue < nMax then
+      begin
+        Top := nValue;
+      end else
+      begin
+        if Position = poDesigned then
+          Position := poDesktopCenter;
+        //初次加载时居中,避免设计时分辨率不同越界
+      end;
 
       nValue := nIni.ReadInteger(Name, 'FormLeft', nMax);
       if nValue < nMax then Left := nValue;
