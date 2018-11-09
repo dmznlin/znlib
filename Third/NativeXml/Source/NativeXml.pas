@@ -434,6 +434,8 @@ type
     // DepthFirst method. It is possible to search for a full path too, e.g.
     // FoundNode := MyNode.FindNode('/Root/SubNode1/SubNode2/ThisNode');
     function FindNode(const NodeName: string): TXmlNode;
+    //raise exception when result is nil
+    function FindNodeR(const NodeName: string): TXmlNode;
     // Find all nodes which have name NodeName. Contrary to the NodesByName
     // function, this function will search the whole subnode tree. If you use
     // a TXmlNodeList for the AList parameter, you don't need to cast the list
@@ -475,6 +477,8 @@ type
     // Return a pointer to the first subnode in the nodelist that has name AName.
     // If no subnodes with AName are found, the function returns nil.
     function NodeByName(const AName: string): TXmlNode; virtual;
+    //raise exception when result is nil
+    function NodeByNameR(const AName: string): TXmlNode;
     // \Delete the subnode at Index. The node will also be freed, so do not free the
     // node in the application.
     procedure NodeDelete(Index: integer); virtual;
@@ -3152,6 +3156,14 @@ begin
   end;
 end;
 
+function TXmlNode.FindNodeR(const NodeName: string): TXmlNode;
+begin
+  Result := FindNode(NodeName);
+  if not Assigned(Result) then
+    raise Exception.Create(Format('XML: Node "%s" Is Not Exits.', [NodeName]));
+  //xxxxx
+end;
+
 procedure TXmlNode.FindNodes(const NodeName: string; const AList: TList);
   // local
   procedure FindNodesRecursive(ANode: TXmlNode; AList: TList);
@@ -3646,6 +3658,14 @@ begin
       Result := Nodes[i];
       exit;
     end;
+end;
+
+function TXmlNode.NodeByNameR(const AName: string): TXmlNode;
+begin
+  Result := NodeByName(AName);
+  if not Assigned(Result) then
+    raise Exception.Create(Format('XML: Node "%s" Is Not Exits.', [AName]));
+  //xxxxx
 end;
 
 procedure TXmlNode.NodeDelete(Index: integer);
