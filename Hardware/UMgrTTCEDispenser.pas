@@ -109,6 +109,8 @@ type
     //应答模式发送数据
     function SendToDispenser(const nSend: PDispenserK7Send): Boolean;
     //将数据发送到设备
+    function ReadCOMData(nLen: Integer): Boolean;
+    //从串口读取数据
     function PrepareCard(const nDispenser: PDispenserItem): Boolean;
     //准备卡片: 将卡片发到读卡位置
     function QueryStatuse: string;
@@ -215,6 +217,7 @@ const
   cTTCE_K7_NewError   = $11;                        //准备卡失败
   cTTCE_K7_KXNoCard   = $12;                        //卡箱卡片为空
   cTTCE_K7_TDNoCard   = $13;                        //通道卡片为空
+  cTTCE_K7_CardJam    = $14;                        //卡片阻塞(卡箱满)
 
   cCMD_RecoveryCard   = 'RC';                       //回收卡片
   cCMD_CardOut        = 'CO';                       //发卡到出卡口
@@ -283,12 +286,21 @@ end;
 //Desc: 关闭nDispenser的连接
 procedure TDispenserManager.CloseDispenser(const nDispenser: PDispenserItem);
 begin
-  if Assigned(nDispenser) and Assigned(nDispenser.FClient) then
+  if Assigned(nDispenser) then
   begin
-    nDispenser.FClient.Disconnect;
-    if Assigned(nDispenser.FClient.IOHandler) then
-      nDispenser.FClient.IOHandler.InputBuffer.Clear;
-    //xxxxx
+    if Assigned(nDispenser.FClient) then
+    begin
+      nDispenser.FClient.Disconnect;
+      if Assigned(nDispenser.FClient.IOHandler) then
+        nDispenser.FClient.IOHandler.InputBuffer.Clear;
+      //xxxxx
+    end;
+
+    if Assigned(nDispenser.FCOMPort) then
+    begin
+      nDispenser.FCOMPort.Connected := False;
+      //disconn comport
+    end;
   end;
 end;
 
@@ -591,8 +603,8 @@ begin
           begin
             with Timeouts do
             begin
-              ReadTotalConstant := 1000;
-              ReadTotalMultiplier := 50;
+              ReadTotalConstant := 100;
+              ReadTotalMultiplier := 10;
             end;
 
             with Parity do
@@ -725,7 +737,11 @@ begin
       FActiveDispenser.FLastActive := 0;
       //置为不活动
 
-      WriteLog(Format('Dispenser:[ %s:%d ] Msg: %s', [FActiveDispenser.FHost,
+      if FActiveDispenser.FConn = ctCOM then
+       WriteLog(Format('Dispenser:[ %s:%s ] Msg: %s', [FActiveDispenser.FID,
+        FActiveDispenser.FCOMPort.Port, E.Message]))
+      else
+       WriteLog(Format('Dispenser:[ %s:%d ] Msg: %s', [FActiveDispenser.FHost,
         FActiveDispenser.FPort, E.Message]));
       //xxxxx
 
@@ -814,6 +830,27 @@ begin
   Result := True;
   nStatus := QueryStatuse();
 
+  if (not HasStatus(nStatus, cTTCE_K7_PosRead)) and
+     (FActiveDispenser.FNowCard <> '') then
+    FActiveDispenser.FNowCard := '';
+  //卡不在读卡位,清空卡号
+  
+  if (HasStatus(nStatus, cTTCE_K7_PosRead)) and
+     (FActiveDispenser.FNowCard = '') then
+  begin
+    if GetCardSerial() = '' then    //读取卡号
+      RecoveryCard();               //不成功则收卡
+    //xxxxx
+  end; //卡在读卡位且卡号为空,重新读卡
+
+  if HasStatus(nStatus, cTTCE_K7_PosNew) then
+  begin
+    if SendCardToReadPosition() then //发到读卡位
+     if GetCardSerial() = '' then    //读取卡号
+      RecoveryCard();                //不成功则收卡
+    //xxxxx
+  end; //卡在传感器3位置,新卡就位
+
   if (nDispenser.FStatusKeep > 0) and //某个状态保持时间过长
      (GetTickCount - nDispenser.FStatusKeep >= nDispenser.FTimeout * 1000) then
   begin
@@ -827,7 +864,7 @@ begin
       Exit;
     end;
 
-    if HasStatus(nStatus, cTTCE_K7_NewError) then //准备卡失败
+    if HasStatus(nDispenser.FLastStatus, cTTCE_K7_NewError) then
     begin
       nDispenser.FStatusKeep := 0;
       nDispenser.FLastStatus := DateTimeSerial;
@@ -835,19 +872,21 @@ begin
 
       WriteLog(Format('主机[ %s ]准备卡失败,已重置.', [nDispenser.FID]));
       Exit;
-    end;
+    end; //准备卡失败
 
-    if HasStatus(nStatus, cTTCE_K7_PosOut) then //出卡处有卡
+    if HasStatus(nDispenser.FLastStatus, cTTCE_K7_PosOut) then
     begin
       RecoveryCard();
       WriteLog(Format('主机[ %s ]超时未取,已收回.', [nDispenser.FID]));
-    end;
+    end; //出卡处有卡
+
+    if HasStatus(nDispenser.FLastStatus, cTTCE_K7_CardJam) then
+    begin
+      ResetDispenser();
+      WriteLog(Format('主机[ %s ]卡片拥堵或卡箱满,尝试重置.', [nDispenser.FID]));
+    end; //卡箱满,出卡拥堵
   end;
-
-  if not HasStatus(nStatus, cTTCE_K7_PosRead) then //卡不在读卡位,清空卡号
-    FActiveDispenser.FNowCard := '';
-  //xxxxx
-
+  
   nStr := FOwner.SyncCommand(FActiveDispenser, False);
   if nStr = cCMD_RecoveryCard then
   begin
@@ -862,29 +901,12 @@ begin
       FOwner.SyncCommand(FActiveDispenser, True, '');
     //执行收卡
   end else
+
+  if nStr <> '' then
   begin
     FOwner.SyncCommand(FActiveDispenser, True, '');
     //不可识别的指令,直接清空
   end;
-
-  if (HasStatus(nStatus, cTTCE_K7_PosRead)) and //卡在读卡位且卡号为空
-     (FActiveDispenser.FNowCard = '') then
-  begin
-    if GetCardSerial() = '' then    //读取卡号
-      RecoveryCard();               //不成功则收卡
-    //xxxxx
-  end;
-
-  if HasStatus(nStatus, cTTCE_K7_PosNew) then //卡在传感器3位置,新卡就位
-  begin
-    if SendCardToReadPosition() then //发到读卡位
-     if GetCardSerial() = '' then    //读取卡号
-      RecoveryCard();                //不成功则收卡
-    //xxxxx
-  end;
-
-  if HasStatus(nStatus, cTTCE_K7_PosRead) then
-    SendCardOut();
 end;
 
 //Date: 2018-11-23
@@ -948,6 +970,36 @@ begin
   Result[nLen - 1] := CalBBC(Result, 0, nLen - 2);
 end;
 
+//Date: 2018-11-28
+//Parm: 待读取的长度
+//Desc: 从串口读取读取nLen长度的数据
+function TDispenserThread.ReadCOMData(nLen: Integer): Boolean;
+var nInit: Int64;
+    nInt: Integer;
+begin
+  nInit := GetTickCount;
+  while (nLen > 0) and (GetTickCount - nInit < 12 * 1000) do
+  begin
+    FActiveDispenser.FCOMBuff := '';
+    FActiveDispenser.FCOMPort.ReadStr(FActiveDispenser.FCOMBuff, nLen);
+    nInt := Length(FActiveDispenser.FCOMBuff);
+
+    if nInt > 0 then
+    begin
+      nLen := nLen - nInt;
+      FActiveDispenser.FCOMData := FActiveDispenser.FCOMData +
+                                   FActiveDispenser.FCOMBuff;
+      //合并数据
+    end;
+  end;
+
+  Result := nLen <= 0;
+  if not Result then
+   WriteLog(Format('主机[ %s,%s ]读取数据失败.', [FActiveDispenser.FID,
+    FActiveDispenser.FCOMPort.Port]));
+  //xxxxx
+end;
+
 //Date: 2018-11-23
 //Parm: 发送帧;接收帧
 //Desc: 发送nSend数据,接收后存入nRecv,应答模式
@@ -958,20 +1010,39 @@ var nStr: string;
     nItv: Int64;
     nIdx,nLen: Integer;
 begin
-  with FActiveDispenser.FClient do
+  with FActiveDispenser.FClient,FActiveDispenser.FCOMPort do
   begin
-    if not Connected then
-      Connect;
-    Result := False;
+    if FActiveDispenser.FConn = ctCOM then
+    begin
+      if not FActiveDispenser.FCOMPort.Connected then
+        FActiveDispenser.FCOMPort.Connected := True;
+      Result := False;
+    end else
+    begin
+      if not FActiveDispenser.FClient.Connected then
+        FActiveDispenser.FClient.Connect;
+      Result := False;
+    end;
     
     nItv := GetTickCount - FActiveDispenser.FLastSend;
     nItv := cTTCE_Frame_SendInterval - nItv;
     if nItv > 0 then Sleep(nItv); //限制发送速度
     FActiveDispenser.FLastSend := GetTickCount();
-                                 
-    Socket.Write(SendData2Bytes(nSend));
-    SetLength(nBuf, 0);
-    Socket.ReadBytes(nBuf, 3, False);
+
+    if FActiveDispenser.FConn = ctCOM then
+    begin
+      nBuf := SendData2Bytes(nSend);
+      Write(@nBuf[0], Length(nBuf));
+
+      FActiveDispenser.FCOMData := '';
+      if not ReadCOMData(3) then Exit;
+      nBuf := ToBytes(FActiveDispenser.FCOMData);
+    end else
+    begin
+      Socket.Write(SendData2Bytes(nSend));
+      SetLength(nBuf, 0);
+      Socket.ReadBytes(nBuf, 3, False);
+    end;
 
     if (nBuf[1] <> FActiveDispenser.FAddH) or
        (nBuf[2] <> FActiveDispenser.FAddL) then
@@ -1002,10 +1073,19 @@ begin
     end;
 
     nBuf[0] := cTTCE_K7_ENQ;
-    Socket.Write(nBuf); //确认执行
-
-    SetLength(nBuf, 0);
-    Socket.ReadBytes(nBuf, 5, False);
+    if FActiveDispenser.FConn = ctCOM then
+    begin
+      Write(@nBuf[0], 3);
+      FActiveDispenser.FCOMData := '';
+      
+      if not ReadCOMData(5) then Exit;
+      nBuf := ToBytes(FActiveDispenser.FCOMData, en8Bit);
+    end else
+    begin
+      Socket.Write(nBuf); //确认执行
+      SetLength(nBuf, 0);
+      Socket.ReadBytes(nBuf, 5, False);
+    end; 
 
     if (nBuf[0] <> cTTCE_K7_STX) or (nBuf[1] <> FActiveDispenser.FAddH) or
        (nBuf[2] <> FActiveDispenser.FAddL) then
@@ -1018,11 +1098,19 @@ begin
     end;
 
     nLen := nBuf[3] * 265 + nBuf[4]; //数据负载长度
-    Socket.ReadBytes(nBuf, nLen + 2, True);
+    if FActiveDispenser.FConn = ctCOM then
+    begin
+      if not ReadCOMData(nLen + 2) then Exit;
+      nBuf := ToBytes(FActiveDispenser.FCOMData, en8Bit);
+    end else
+    begin
+      Socket.ReadBytes(nBuf, nLen + 2, True);
+    end;
+    
     nIdx := Length(nBuf);
-
     Result := nBuf[nIdx-1] = CalBBC(nBuf, 0, nIdx-2);
     //通过验证
+    
     if not Result then
     begin
       nStr := Format('主机[ %s ]应答校验失败.', [FActiveDispenser.FID]);
@@ -1045,26 +1133,45 @@ end;
 
 //Date: 2018-11-24
 //Parm: 发送帧;接收帧
-//Desc: 发送nSend数据,接收后存入nRecv,无需应答
+//Desc: 发送nSend数据,无需应答
 function TDispenserThread.SendToDispenser(const nSend: PDispenserK7Send): Boolean;
 var nStr: string;
     nBuf: TIdBytes;
     nItv: Int64;
 begin
-  with FActiveDispenser.FClient do
+  with FActiveDispenser.FClient,FActiveDispenser.FCOMPort do
   begin
-    if not Connected then
-      Connect;
-    Result := False;
-    
+    if FActiveDispenser.FConn = ctCOM then
+    begin
+      if not FActiveDispenser.FCOMPort.Connected then
+        FActiveDispenser.FCOMPort.Connected := True;
+      Result := False;
+    end else
+    begin
+      if not FActiveDispenser.FClient.Connected then
+        FActiveDispenser.FClient.Connect;
+      Result := False;
+    end;
+
     nItv := GetTickCount - FActiveDispenser.FLastSend;
     nItv := cTTCE_Frame_SendInterval - nItv;
     if nItv > 0 then Sleep(nItv); //限制发送速度
     FActiveDispenser.FLastSend := GetTickCount();
-                                 
-    Socket.Write(SendData2Bytes(nSend));
-    SetLength(nBuf, 0);
-    Socket.ReadBytes(nBuf, 3, False);
+
+    if FActiveDispenser.FConn = ctCOM then
+    begin
+      nBuf := SendData2Bytes(nSend);
+      Write(@nBuf[0], Length(nBuf));
+
+      FActiveDispenser.FCOMData := '';
+      if not ReadCOMData(3) then Exit;
+      nBuf := ToBytes(FActiveDispenser.FCOMData, en8Bit);
+    end else
+    begin
+      Socket.Write(SendData2Bytes(nSend));
+      SetLength(nBuf, 0);
+      Socket.ReadBytes(nBuf, 3, False);
+    end;
 
     if (nBuf[1] <> FActiveDispenser.FAddH) or
        (nBuf[2] <> FActiveDispenser.FAddL) then
@@ -1095,7 +1202,9 @@ begin
     end;
 
     nBuf[0] := cTTCE_K7_ENQ;
-    Socket.Write(nBuf); //确认执行
+    if FActiveDispenser.FConn = ctCOM then
+         Write(@nBuf[0], 3)
+    else Socket.Write(nBuf); //确认执行
 
     FActiveDispenser.FLastSend := GetTickCount();
     //重新计算下次发送间隔
@@ -1140,10 +1249,12 @@ begin
    cTTCE_K7_PosNew    : Result := StrToInt(nALL[4]) and $04 = $04;
    cTTCE_K7_PosRead   : Result := StrToInt(nALL[4]) and $02 = $02;
    cTTCE_K7_PosOut    : Result :=(StrToInt(nALL[4]) and $01 = $01) and
-                                 (StrToInt(nALL[4]) and $03 <> $03);
+                                 (StrToInt(nALL[4]) and $02 <> $02);
    cTTCE_K7_NewError  : Result := StrToInt(nALL[1]) and $02 = $02;
    cTTCE_K7_KXNoCard  : Result := StrToInt(nALL[3]) and $01 = $01;
    cTTCE_K7_TDNoCard  : Result := StrToInt(nALL[4]) and $08 = $08;
+   cTTCE_K7_CardJam   : Result :=(StrToInt(nALL[2]) and $01 = $01) and
+                                 (StrToInt(nALL[3]) and $02 = $02);
   end;
 end;
 
@@ -1171,9 +1282,12 @@ begin
     end;
   end;
 
-  WriteLog(Format('主机[ %d ]无法将卡发到读卡位,错误码: %s.',
-    [FActiveDispenser.FID, nStr]));
-  //xxxxx
+  if nStr <> '' then
+  begin
+    WriteLog(Format('主机[ %s ]无法将卡发到读卡位,错误码: %s.',
+      [FActiveDispenser.FID, nStr]));
+    //xxxxx
+  end;
 end;
 
 //Date: 2018-11-26
