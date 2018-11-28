@@ -162,8 +162,6 @@ type
     //清理资源
     procedure CloseDispenser(const nDispenser: PDispenserItem);
     //关闭设备
-    function FindDispenser(const nID: string): PDispenserItem;
-    //检索设备
     function SyncCardNo(const nDispenser: PDispenserItem; const nSet: Boolean;
       const nCard: string = ''): string;
     //同步读写卡号
@@ -179,6 +177,8 @@ type
     procedure StartDispensers;
     procedure StopDispensers;
     //启停设备
+    function FindDispenser(const nID: string): PDispenserItem;
+    //检索设备
     function GetCardNo(const nID:string; var nHint: string;
       const nTimeout: Integer = 10 * 1000): string;
     //获得卡号
@@ -262,13 +262,13 @@ begin
     if Assigned(nItem.FCOMPort) then
     begin
       nItem.FCOMPort.Close;
-      nItem.FCOMPort.Free;
+      FreeAndNil(nItem.FCOMPort);
     end;
 
     if Assigned(nItem.FClient) then
     begin
       nItem.FClient.Disconnect;
-      nItem.FClient.Free;
+      FreeAndNil(nItem.FClient);
     end;
 
     FreeAndNil(nItem.FOptions);
@@ -890,14 +890,15 @@ begin
   nStr := FOwner.SyncCommand(FActiveDispenser, False);
   if nStr = cCMD_RecoveryCard then
   begin
-    if RecoveryCard() then
+    if (not (HasStatus(nStatus, cTTCE_K7_PosRead) or
+             HasStatus(nStatus, cTTCE_K7_PosOut))) or RecoveryCard() then
       FOwner.SyncCommand(FActiveDispenser, True, '');
     //执行收卡
   end else
 
   if nStr = cCMD_CardOut then
   begin
-    if HasStatus(nStatus, cTTCE_K7_PosRead) and SendCardOut() then
+    if (not HasStatus(nStatus, cTTCE_K7_PosRead)) or SendCardOut() then
       FOwner.SyncCommand(FActiveDispenser, True, '');
     //执行收卡
   end else
