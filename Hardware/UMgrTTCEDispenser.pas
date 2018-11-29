@@ -40,7 +40,7 @@ type
     FADDH  : Byte;                                 //地址H
     FADDL  : Byte;                                 //地址L
     FLen   : Word;                                 //返回数据包长
-    FACK   : Char;                                 //返回码: P/N
+    FRes   : Char;                                 //执行结果: P/N
     FData  : array [0..cTTCE_Frame_DataMax-1] of Char;//返回的数据包
     FETX   : Byte;                                 //块结束符
     FBCC   : Byte;                                 //异或校验
@@ -127,6 +127,8 @@ type
     //将卡片收到回收箱
     function ResetDispenser: Boolean;
     //重置设置
+    procedure WriteRecvError(const nRecv: PDispenserK7Recv);
+    //记录错误日志
   public
     constructor Create(AOwner: TDispenserManager; AType: TDispenserThreadType);
     destructor Destroy; override;
@@ -834,14 +836,6 @@ begin
      (FActiveDispenser.FNowCard <> '') then
     FActiveDispenser.FNowCard := '';
   //卡不在读卡位,清空卡号
-  
-  if (HasStatus(nStatus, cTTCE_K7_PosRead)) and
-     (FActiveDispenser.FNowCard = '') then
-  begin
-    if GetCardSerial() = '' then    //读取卡号
-      RecoveryCard();               //不成功则收卡
-    //xxxxx
-  end; //卡在读卡位且卡号为空,重新读卡
 
   if HasStatus(nStatus, cTTCE_K7_PosNew) then
   begin
@@ -851,6 +845,14 @@ begin
     //xxxxx
   end; //卡在传感器3位置,新卡就位
 
+  if (HasStatus(nStatus, cTTCE_K7_PosRead)) and
+     (FActiveDispenser.FNowCard = '') then
+  begin
+    if GetCardSerial() = '' then    //读取卡号
+      RecoveryCard();               //不成功则收卡
+    //xxxxx
+  end; //卡在读卡位且卡号为空,重新读卡
+  
   if (nDispenser.FStatusKeep > 0) and //某个状态保持时间过长
      (GetTickCount - nDispenser.FStatusKeep >= nDispenser.FTimeout * 1000) then
   begin
@@ -1001,6 +1003,36 @@ begin
   //xxxxx
 end;
 
+//Date: 2018-11-29
+//Parm: 接收数据
+//Desc: 记录nRecv描述的错误日志
+procedure TDispenserThread.WriteRecvError(const nRecv: PDispenserK7Recv);
+var nStr,nCode: string;
+    nIdx,nInt: Integer;
+begin
+  if nRecv.FRes = cTTCE_K7_Failure then
+  begin
+    nCode := '';
+    nInt := nRecv.FLen - 3; //ERR_CD长度
+
+    for nIdx:=2 to cTTCE_Frame_DataMax - 1 do
+    begin
+      if (nInt <= 0) or
+         (nRecv.FData[nIdx] = Char(cTTCE_K7_ETX)) then Break;
+      nCode := nCode + IntToHex(Ord(nRecv.FData[nIdx]), 2);
+
+      Dec(nInt);
+      if nInt > 0 then nCode := nCode + '-';
+    end;
+
+    nStr := '主机[ %s ]执行失败,描述: CM:%s PM:%s CODE:%s.';
+    nStr := Format(nStr, [FActiveDispenser.FID,
+            IntToHex(Ord(nRecv.FData[0]), 2),
+            IntToHex(Ord(nRecv.FData[1]), 2), nCode]);
+    WriteLog(nStr);
+  end;
+end;
+
 //Date: 2018-11-23
 //Parm: 发送帧;接收帧
 //Desc: 发送nSend数据,接收后存入nRecv,应答模式
@@ -1125,6 +1157,9 @@ begin
       nRecv.FLen := nLen;
       nRecv.FETX := nBuf[nIdx-2];
       nRecv.FBCC := nBuf[nIdx-1];
+
+      WriteRecvError(nRecv);
+      //记录错误日志
     end;
 
     FActiveDispenser.FLastSend := GetTickCount();
@@ -1331,12 +1366,12 @@ begin
   Result := '';
   InitSendData(@nSend, Char($3C) + Char($30));
   if not (SendWithResponse(@nSend, @nRecv) and
-         (nRecv.FACK = cTTCE_K7_Success)) then Exit;
+         (nRecv.FRes = cTTCE_K7_Success)) then Exit;
   //寻卡
 
   InitSendData(@nSend, Char($3C) + Char($31));
   if not (SendWithResponse(@nSend, @nRecv) and
-         (nRecv.FACK = cTTCE_K7_Success)) then Exit;
+         (nRecv.FRes = cTTCE_K7_Success)) then Exit;
   //读卡
 
   Result:= Copy(nRecv.FData, 3, 4);
