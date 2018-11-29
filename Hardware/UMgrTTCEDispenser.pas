@@ -468,6 +468,7 @@ begin
 
   SyncCommand(nDispenser, True, cCMD_RecoveryCard);
   //设置指令
+  Result := True;
 end;
 
 function TDispenserManager.SendCardOut(const nID: string; var nHint: string): Boolean;
@@ -486,6 +487,7 @@ begin
 
   SyncCommand(nDispenser, True, cCMD_CardOut);
   //设置指令
+  Result := True;
 end;
 
 //Date: 2018-11-23
@@ -1283,7 +1285,7 @@ begin
 
   case nStatus of
    cTTCE_K7_PosNew    : Result := StrToInt(nALL[4]) and $04 = $04;
-   cTTCE_K7_PosRead   : Result := StrToInt(nALL[4]) and $02 = $02;
+   cTTCE_K7_PosRead   : Result := StrToInt(nALL[4]) and $03 = $03;
    cTTCE_K7_PosOut    : Result :=(StrToInt(nALL[4]) and $01 = $01) and
                                  (StrToInt(nALL[4]) and $02 <> $02);
    cTTCE_K7_NewError  : Result := StrToInt(nALL[1]) and $02 = $02;
