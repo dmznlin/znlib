@@ -952,6 +952,48 @@ begin
   Result := True;
 end;
 
+//-----------------------------------------------------------------------
+type
+  TPrinterJTSK = class(TCodePrinterBase)
+  protected
+    function PrintCode(const nCode: string;
+     var nHint: string): Boolean; override;
+  public
+    class function DriverName: string; override;
+  end;
+
+class function TPrinterJTSK.DriverName: string;
+begin
+  Result := 'JTSK';
+end;
+
+function TPrinterJTSK.PrintCode(const nCode: string;
+  var nHint: string): Boolean;
+var nData: string;
+    nBuf: TIdBytes;
+begin
+  //杭州杰特SK系列
+  //<STX><CMD_ID><DATA_BLOCK><ETX>: 02 20 ascii 03
+  nData := Char($02) + Char($20) + nCode + Char($03);
+
+  FClient.Socket.Write(nData, Indy8BitEncoding);
+  Sleep(200);
+
+  if FPrinter.FResponse then
+  begin
+    SetLength(nBuf, 1);
+    FClient.Socket.ReadBytes(nBuf, 1, False);
+
+    Result := nBuf[0] = $06;
+    if not Result then
+    begin
+      nHint := '喷码机接收数据失败.';
+      Exit;
+    end;
+  end;
+
+  Result := True;
+end;
 
 initialization
   gCodePrinterManager := TCodePrinterManager.Create;
@@ -960,7 +1002,8 @@ initialization
   gCodePrinterManager.RegDriver(TPrinterWSD);
   gCodePrinterManager.RegDriver(TPrinterSGB);
   gCodePrinterManager.RegDriver(TPrinterWZP);
-  
+  gCodePrinterManager.RegDriver(TPrinterJTSK);
+
 finalization
   FreeAndNil(gCodePrinterManager);
 end.

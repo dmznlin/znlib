@@ -6,7 +6,7 @@
 *.response: 应答反馈(1,启用反馈;其它,不启用)
 
 节点: printers->item
-*.driver: 驱动(zero,零点;JY,久易;WSD,威士德;SGB,仕贵宝)
+*.driver: 驱动(zero,零点;JY,久易;WSD,威士德;SGB,仕贵宝;JTSK,杭州杰特SK)
 *.enable: 启用喷码机(1,开启;其它,关闭)
 *.id: 喷码机标识
 *.ip,port: 通讯地址

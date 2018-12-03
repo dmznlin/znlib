@@ -17,6 +17,7 @@ const
   cDispenser_MaxThread      = 10;                  //最大扫描线程数
   cDispenser_Wait_Short     = 1500;
   cDispenser_Wait_Long      = 3 * 1000;            //等待时长
+  cDispenser_Wait_Timeout   = 12 * 1000;           //等待应答超时
 
   cTTCE_Frame_MaxSize       = 300;                 //命令包最大字节数
   cTTCE_Frame_DataMax       = cTTCE_Frame_MaxSize - 7; //命令包最大负载
@@ -182,7 +183,8 @@ type
     function FindDispenser(const nID: string): PDispenserItem;
     //检索设备
     function GetCardNo(const nID:string; var nHint: string;
-      const nTimeout: Integer = 10 * 1000): string;
+      const nWaitFor: Boolean = True;
+      const nTimeout: Integer = cDispenser_Wait_Timeout): string;
     //获得卡号
     function SendCardOut(const nID: string; var nHint: string):Boolean;
     //发卡
@@ -227,6 +229,16 @@ const
 procedure WriteLog(const nEvent: string);
 begin
   gSysLoger.AddLog(TDispenserManager, '自助卡机管理器', nEvent);
+end;
+
+procedure LogHex(const nData: TIdBytes; const nPrefix: string = '');
+var nStr: string;
+    nIdx: Integer;
+begin
+  nStr := '';
+  for nIdx:=Low(nData) to High(nData) do
+    nStr := nStr + IntToHex(nData[nIdx], 2) + ' ';
+  WriteLog(nPrefix + nStr);
 end;
 
 //------------------------------------------------------------------------------
@@ -415,10 +427,10 @@ begin
 end;
 
 //Date: 2018-11-26
-//Parm: 设备号;提示;超时时间
+//Parm: 设备号;提示;是否等待;超时时间
 //Desc: 读取nID当前的卡号
 function TDispenserManager.GetCardNo(const nID: string; var nHint: string;
-  const nTimeout: Integer): string;
+  const nWaitFor: Boolean; const nTimeout: Integer): string;
 var nInit: Int64;
     nDispenser: PDispenserItem;
 begin
@@ -430,6 +442,12 @@ begin
   begin
     nHint := Format('标识为[ %s ]的设备不存在.', [nID]);
     WriteLog(nHint);
+    Exit;
+  end;
+
+  if not nWaitFor then
+  begin
+    Result := SyncCardNo(nDispenser, False);
     Exit;
   end;
 
@@ -836,7 +854,7 @@ begin
 
   if (not HasStatus(nStatus, cTTCE_K7_PosRead)) and
      (FActiveDispenser.FNowCard <> '') then
-    FActiveDispenser.FNowCard := '';
+    FOwner.SyncCardNo(nDispenser, True, '');
   //卡不在读卡位,清空卡号
 
   if HasStatus(nStatus, cTTCE_K7_PosNew) then
@@ -858,7 +876,7 @@ begin
   if (nDispenser.FStatusKeep > 0) and //某个状态保持时间过长
      (GetTickCount - nDispenser.FStatusKeep >= nDispenser.FTimeout * 1000) then
   begin
-    if nStatus = '' then
+    if nDispenser.FLastStatus = '' then
     begin
       nDispenser.FStatusKeep := 0;
       nDispenser.FLastStatus := DateTimeSerial;
@@ -890,8 +908,11 @@ begin
       WriteLog(Format('主机[ %s ]卡片拥堵或卡箱满,尝试重置.', [nDispenser.FID]));
     end; //卡箱满,出卡拥堵
   end;
-  
+
+  if nStatus <> nDispenser.FLastStatus then Exit;
+  //状态已变更
   nStr := FOwner.SyncCommand(FActiveDispenser, False);
+
   if nStr = cCMD_RecoveryCard then
   begin
     if (not (HasStatus(nStatus, cTTCE_K7_PosRead) or
@@ -983,7 +1004,7 @@ var nInit: Int64;
     nInt: Integer;
 begin
   nInit := GetTickCount;
-  while (nLen > 0) and (GetTickCount - nInit < 12 * 1000) do
+  while (nLen > 0) and (GetTickCount - nInit < cDispenser_Wait_Timeout) do
   begin
     FActiveDispenser.FCOMBuff := '';
     FActiveDispenser.FCOMPort.ReadStr(FActiveDispenser.FCOMBuff, nLen);
@@ -1284,7 +1305,8 @@ begin
   if nALL = '' then Exit;
 
   case nStatus of
-   cTTCE_K7_PosNew    : Result := StrToInt(nALL[4]) and $04 = $04;
+   cTTCE_K7_PosNew    : Result :=(StrToInt(nALL[4]) and $04 = $04) or
+                                 (StrToInt(nALL[4]) and $0F = $02);
    cTTCE_K7_PosRead   : Result := StrToInt(nALL[4]) and $03 = $03;
    cTTCE_K7_PosOut    : Result :=(StrToInt(nALL[4]) and $01 = $01) and
                                  (StrToInt(nALL[4]) and $02 <> $02);
@@ -1310,7 +1332,7 @@ begin
   nStr := '';
   nInit := GetTickCount();
   
-  while GetTickCount - nInit < 12 * 1000 do
+  while GetTickCount - nInit < cDispenser_Wait_Timeout do
   begin
     nStr := QueryStatuse();
     if HasStatus(nStr, cTTCE_K7_PosRead) then //卡已发到读卡位
@@ -1403,7 +1425,7 @@ begin
   nStr := '';
   nInit := GetTickCount();
   
-  while GetTickCount - nInit < 12 * 1000 do
+  while GetTickCount - nInit < cDispenser_Wait_Timeout do
   begin
     nStr := QueryStatuse();
     if HasStatus(nStr, cTTCE_K7_PosOut) then //卡已发到取卡位
@@ -1438,7 +1460,7 @@ begin
   nStr := '';
   nInit := GetTickCount();
 
-  while GetTickCount - nInit < 12 * 1000 do
+  while GetTickCount - nInit < cDispenser_Wait_Timeout do
   begin
     nStr := QueryStatuse();
     if HasStatus(nStr, cTTCE_K7_TDNoCard) or
@@ -1471,7 +1493,7 @@ begin
   nStr := '';
   nInit := GetTickCount();
   
-  while GetTickCount - nInit < 12 * 1000 do
+  while GetTickCount - nInit < cDispenser_Wait_Timeout do
   begin
     nStr := QueryStatuse();
     if HasStatus(nStr, cTTCE_K7_PosNew) or
