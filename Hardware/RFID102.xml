@@ -15,6 +15,7 @@
 *.tunnel: 通道号
 *.virtual: Y,虚拟读头;其它不虚拟
 *.reader: 读头标识,可多个,格式:001,002
+*.interval: 虚拟多读头时,每两个读头的刷卡间隔,单位毫秒
 *.type: 900,900m远距离;02n,现场近距离
 *.keeponce:同卡号连续刷卡时,卡号有效间隔,单位毫秒.
 *.keeppeer: Y,每keeponce视为一次;N,间隔keeponce刷卡视为一次.
@@ -37,7 +38,7 @@
       <port>6000</port>
       <tunnel>FH001</tunnel>
       <keeponce keeppeer="N">5000</keeponce>
-      <virtual reader="001,002" type="900">N</virtual>
+      <virtual reader="001,002" type="900" interval="100">N</virtual>
       <cardlen>10</cardlen>
       <cardprefix>C0F0</cardprefix>
       <connkeep>3000</connkeep>

@@ -46,6 +46,8 @@ type
 
     FVirtual: Boolean;         //虚拟读头
     FVReader: string;          //读头标识
+    FVReaders: TDynamicStrArray;//多头虚拟
+    FVMultiInterval: Integer;  //多头间隔           
     FVRGroup: string;          //读头分组
     FVType  : THYReaderVType;  //虚拟类型
 
@@ -393,10 +395,44 @@ begin
 end;
 
 procedure THYReaderManager.LoadConfig(const nFile: string);
-var nIdx,nKeep: Integer;
+var nStr: string;
+    nIdx,nKeep: Integer;
     nXML: TNativeXml;  
     nReader: PHYReaderItem;
     nRoot,nNode,nTmp: TXmlNode;
+
+    //Desc: 拆分多读头标识
+    procedure SplitMultiReaders(nNames: string);
+    var i,nPos: Integer;
+    begin
+      nPos := Pos(',', nNames);
+      if nPos < 2 then
+      begin
+        SetLength(nReader.FVReaders, 1);
+        nReader.FVReaders[0] := nNames;
+        Exit;
+      end;
+
+      i := Length(nNames);
+      if Copy(nNames, i, 1) <> ',' then
+        nNames := nNames + ',';
+      //xxxxx
+
+      nPos := Pos(',', nNames);
+      while nPos > 0 do
+      begin
+        nStr := Trim(Copy(nNames, 1, nPos - 1));
+        if nStr <> '' then
+        begin
+          i := Length(nReader.FVReaders);
+          SetLength(nReader.FVReaders, i + 1);
+          nReader.FVReaders[i] := nStr;
+        end;
+
+        System.Delete(nNames, 1, nPos);
+        nPos := Pos(',', nNames);
+      end;
+    end;
 begin
   FEnable := False;
   if not FileExists(nFile) then Exit;
@@ -497,6 +533,14 @@ begin
           if nTmp.AttributeByName['type'] = '900' then
                FVType := rt900
           else FVType := rt02n;
+
+          SplitMultiReaders(FVReader);
+          //虚拟多读卡器时,拆分数组
+          
+          nStr := nTmp.AttributeByName['interval'];
+          if (nStr <> '') and IsNumber(nStr, False) then
+               FVMultiInterval := StrToInt(nStr)
+          else FVMultiInterval := 0;
         end else
         begin
           FVirtual := False;
