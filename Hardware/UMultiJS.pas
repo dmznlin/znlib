@@ -54,6 +54,8 @@ type
     FLastBill: string;
     FLastSaveDai: Word;
     //上次保存
+    FExtData: Pointer;
+    //附加数据
   end;
 
   PMultiJSHost= ^TMultiJSHost;
@@ -669,6 +671,7 @@ begin
           FTunnel := nNode.NodeByName('tunnel').ValueAsInteger;
           FDelay := nNode.NodeByName('delay').ValueAsInteger;
 
+          FExtData := nil;
           nTN := nNode.FindNode('group');
           if Assigned(nTN) then
                FGroup := nTN.ValueAsString

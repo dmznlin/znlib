@@ -61,6 +61,8 @@ type
     FLastBill: string;
     FLastSaveDai: Word;
     //上次保存
+    FExtData: Pointer;
+    //附加数据
   end;
 
   PMultiJSHost= ^TMultiJSHost;
@@ -944,6 +946,7 @@ begin
                FGroup := nTN.ValueAsString
           else FGroup := '';
 
+          FExtData := nil;
           nTN := nNode.FindNode('switch');
           if Assigned(nTN) then
                FUseBanDao := nTN.ValueAsInteger = 1

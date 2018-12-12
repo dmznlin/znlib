@@ -33,6 +33,7 @@ type
     FELast  : Int64;             //上次触发
     FETimeOut: Boolean;          //电子签超时
     FRealLabel: string;          //实际业务的电子标签
+    FExtData: Pointer;           //附加数据
     FOptions: TStrings;          //附加参数
   end;
 
@@ -107,6 +108,7 @@ type
     procedure SetRealELabel(const nTunnel,nELabel: string);
     procedure ActiveELabel(const nTunnel,nELabel: string);
     //激活电子签
+    property Readers: TList read FReaders;
     property ServerPort: Integer read FSrvPort write FSrvPort;
     property OnCardIn: TOnCard read FCardIn write FCardIn;
     property OnCardOut: TOnCard read FCardOut write FCardOut;
@@ -423,7 +425,8 @@ begin
                FPrinter := nTP.ValueAsString
           else FPrinter := '';
 
-          nTP := nNode.FindNode('options');
+          FExtData := nil;
+          nTP := nNode.FindNode('options');          
           if Assigned(nTP) then
           begin
             FOptions := TStringList.Create;
@@ -455,6 +458,7 @@ begin
                FLEDText := nTP.ValueAsString
           else FLEDText := 'NULL';
 
+          FExtData := nil;
           nTP := nNode.FindNode('options');
           if Assigned(nTP) then
           begin
