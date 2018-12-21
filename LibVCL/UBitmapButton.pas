@@ -52,12 +52,14 @@ type
     property Down:boolean read FDown write SetDown;
     property Latching:boolean read FLatching write SetLatching;
     property HotTrack:boolean read FHotTrack write SetHotTrack;
+    property Align;
     property Anchors;
     property Enabled;
     property Font;
     property ShowHint;
     property Hint;
     property Tag;
+    property Visible;
     property OnClick;
     property OnMouseDown;
     property OnMouseUp;

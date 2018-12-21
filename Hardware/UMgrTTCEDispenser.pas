@@ -1384,20 +1384,40 @@ end;
 //Date: 2018-11-26
 //Desc: ∂¡»°ø®∫≈
 function TDispenserThread.GetCardSerial: string;
-var nSend: TDispenserK7Send;
+var nIdx: Integer;
+    nBool: Boolean;
+    nSend: TDispenserK7Send;
     nRecv: TDispenserK7Recv;
 begin
   Result := '';
   InitSendData(@nSend, Char($3C) + Char($30));
-  if not (SendWithResponse(@nSend, @nRecv) and
-         (nRecv.FRes = cTTCE_K7_Success)) then Exit;
-  //—∞ø®
 
+  for nIdx:=1 to 2 do
+  begin
+    nBool := SendWithResponse(@nSend, @nRecv) and
+             (nRecv.FRes = cTTCE_K7_Success);
+    //—∞ø®
+
+    if nBool then
+         Break
+    else Sleep(cTTCE_Frame_SendInterval);
+  end;
+
+  if not nBool then Exit;
   InitSendData(@nSend, Char($3C) + Char($31));
-  if not (SendWithResponse(@nSend, @nRecv) and
-         (nRecv.FRes = cTTCE_K7_Success)) then Exit;
-  //∂¡ø®
+  
+  for nIdx:=1 to 2 do
+  begin
+    nBool := SendWithResponse(@nSend, @nRecv) and
+             (nRecv.FRes = cTTCE_K7_Success);
+    //∂¡ø®
 
+    if nBool then
+         Break
+    else Sleep(cTTCE_Frame_SendInterval);
+  end;
+
+  if not nBool then Exit;
   Result:= Copy(nRecv.FData, 3, 4);
   //∏¥÷∆4Œªø®∫≈
   Result := ParseCardNO(Result, True);
