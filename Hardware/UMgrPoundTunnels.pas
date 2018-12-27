@@ -102,6 +102,7 @@ type
     FCOMPort: TComPort;              //读写对象
     FCOMBuff: string;                //通讯缓冲
     FCOMData: string;                //通讯数据
+    FCOMValue: Double;               //有效值
     FCOMDataEx: string;              //原始数据
     
     FEventTunnel: PPTTunnelItem;     //接收通道
@@ -149,6 +150,8 @@ type
     //同步锁定
     FConnector: TPoundTunnelConnector;
     //套接字链路
+    FOnTunnelData: TOnTunnelDataEventEx;
+    //数据触发事件
   protected
     procedure ClearList(const nFree: Boolean);
     //清理资源
@@ -173,6 +176,7 @@ type
     function GetTunnel(const nID: string): PPTTunnelItem;
     //检索数据
     property Tunnels: TList read FTunnels;
+    property OnData: TOnTunnelDataEventEx read FOnTunnelData write FOnTunnelData;
     //属性相关
   end;
 
@@ -190,6 +194,7 @@ end;
 constructor TPoundTunnelManager.Create;
 begin
   FConnector := nil;
+  FOnTunnelData := nil;
   FPorts := TList.Create;
   FCameras := TList.Create;
 
@@ -709,8 +714,8 @@ begin
 
   FSyncLock.Enter;
   try
-    if not (Assigned(nPort.FEventTunnel) and
-            Assigned(nPort.FEventTunnel.FOnData)) then Exit;
+    if not (Assigned(FOnTunnelData) or (Assigned(nPort.FEventTunnel) and
+            Assigned(nPort.FEventTunnel.FOnData))) then Exit;
     //无接收事件
 
     nPort.FCOMData := nPort.FCOMData + nPort.FCOMBuff;
@@ -721,15 +726,26 @@ begin
       begin
         nVal := StrToFloat(nPort.FCOMData) * nPort.FDataEnlarge;
         nVal := Float2Float(nVal, nPort.FDataPrecision, False);
-        //精度调整
 
-        nPort.FEventTunnel.FOnData(nVal);
+        nPort.FCOMValue := nVal;
         nPort.FCOMData := '';
-        //do event
+        //clear data
 
-        if Assigned(nPort.FEventTunnel.FOnDataEx) then
-          nPort.FEventTunnel.FOnDataEx(nVal, nPort);
+        if Assigned(FOnTunnelData) then
+          FOnTunnelData(nPort.FCOMValue, nPort);
         //xxxxx
+
+        if Assigned(nPort.FEventTunnel) then
+        begin
+          if Assigned(nPort.FEventTunnel.FOnData) then
+            nPort.FEventTunnel.FOnData(nPort.FCOMValue);
+          //xxxxx
+
+
+          if Assigned(nPort.FEventTunnel.FOnDataEx) then
+            nPort.FEventTunnel.FOnDataEx(nPort.FCOMValue, nPort);
+          //xxxxx
+        end;
       end;
     except
       on E: Exception do
@@ -909,7 +925,8 @@ end;
 
 //Desc: 读取磅重
 function TPoundTunnelConnector.ReadPound: Boolean;
-var nBuf: TIdBytes;
+var nVal: Double;
+    nBuf: TIdBytes;
 begin
   Result := False;
   try
@@ -939,7 +956,20 @@ begin
       Exit;
     end;
 
-    Synchronize(DoSyncEvent);
+    nVal := StrToFloat(FActivePort.FCOMData) * FActivePort.FDataEnlarge;
+    nVal := Float2Float(nVal, FActivePort.FDataPrecision, False);
+
+    FActivePort.FCOMValue := nVal;
+    FActivePort.FCOMData := '';
+    //clear data
+
+    if Assigned(FOwner.FOnTunnelData) then
+      FOwner.FOnTunnelData(FActivePort.FCOMValue, FActivePort);
+    //xxxxx
+
+    if Assigned(FActivePort.FEventTunnel) and
+       Assigned(FActivePort.FEventTunnel.FOnData) then
+      Synchronize(DoSyncEvent);
     Result := True;
   except
     FOwner.DisconnectClient(FActiveClient);
@@ -950,23 +980,14 @@ end;
 
 //Desc: 处理主进程事件
 procedure TPoundTunnelConnector.DoSyncEvent;
-var nVal: Double;
 begin
-  if Assigned(FActivePort.FEventTunnel) and
-     Assigned(FActivePort.FEventTunnel.FOnData) then
-  begin
-    nVal := StrToFloat(FActivePort.FCOMData) * FActivePort.FDataEnlarge;
-    nVal := Float2Float(nVal, FActivePort.FDataPrecision, False);
-    //pound data
+  if Assigned(FActiveTunnel.FOnData) then
+    FActiveTunnel.FOnData(FActivePort.FCOMValue);
+  //do event
 
-    FActiveTunnel.FOnData(nVal);
-    FActiveTunnel.FPort.FCOMData := '';
-    //do event
-
-    if Assigned(FActiveTunnel.FOnDataEx) then
-      FActiveTunnel.FOnDataEx(nVal, FActivePort);
-    //xxxxx
-  end;
+  if Assigned(FActiveTunnel.FOnDataEx) then
+    FActiveTunnel.FOnDataEx(FActivePort.FCOMValue, FActivePort);
+  //xxxxx
 end;
 
 initialization
