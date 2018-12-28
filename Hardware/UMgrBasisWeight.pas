@@ -19,14 +19,19 @@ type
     FID           : string;            //通道标识
     FBill         : string;            //交货单据
     FValue        : Double;            //待装量
-    FValHas       : Double;            //已装量
-    FValMax       : Double;            //最大数据
-    FValTunnel    : Double;            //通道数据
-    FValUpdate    : Int64;             //通道更新
+    FValHas       : Double;            //已装量:平稳后的有效值
+    FValMax       : Double;            //最大数据:地磅出现的最大数值
+    FValTunnel    : Double;            //通道数据:当前地磅数据
+    FValUpdate    : Int64;             //通道更新:通道数据的更新时间
+    FValAdjust    : Double;            //冲击修正:定值,物料下落产生的重量
+    FValPercent   : Double;            //比例修正:百分比,防止发超的保留量
+    FWeightMax    : Double;            //修正后可装量:定值,装车中允许的最大量
 
     FStatusNow    : TBWStatus;         //当前状态
     FStatusNew    : TBWStatus;         //新状态
     FStableDone   : Boolean;           //平稳状态
+    FWeightDone   : Boolean;           //装车完成:完成装车量
+    FWeightOver   : Boolean;           //装车结束:完成并保存完毕
 
     //TimeOut
     FTONoData     : Integer;           //长时间无数据
@@ -52,7 +57,7 @@ type
     FWaiter: TWaitObject;
     //等待对象
   protected
-    procedure DoExecute;
+    procedure DoBasisWeight;
     procedure Execute; override;
     //执行业务
     function IsValidSamaple(const nCheckMin: Boolean): Boolean;
@@ -225,6 +230,8 @@ begin
     nTunnel.FBill := '';
     nTunnel.FParams.Clear;
     nTunnel.FStableDone := False;
+    nTunnel.FWeightOver := False;
+    nTunnel.FWeightDone := False;
 
     nTunnel.FValue := 0;
     nTunnel.FValHas := 0;
@@ -232,7 +239,7 @@ begin
     nTunnel.FValTunnel := 0;
     nTunnel.FValUpdate := GetTickCount;
 
-    nTunnel.FValFresh := -1;
+    nTunnel.FValFresh := 0;
     nTunnel.FInitFresh := 0;
     nTunnel.FInitWeight := GetTickCount;
   end;
@@ -305,6 +312,7 @@ begin
       InitTunnelData(nPT, False);
       nPT.FBill := nBill;
       nPT.FValue := nValue;
+      nPT.FWeightMax := nValue + nPT.FValAdjust - nValue * nPT.FValPercent;
     end;
 
     if nParams <> '' then
@@ -368,6 +376,16 @@ begin
       if IsNumber(nStr, False) then
            nTunnel.FTOProceFresh := StrToInt(nStr) * 1000
       else nTunnel.FTOProceFresh := 1 * 1000;
+
+      nStr := nTunnel.FTunnel.FOptions.Values['PreKd'];
+      if IsNumber(nStr, True) then
+           nTunnel.FValPercent := StrToFloat(nStr)
+      else nTunnel.FValPercent := 0;
+
+      nStr := nTunnel.FTunnel.FOptions.Values['PreKdFix'];
+      if IsNumber(nStr, True) then
+           nTunnel.FValAdjust := StrToFloat(nStr)
+      else nTunnel.FValAdjust := 0;
     end;
 
     InitTunnelData(nTunnel, False);
@@ -457,11 +475,10 @@ begin
         if FActive.FValFresh <> FActive.FValTunnel then
         begin
           if (FActive.FValFresh = 0) and (FActive.FValTunnel > 0) then
-            FOwner.DoChangeEvent(FActive, bsStart);
-          //开始称重
+               FOwner.DoChangeEvent(FActive, bsStart)
+          else FOwner.DoChangeEvent(FActive, bsProcess);
 
           FActive.FValFresh := FActive.FValTunnel;
-          FOwner.DoChangeEvent(FActive, bsProcess);
         end;
 
         FActive.FInitFresh := GetTickCount;
@@ -490,10 +507,10 @@ begin
         Continue;
       end;
 
-      if (nItv >= 1500) or (nItv < 300) then Continue;
-      //更新超时 或 更新过频 
+      if (nItv >= 3200) or (nItv < 300) then Continue;
+      //更新超时 或 更新过频
 
-      DoExecute;
+      DoBasisWeight;
       if Terminated then Break;
     finally
       FOwner.FSyncLock.Leave;
@@ -530,8 +547,15 @@ begin
   Result := True;
 end;
 
-procedure TBasisWeightWorker.DoExecute;
+procedure TBasisWeightWorker.DoBasisWeight;
 begin
+  if (not FActive.FWeightDone) and
+     (FActive.FValTunnel >= FActive.FWeightMax) then //未装车完成
+  begin
+    FActive.FWeightDone := True;
+    FOwner.DoChangeEvent(FActive, bsDone);
+  end; 
+
   FActive.FValSamples[FActive.FSampleIndex] := FActive.FValTunnel;
   Inc(FActive.FSampleIndex);
 
@@ -556,26 +580,36 @@ begin
     begin
       FActive.FStableDone := True;
       FActive.FValHas := FActive.FValTunnel;
-      FOwner.DoChangeEvent(FActive, bsStable);
 
-      if not FActive.FStableDone then
-        FOwner.InitTunnelData(FActive, True);
-      //重置样本
+      if not FActive.FWeightOver then //未完成保存
+      begin
+        FOwner.DoChangeEvent(FActive, bsStable);
+        if not FActive.FStableDone then
+          FOwner.InitTunnelData(FActive, True);
+        //reset simples
+
+        if FActive.FStableDone and FActive.FWeightDone then
+          FActive.FWeightOver := True;
+        //装车完成且成功保存
+      end;
     end;
 
     if (FActive.FValTunnel = 0) and
        (FActive.FValMax > 0) and IsValidSamaple(False) then //装完下磅
     begin
-      if FActive.FValHas <= 0 then
+      if not FActive.FWeightOver then //未保存平稳数据
+      begin
         FActive.FValHas := FActive.FValMax;
-      //使用最大值
+        FOwner.DoChangeEvent(FActive, bsStable);
+      end;
 
       FActive.FStableDone := True;
-      FOwner.DoChangeEvent(FActive, bsDone);
+      FOwner.DoChangeEvent(FActive, bsClose); //关闭业务
+      FOwner.InitTunnelData(FActive, False);
 
-      if FActive.FStableDone then
-        FOwner.InitTunnelData(FActive, False);
-      //关闭业务
+      WriteLog(Format('通道[ %s.%s ]车辆已下磅.', [
+        FActive.FID, FActive.FTunnel.FName]));
+      //xxxxx
     end;
   end;
 end;
