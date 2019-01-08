@@ -113,13 +113,13 @@ begin
       
       for nRF in nType.GetFields do
       begin
-        nBool := (nBase = nRF.Name) or (nBase = sAllManager);
+        nBool := (nBase = nRF.FieldType.Name) or (nBase = sAllManager);
         if not nBool then Continue;
         
         if nRF.FieldType.TypeKind = tkClass then
         begin
           CheckSupport(nCallClass, nRF.Name, nRF.GetValue(@gMG).AsObject);
-          if nBase <> sAllManager then           
+          if nBase <> sAllManager then
             Break; 
           //match done  
         end else

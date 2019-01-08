@@ -42,7 +42,7 @@ type
   end;
 
   TObjectLockFilter = reference to function(const nObject: TObject;
-    const nData: Pointer): Boolean;
+    const nData: Pointer; var nTimes: Integer): Boolean;
   //锁定时筛选
 
   TObjectPoolManager = class(TManagerBase)
@@ -70,9 +70,9 @@ type
       const nReset: TObjectResetOne = nil): Integer;
     procedure NewNormalClass;
     //注册类型
-    function Lock(const nClass: TClass; const nNew: TObjectNewOne = nil;
-      const nData: PPointer = nil;
-      const nFilter: TObjectLockFilter = nil): TObject;
+    function Lock(const nClass: TClass; nNew: TObjectNewOne = nil;
+      const nData: PPointer = nil; const nFilter: TObjectLockFilter = nil;
+      const nLockNil: Boolean = False): TObject;
     procedure Release(const nObject: TObject; const nReset: Boolean = True);
     //锁定释放
     function GetData(const nClass: TClass; const nObj: TObject): Pointer;
@@ -256,20 +256,21 @@ begin
 end;
 
 //Date: 2017-03-23
-//Parm: 对象类型;创建方法;扩展数据;筛选策略
+//Parm: 对象类型;创建方法;扩展数据;筛选策略;允许返空
 //Desc: 返回nClass的对象指针
-function TObjectPoolManager.Lock(const nClass:TClass; const nNew:TObjectNewOne;
-  const nData: PPointer; const nFilter: TObjectLockFilter): TObject;
-var nIdx,i: Integer;
+function TObjectPoolManager.Lock(const nClass:TClass; nNew:TObjectNewOne;
+  const nData: PPointer; const nFilter: TObjectLockFilter;
+  const nLockNil: Boolean): TObject;
+var nIdx,i,nVal,nRepeat,nTimes: Integer;
     nItem: PObjectPoolItem;
 begin
   SyncEnter;
   try    
-    Result := nil; 
+    Result := nil;
     if FSrvClosed = cYes then
       raise Exception.Create(ClassName + ': Not Support "Lock" When Closing.');
     //pool will close
-                                
+
     nIdx := FindPool(nClass);
     if (not Assigned(nNew)) and ((nIdx < 0) or 
        (not Assigned(FPool[nIdx].FNewOne))) then
@@ -286,35 +287,51 @@ begin
         FItems := TList.Create;
       //xxxxx
 
-      if Assigned(nNew) and (not Assigned(FNewOne)) then
-        FNewOne := nNew;
+      if not Assigned(nNew) then
+        nNew := FNewOne;
       //xxxxx
 
-      for i := FItems.Count - 1 downto 0 do
-      begin
-        nItem := FItems[i];
-        if (not nItem.FUsed) and (
-           (not Assigned(nFilter)) or nFilter(nItem.FObject, nItem.FData)) then
-        begin
-          Result := nItem.FObject;
-          nItem.FUsed := True;
+      nTimes := 0;
+      nRepeat := 1;
+      //default once
 
-          if Assigned(nData) then
-            nData^ := nItem.FData;
-          Break;
+      while nRepeat > nTimes do
+      begin
+        Inc(nTimes);
+        //counter
+
+        for i := FItems.Count - 1 downto 0 do
+        begin
+          nItem := FItems[i];
+          nVal := nTimes;
+
+          if (not nItem.FUsed) and ((not Assigned(nFilter)) or
+              nFilter(nItem.FObject, nItem.FData, nVal)) then
+          begin
+            Result := nItem.FObject;
+            nItem.FUsed := True;
+
+            if Assigned(nData) then
+              nData^ := nItem.FData;
+            Break;
+          end;
+
+          if nVal > nTimes then
+           nRepeat := nVal;
+          //更新轮询次数
         end;
+
+        if Assigned(Result) then Break;
+        //有轮询结果
       end;
 
-      if not Assigned(Result) then
+      if not (Assigned(Result) or nLockNil) then
       begin
         New(nItem);
         FItems.Add(nItem);
         FillChar(nItem^, SizeOf(TObjectPoolItem), #0);
         
-        if Assigned(nNew) then         
-             nItem.FObject := nNew(nItem.FData)
-        else nItem.FObject := FNewOne(nItem.FData);
-
+        nItem.FObject := nNew(nItem.FData);
         Result := nItem.FObject;
         nItem.FUsed := True;
 
@@ -324,17 +341,20 @@ begin
       end;
     end;
 
-    Inc(FPool[nIdx].FNumLocked);
-    Inc(Self.FNumLocked);
-    //inc counter
+    if Assigned(Result) then
+    begin
+      Inc(FPool[nIdx].FNumLocked);
+      Inc(Self.FNumLocked);
+      //inc counter
 
-    if FPool[nIdx].FNumLockAll < High(Int64) then      
-         Inc(FPool[nIdx].FNumLockAll)
-    else FPool[nIdx].FNumLockAll := 0;
+      if FPool[nIdx].FNumLockAll < High(Int64) then
+           Inc(FPool[nIdx].FNumLockAll)
+      else FPool[nIdx].FNumLockAll := 0;
 
-    if Self.FNumLockAll < High(Int64) then
-         Inc(Self.FNumLockAll)
-    else Self.FNumLockAll := 0;    
+      if Self.FNumLockAll < High(Int64) then
+           Inc(Self.FNumLockAll)
+      else Self.FNumLockAll := 0;
+    end;
   finally
     SyncLeave;
   end;

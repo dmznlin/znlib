@@ -12,7 +12,7 @@ unit UWaitItem;
 interface
 
 uses
-  System.Classes, System.SysUtils, Winapi.Windows, ULibFun;
+  System.Classes, System.SysUtils, Winapi.Windows, UManagerGroup, ULibFun;
 
 type
   TWaitObject = class(TObject)
@@ -64,9 +64,12 @@ type
 
   TWaitTimer = class(TObject)
   strict private
-    class var
-      FTimer: TWaitTimer;
-      {*计时器*}
+    type
+      PTimerItem = ^TTimerItem;
+      TTimerItem = record
+        FThread: THandle;    //线程句柄
+        FLastActive: UInt64; //上次活动
+      end;
   private
     FFrequency: Int64;
     {*CPU频率*}
@@ -76,7 +79,7 @@ type
     {*计时结果*}
   public
     constructor Create;
-    class procedure ManageTimer(const nInit: Boolean); static;
+    class procedure ManageTimer; static;
     {*创建释放*}
     procedure StartTime;
     class procedure StartHighResolutionTimer; static;
@@ -242,35 +245,106 @@ begin
 end;
 
 //Date: 2017-04-17
-//Parm: 是否初始化
-//Desc: 初始化 or 释放全局计时器对象
-class procedure TWaitTimer.ManageTimer(const nInit: Boolean);
+//Desc: 注册计时器对象
+class procedure TWaitTimer.ManageTimer;
+var nItem: PTimerItem;
 begin
-  if nInit then
-       TWaitTimer.FTimer := nil
-  else FreeAndNil(TWaitTimer.FTimer);
+  gMG.CheckSupport('TWaitTimer', ['TObjectPoolManager']);
+  //检查依赖
+
+  gMG.FObjectPool.NewClass(TWaitTimer,
+    function(var nData: Pointer):TObject
+    begin
+      Result := TWaitTimer.Create;
+      New(nItem);
+      nData := nItem;
+
+      nItem.FThread := 0;
+      nItem.FLastActive := 0;
+    end,
+
+    procedure(const nObj: TObject; const nData: Pointer)
+    begin
+      TWaitTimer(nObj).Free;
+      Dispose(PTimerItem(nData));
+    end);
+  //xxxxx
 end;
 
 //Date: 2017-04-17
 //Desc: 开始一个计数
 class procedure TWaitTimer.StartHighResolutionTimer;
+var nCurID: THandle;
+    nItem: PTimerItem;
+    nTimer: TWaitTimer;
 begin
-  if not Assigned(TWaitTimer.FTimer) then
-    TWaitTimer.FTimer := TWaitTimer.Create;
-  TWaitTimer.FTimer.StartTime;
+  nTimer := nil;
+  try
+    nCurID := GetCurrentThreadId;
+    nTimer := gMG.FObjectPool.Lock(TWaitTimer, nil, @nItem,
+      function(const nObj: TObject; const nData: Pointer;
+       var nTimes: Integer): Boolean
+      begin
+        nItem := nData;
+        if nTimes = 1 then //首轮扫描
+        begin
+          Result := (not Assigned(nItem)) or (nItem.FThread = nCurID);
+          //相同线程
+        end else
+        begin
+          Result := (not Assigned(nItem)) or ((nItem.FThread = 0) or
+                    (GetTickCount - nItem.FLastActive > 60 * 60 * 1000));
+          //空闲对象
+        end;
+
+        if nTimes = 1 then
+          nTimes := 2;
+        //扫描2轮
+      end) as TWaitTimer;
+    //xxxxx
+
+    nTimer.StartTime;
+    nItem.FThread := nCurID;
+    nItem.FLastActive := GetTickCount64;
+  finally
+    gMG.FObjectPool.Release(nTimer);
+  end;
 end;
 
 //Date: 2017-04-17
 //Desc: 返回计数结果
 class function TWaitTimer.GetHighResolutionTimerResult: Int64;
+var nCurID: THandle;
+    nItem: PTimerItem;
+    nTimer: TWaitTimer;
 begin
-  if Assigned(TWaitTimer.FTimer) then
-       Result := TWaitTimer.FTimer.EndTime
-  else Result := 0;
+  nTimer := nil;
+  try
+    Result := 0;
+    nCurID := GetCurrentThreadId;
+
+    nTimer := gMG.FObjectPool.Lock(TWaitTimer, nil, @nItem,
+      function(const nObj: TObject; const nData: Pointer;
+       var nTimes: Integer): Boolean
+      begin
+        nItem := nData;
+        Result := (not Assigned(nItem)) or (nItem.FThread = nCurID);
+      end, True) as TWaitTimer;
+    //xxxxx
+
+    if Assigned(nTimer) then
+    begin
+      Result := nTimer.EndTime;
+      nItem.FThread := 0;
+      nItem.FLastActive := 0;
+    end;
+  finally
+    gMG.FObjectPool.Release(nTimer);
+  end;
 end;
 
 initialization
-  TWaitTimer.ManageTimer(True);
+  TWaitTimer.ManageTimer;
 finalization
-  TWaitTimer.ManageTimer(False);  
+  //nothing
 end.
