@@ -26,7 +26,7 @@ type
 
   PMPDataMain = ^TMPDataMain;
   TMPDataMain = record
-    FType: Int64;                        //数据类型
+    FType: Cardinal;                     //数据类型
     FFlag: string;                       //数据表示
     FDesc: string;                       //类型描述
     FNumOnce: Byte;                      //单次分配
@@ -75,7 +75,7 @@ type
     //使用标记
     function GetDataByMain(const nMain: PMPDataMain): Pointer;
     //获取数据
-    function FindDataMain(const nType: Int64 = 0;
+    function FindDataMain(const nType: Cardinal = 0;
      const nFlag: string = ''): Integer;
     //检索数据
   public
@@ -85,11 +85,11 @@ type
     class procedure RegistMe(const nReg: Boolean); override;
     //注册管理器    
     function NewType(const nFlag,nDesc: string; const nNew: TMPDataNew;
-     const nDispose: TMPDataDispose; const nNumOnce: Byte = 1): Int64;
-    procedure DeleteType(const nType: Int64); overload;
+     const nDispose: TMPDataDispose; const nNumOnce: Byte = 1): Cardinal;
+    procedure DeleteType(const nType: Cardinal); overload;
     procedure DeleteType(const nFlag: string); overload;
     //注册释放
-    function LockData(const nType: Int64): Pointer; overload;
+    function LockData(const nType: Cardinal): Pointer; overload;
     function LockData(const nFlag: string): Pointer; overload;
     procedure Release(const nData: Pointer);
     //锁定释放 
@@ -207,7 +207,7 @@ end;
 //Date: 2017-04-14
 //Parm: 类型编号;类型标识
 //Desc: 检索类型为nType的主项
-function TMemDataManager.FindDataMain(const nType: Int64;
+function TMemDataManager.FindDataMain(const nType: Cardinal;
  const nFlag: string): Integer;
 var nIdx: Integer;
 begin
@@ -227,7 +227,7 @@ end;
 //Desc: 注册一个描述为nDesc的数据类型,返回类型编号
 function TMemDataManager.NewType(const nFlag,nDesc: string;
   const nNew: TMPDataNew; const nDispose: TMPDataDispose;
-  const nNumOnce: Byte): Int64;
+  const nNumOnce: Byte): Cardinal;
 var nMain: PMPDataMain;
 begin
   if not (Assigned(nNew) and Assigned(nDispose)) then
@@ -269,7 +269,7 @@ end;
 //Date: 2017-04-15
 //Parm: 类型编号
 //Desc: 注销编号为nType的数据类型
-procedure TMemDataManager.DeleteType(const nType: Int64);
+procedure TMemDataManager.DeleteType(const nType: Cardinal);
 var nIdx: Integer;
 begin
   SyncEnter;
@@ -398,7 +398,7 @@ end;
 //Date: 2017-04-15
 //Parm: 类型编号
 //Desc: 返回类型为nType的一个数据项,从缓存中取空闲,或新分配
-function TMemDataManager.LockData(const nType: Int64): Pointer;
+function TMemDataManager.LockData(const nType: Cardinal): Pointer;
 var nIdx: Integer;
 begin
   SyncEnter;

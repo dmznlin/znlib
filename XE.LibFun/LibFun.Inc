@@ -13,7 +13,17 @@
   //10.2 tokyo delphi支持序列化
 {$ENDIF}
 
-{$DEFINE RemObjects}
+{-------------------------------------------------------------------------------
+ 以下功能模块,需要在项目中定义编译条件,操作方法(以Delphi_10.2为例):
+ 1.菜单 - Project - Options - Delphi Compiler - Compiling
+ 2.Target - All configurations - Conditional defines
+ 3.添加RemObjects开启RO支持,添加ThreadPool开启线程池等
+-------------------------------------------------------------------------------}
+{$IFNDEF HasFMX}
+  {$DEFINE HasVCL}
+{$ENDIF}
+//组件类别
+
 {$IFDEF RemObjects}
   {.$DEFINE RO_v90}
   //使用ver9.0的RemObjects
@@ -21,7 +31,7 @@
   //启用通道管理器
 {$ENDIF}
 
-{$IFNDEF HasFMX}
-  {$DEFINE HasVCL}
+{$IFDEF ThreadPool}
+  {$DEFINE EnableThreadPool}
+  //启用线程池
 {$ENDIF}
-//组件类别.由于Delphi没有足够信息区分FMX和VCL,所以需要在项目中手工添加编译条件.

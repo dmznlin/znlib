@@ -120,7 +120,7 @@ type
 
   TSerialIDManager = class(TManagerBase)
   private
-    FBase: Int64;
+    FBase: Cardinal;
     //编码基数
     FTimeStamp: string;
     //时间戳
@@ -129,7 +129,7 @@ type
     //创建释放
     class procedure RegistMe(const nReg: Boolean); override;
     //注册管理器    
-    function GetID: Int64;
+    function GetID: Cardinal;
     function GetSID: string;
     //获取标识
     procedure GetStatus(const nList: TStrings;
@@ -417,10 +417,10 @@ begin
   end;
 end;
 
-function TSerialIDManager.GetID: Int64;
+function TSerialIDManager.GetID: Cardinal;
 begin
   SyncEnter;
-  if FBase < High(Int64) then
+  if FBase < High(Cardinal) then
        Inc(FBase)
   else FBase := 1;
 

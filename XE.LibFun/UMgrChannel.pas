@@ -109,7 +109,6 @@ begin
   end;
 end;
 
-
 //Desc: 清理通道对象
 procedure TChannelManager.ClearChannel;
 var nIdx: Integer;

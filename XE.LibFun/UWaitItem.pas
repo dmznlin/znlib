@@ -12,7 +12,7 @@ unit UWaitItem;
 interface
 
 uses
-  System.Classes, System.SysUtils, Winapi.Windows, UManagerGroup, ULibFun;
+  System.Classes, System.SysUtils, Winapi.Windows;
 
 type
   TWaitObject = class(TObject)
@@ -92,6 +92,9 @@ type
   end;
 
 implementation
+
+uses
+  UManagerGroup, ULibFun;
 
 constructor TWaitObject.Create(nEventName: string);
 begin

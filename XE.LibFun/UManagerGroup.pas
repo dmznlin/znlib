@@ -9,6 +9,7 @@ interface
 
 uses
   System.Rtti, System.SysUtils, UBaseObject, UObjectPool, UMemDataPool,
+  {$IFDEF EnableThreadPool}UThreadPool,{$ENDIF}
   {$IFDEF EnableChannelManager}UMgrChannel,{$ENDIF}
   ULibFun;
 
@@ -24,16 +25,14 @@ type
     //对象缓冲池
     FMemDataManager: TMemDataManager;
     //内存管理器
-
-    {$IFDEF EnableChannelManager}
-    FChannelManager: TChannelManager;
-    //RemObjects通道管理器
-    {$ENDIF}
-
     FSerialIDManager: TSerialIDManager;
     //编号管理器
     FObjectManager: TCommonObjectManager;
     //对象管理器
+    {$IFDEF EnableThreadPool}FThreadPool: TThreadPoolManager;{$ENDIF}
+    //线程管理器
+    {$IFDEF EnableChannelManager}FChannelManager: TChannelManager;{$ENDIF}
+    //RemObjects通道管理器
   public
     procedure RegistAll(const nReg: Boolean);
     //注册所有
