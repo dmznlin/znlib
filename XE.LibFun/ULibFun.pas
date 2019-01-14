@@ -213,6 +213,8 @@ type
     //change time long to chinese string
     class function DateTimeSerial: string; static;
     //serial id by date
+    class function GetTickCountDiff(const nCount: Cardinal): Cardinal;
+    //result = gettickcount - nCount
   end;
 
 implementation
@@ -1558,6 +1560,17 @@ class function TDateTimeHelper.DateTimeSerial: string;
 begin
   Sleep(1); //must be
   Result := FormatDateTime('yyyymmddhhnnsszzz', Now());
+end;
+
+//Date: 2019-01-11
+//Parm: 上一次调用GetTickCount的值
+//Desc: 计算GetTickCount - nCount的差值,需校正溢出归零问题
+class function TDateTimeHelper.GetTickCountDiff(const nCount:Cardinal):Cardinal;
+begin
+  Result := GetTickCount();
+  if Result >= nCount then
+       Result := Result - nCount
+  else Result := Result + High(Cardinal) - nCount + 1;
 end;
 
 end.
