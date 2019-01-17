@@ -150,6 +150,9 @@ type
     {*拥有者*}
     FWaiter: TWaitObject;
     {*等待对象*}
+    FLastRunDelayVal: Cardinal;
+    FLastRunDelayInc: Cardinal;
+    {*状态标记*}
   protected
     procedure DoMonitor;
     procedure Execute; override;
@@ -448,6 +451,10 @@ begin
         nWorker := FWorkers[nIdx];
         if nWorker.FWorkerID <> nWorkerID then Continue;
 
+        if nWorker.FStartDelete < 1 then
+          nWorker.FStartDelete := GetTickCount;
+        //删除标记
+
         if nWorker.FStartCall = 0 then //未被调用
         begin
           DeleteWorker(nIdx);
@@ -488,6 +495,8 @@ begin
         nWorker.FLastCall := 0;
       end;
     end;
+
+    ValidWorkerNumber(False);
   finally
     SyncLeave;
   end;
@@ -515,6 +524,8 @@ begin
         Break;
       end;
     end;
+
+    ValidWorkerNumber(False);
   finally
     SyncLeave;
   end;
@@ -539,6 +550,9 @@ begin
       nWorker := FWorkers[nIdx];
       if nWorker.FWorker.FParentObj = nParent then
       begin
+        nWorker.FWorker.FCallTimes := 0;
+        //停止标记
+
         nLen := Length(nWorkers);
         SetLength(nWorkers, nLen + 1);
         nWorkers[nLen] := nWorker.FWorkerID;
@@ -572,14 +586,16 @@ begin
         nWorker := FWorkers[nIdx];
         if nWorker.FWorkerID <> nWorkerID then Continue;
 
-        if nWorker.FStartCall = 0 then //未被调用
+        if nWorker.FWorker.FCallTimes > 0 then
         begin
           nWorker.FWorker.FCallTimes := 0;
+          //停止标记
           if nUpdateValid then
             ValidWorkerNumber(False);
-          Exit;
+          //xxxxx
         end;
 
+        if nWorker.FStartCall = 0 then Exit; //未被调用
         nExists := True;
         Break;
       end;
@@ -779,6 +795,9 @@ begin
   FreeOnTerminate := False;
 
   FOwner := AOwner;
+  FLastRunDelayVal := 0;
+  FLastRunDelayInc := 0;
+
   FWaiter := TWaitObject.Create();
   FWaiter.Interval := 10 * 1000;
 end;
@@ -963,9 +982,17 @@ begin
 
   with FOwner.FStatus do
   begin
-    if (FRunDelayNow >= 1000) and (FNumRunners < FNumWorkerValid) then
+    if (FRunDelayNow >= 1000) and (FNumRunners < FNumWorkerValid) and (
+       (FRunDelayNow <> FLastRunDelayVal) or (TDateTimeHelper.
+        GetTickCountDiff(FLastRunDelayInc) >= FRunDelayNow)) then
     begin
-      AdjustRunner(True, 1);
+      FLastRunDelayVal := FRunDelayNow;
+      FLastRunDelayInc := GetTickCount();
+      nVal := Trunc(FRunDelayNow / 2000);
+
+      if nVal < 1 then 
+        nVal := 1;      
+      AdjustRunner(True, nVal);
       //运行延迟过大,增加线程
     end;
   end;
@@ -1006,6 +1033,8 @@ var nIdx: Integer;
   procedure ScanActiveWorker;
   begin
     nLoop := False;
+    if FOwner.FWorkerIndex >= FOwner.FWorkers.Count then
+      FOwner.FWorkerIndex := 0;
     nIdx := FOwner.FWorkerIndex;
 
     while FOwner.FWorkerIndex < FOwner.FWorkers.Count do
