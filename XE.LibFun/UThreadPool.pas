@@ -384,10 +384,11 @@ begin
     FWorkers.Add(nPWorker);
     FillChar(nPWorker^, SizeOf(TThreadWorker), #0);
 
+    nPWorker.FRunner := -1;
     nPWorker.FWorker := nWorker^;
     nPWorker.FWorkerID := gMG.FSerialIDManager.GetID;
-    Inc(FStatus.FNumWorkers);
 
+    Inc(FStatus.FNumWorkers);
     if FStatus.FNumWorkers > FStatus.FNumWorkerMax then
       FStatus.FNumWorkerMax := FStatus.FNumWorkers;
     ValidWorkerNumber(False);
@@ -438,7 +439,7 @@ end;
 procedure TThreadPoolManager.WorkerDelete(const nWorkerID: Cardinal;
  const nUpdateValid: Boolean);
 var nIdx: Integer;
-    nExists: Boolean;
+    nExists,nInMain: Boolean;
     nWorker: PThreadWorker;
 begin
   while True do
@@ -455,9 +456,17 @@ begin
           nWorker.FStartDelete := GetTickCount;
         //删除标记
 
-        if nWorker.FStartCall = 0 then //未被调用
+        {删除时需要等待调用结束:
+          1.若删除操作由主线程发起,则主线程处于锁定状态.
+          2.若Worker在线程中执行时,使用Synchronize同步VCL操作.
+          3.则以上两步操作会死锁,所以主线程调用时延迟清理.}
+        nInMain := GetCurrentThreadId = MainThreadID;
+        if (nWorker.FStartCall = 0) or nInMain then
         begin
-          DeleteWorker(nIdx);
+          if (nWorker.FStartCall = 0) or (not nInMain) then
+            DeleteWorker(nIdx);
+          //主线程调用时延迟清理
+
           if nUpdateValid then
             ValidWorkerNumber(False);
           Exit;
@@ -595,7 +604,14 @@ begin
           //xxxxx
         end;
 
-        if nWorker.FStartCall = 0 then Exit; //未被调用
+        {停止时需要等待调用结束:
+          1.若停止操作由主线程发起,则主线程处于锁定状态.
+          2.若Worker在线程中执行时,使用Synchronize同步VCL操作.
+          3.则以上两步操作会死锁,所以主线程调用时不等待.}
+        if (nWorker.FStartCall = 0) or
+           (GetCurrentThreadId = MainThreadID) then Exit;
+        //未被调用或主线程调用
+
         nExists := True;
         Break;
       end;
@@ -978,6 +994,12 @@ begin
         FOwner.IncErrorCounter(nWorker.FWorker.FWorkerName, False);
       //Worker长时间挂起,视为异常
     end;
+
+    if (nWorker.FStartDelete > 0) and (nWorker.FStartCall < 1) then
+    begin
+      FOwner.DeleteWorker(nIdx);
+      //清理在主线程调用中被延迟的Worker
+    end;
   end;
 
   with FOwner.FStatus do
@@ -1148,7 +1170,7 @@ var nIdx: Integer;
       end;
     end;
 
-    FActiveWorker.FRunner := 0;
+    FActiveWorker.FRunner := -1;
     FActiveWorker.FStartCall := 0;
     FActiveWorker.FLastCall := GetTickCount;
 
