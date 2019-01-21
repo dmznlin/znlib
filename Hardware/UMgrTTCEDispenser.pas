@@ -915,17 +915,27 @@ begin
 
   if nStr = cCMD_RecoveryCard then
   begin
-    if (not (HasStatus(nStatus, cTTCE_K7_PosRead) or
-             HasStatus(nStatus, cTTCE_K7_PosOut))) or RecoveryCard() then
-      FOwner.SyncCommand(FActiveDispenser, True, '');
+    if HasStatus(nStatus, cTTCE_K7_PosRead) or
+       HasStatus(nStatus, cTTCE_K7_PosOut) then
+      RecoveryCard();
     //执行收卡
+
+    if not (HasStatus(nDispenser.FLastStatus, cTTCE_K7_PosRead) or
+            HasStatus(nDispenser.FLastStatus, cTTCE_K7_PosOut)) then
+      FOwner.SyncCommand(FActiveDispenser, True, '');
+    //xxxxx
   end else
 
   if nStr = cCMD_CardOut then
   begin
-    if (not HasStatus(nStatus, cTTCE_K7_PosRead)) or SendCardOut() then
+    if HasStatus(nStatus, cTTCE_K7_PosRead) then
+      SendCardOut();
+    //执行发卡
+
+    if not (HasStatus(nDispenser.FLastStatus, cTTCE_K7_PosRead) or
+            HasStatus(nDispenser.FLastStatus, cTTCE_K7_PosOut)) then
       FOwner.SyncCommand(FActiveDispenser, True, '');
-    //执行收卡
+    //xxxxx
   end else
 
   if nStr <> '' then
