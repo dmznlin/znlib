@@ -65,6 +65,8 @@ type
     //创建释放
     class procedure RegistMe(const nReg: Boolean); override;
     //注册管理器
+    function IsExists(const nClass: TClass): Boolean;
+    //是否注册
     function NewClass(const nClass: TClass; const nNew: TObjectNewOne;
       const nFree: TObjectFreeOne = nil;
       const nReset: TObjectResetOne = nil): Integer;
@@ -195,6 +197,19 @@ begin
   begin
     Result := nIdx;
     Exit;
+  end;
+end;
+
+//Date: 2019-01-22
+//Parm: 类型
+//Desc: 检查nClass是否已注册
+function TObjectPoolManager.IsExists(const nClass: TClass): Boolean;
+begin
+  SyncEnter;
+  try
+    Result := not (FindPool(nClass) < 0);
+  finally
+    SyncLeave;
   end;
 end;
 

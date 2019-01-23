@@ -932,8 +932,7 @@ begin
       SendCardOut();
     //Ö´ÐÐ·¢¿¨
 
-    if not (HasStatus(nDispenser.FLastStatus, cTTCE_K7_PosRead) or
-            HasStatus(nDispenser.FLastStatus, cTTCE_K7_PosOut)) then
+    if not HasStatus(nDispenser.FLastStatus, cTTCE_K7_PosRead) then
       FOwner.SyncCommand(FActiveDispenser, True, '');
     //xxxxx
   end else

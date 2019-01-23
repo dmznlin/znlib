@@ -65,7 +65,7 @@ type
   //对象类
 
   TManagerBase = class
-  strict protected 
+  strict protected
     type
       TItem = record
         FClass: TClass;
@@ -119,8 +119,18 @@ type
   end;
 
   TSerialIDManager = class(TManagerBase)
+  public
+    type
+      PSerialID = ^TSerialID;
+      TSerialID = record
+        FID   : Cardinal; //编码基数
+        FLoop : Cardinal; //循环次数
+      end;
+
+      TRelation = (srSame, srBigger, srSmaller);
+      //关系:相同,大于,小于
   private
-    FBase: Cardinal;
+    FBase: TSerialID;
     //编码基数
     FTimeStamp: string;
     //时间戳
@@ -131,7 +141,11 @@ type
     //注册管理器    
     function GetID: Cardinal;
     function GetSID: string;
+    function GetSerialID: TSerialID;
     //获取标识
+    function CompareID(const nA,nB: TSerialID;
+      const nRelation: TRelation): Boolean;
+    //对比标识
     procedure GetStatus(const nList: TStrings;
       const nFriendly: Boolean = True); override;
     //获取状态
@@ -387,7 +401,8 @@ end;
 constructor TSerialIDManager.Create;
 begin
   inherited;
-  FBase := 0;
+  FBase.FID := 0;
+  FBase.FLoop := 0;
 
   with TDateTimeHelper do
   begin
@@ -417,20 +432,49 @@ begin
   end;
 end;
 
-function TSerialIDManager.GetID: Cardinal;
+function TSerialIDManager.GetSerialID: TSerialID;
 begin
   SyncEnter;
-  if FBase < High(Cardinal) then
-       Inc(FBase)
-  else FBase := 1;
+  try
+    if FBase.FID < High(Cardinal) then
+    begin
+      Inc(FBase.FID);
+    end else
+    begin
+      FBase.FID := 1;
+      Inc(FBase.FLoop);
+    end;
 
-  Result := FBase;
-  SyncLeave;
+    Result := FBase;
+  finally
+    SyncLeave;
+  end;
+end;
+
+function TSerialIDManager.GetID: Cardinal;
+begin
+  Result := GetSerialID.FID;
 end;
 
 function TSerialIDManager.GetSID: string;
 begin
-  Result := GetID.ToString;
+  Result := GetSerialID.FID.ToString;
+end;
+
+//Date: 2019-01-22
+//Parm: 标识A,B;关系项
+//Desc: 判断nA,nB是否具有nRelation
+function TSerialIDManager.CompareID(const nA, nB: TSerialID;
+  const nRelation: TRelation): Boolean;
+begin
+  case nRelation of
+   srSame    : Result := (nA.FLoop = nB.FLoop) and (nA.FID = nB.FID);
+   srBigger  : Result := (nA.FLoop > nB.FLoop) or ((
+                         (nA.FLoop = nB.FLoop)) and (nA.FID > nB.FID));
+   srSmaller : Result := (nA.FLoop < nB.FLoop) or ((
+                         (nA.FLoop = nB.FLoop)) and (nA.FID < nB.FID))
+   else        Result := False;
+  end;
 end;
 
 //Date: 2017-04-15
@@ -447,7 +491,8 @@ begin
     
     if not nFriendly then
     begin
-      nList.Add('Base=' + FBase.ToString);
+      nList.Add('Base=' + FBase.FID.ToString);
+      nList.Add('Loop=' + FBase.FLoop.ToString);
       Exit;
     end;
     
@@ -459,7 +504,8 @@ begin
       {$ENDIF}
     end;
   
-    nList.Add(FixData('Base:', FBase));
+    nList.Add(FixData('Base:', FBase.FID));
+    nList.Add(FixData('Loop:', FBase.FLoop));
     nList.Add(FixData('Start On:',  FTimeStamp));
     nList.Add(FixData('Service Now:',  nStr));
   finally
