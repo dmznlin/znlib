@@ -149,13 +149,13 @@ begin
   nIdx := GetMe(TMemDataManager);
   if nReg then
   begin     
-    if not Assigned(FManagers[nIdx].FManager) then
-      FManagers[nIdx].FManager := TMemDataManager.Create;
-    gMG.FMemDataManager := FManagers[nIdx].FManager as TMemDataManager; 
+    if not Assigned(gMG.FManagers[nIdx].FManager) then
+      gMG.FManagers[nIdx].FManager := TMemDataManager.Create;
+    gMG.FMemDataManager := gMG.FManagers[nIdx].FManager as TMemDataManager;
   end else
   begin
     gMG.FMemDataManager := nil;
-    FreeAndNil(FManagers[nIdx].FManager);    
+    FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
 end;
 

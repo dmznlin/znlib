@@ -137,13 +137,13 @@ begin
   nIdx := GetMe(TObjectPoolManager);
   if nReg then
   begin     
-    if not Assigned(FManagers[nIdx].FManager) then
-      FManagers[nIdx].FManager := TObjectPoolManager.Create;
-    gMG.FObjectPool := FManagers[nIdx].FManager as TObjectPoolManager; 
+    if not Assigned(gMG.FManagers[nIdx].FManager) then
+      gMG.FManagers[nIdx].FManager := TObjectPoolManager.Create;
+    gMG.FObjectPool := gMG.FManagers[nIdx].FManager as TObjectPoolManager;
   end else
   begin
     gMG.FObjectPool := nil;
-    FreeAndNil(FManagers[nIdx].FManager);    
+    FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
 end;
 

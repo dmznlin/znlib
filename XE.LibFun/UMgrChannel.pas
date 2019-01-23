@@ -99,13 +99,13 @@ begin
   nIdx := GetMe(TChannelManager);
   if nReg then
   begin
-    if not Assigned(FManagers[nIdx].FManager) then
-      FManagers[nIdx].FManager := TChannelManager.Create;
-    gMG.FChannelManager := FManagers[nIdx].FManager as TChannelManager;
+    if not Assigned(gMG.FManagers[nIdx].FManager) then
+      gMG.FManagers[nIdx].FManager := TChannelManager.Create;
+    gMG.FChannelManager := gMG.FManagers[nIdx].FManager as TChannelManager;
   end else
   begin
     gMG.FChannelManager := nil;
-    FreeAndNil(FManagers[nIdx].FManager);
+    FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
 end;
 

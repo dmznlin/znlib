@@ -303,13 +303,13 @@ begin
   nIdx := GetMe(TThreadPoolManager);
   if nReg then
   begin
-    if not Assigned(FManagers[nIdx].FManager) then
-      FManagers[nIdx].FManager := TThreadPoolManager.Create;
-    gMG.FThreadPool := FManagers[nIdx].FManager as TThreadPoolManager;
+    if not Assigned(gMG.FManagers[nIdx].FManager) then
+      gMG.FManagers[nIdx].FManager := TThreadPoolManager.Create;
+    gMG.FThreadPool := gMG.FManagers[nIdx].FManager as TThreadPoolManager;
   end else
   begin
     gMG.FThreadPool := nil;
-    FreeAndNil(FManagers[nIdx].FManager);
+    FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
 end;
 

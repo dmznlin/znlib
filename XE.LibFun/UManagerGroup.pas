@@ -20,6 +20,15 @@ type
     const 
       sAllManager = 'ALLManager';
       {*常量定义*}
+    type
+      TItem = record
+        FClass: TClass;
+        FManager: TManagerBase;
+      end;
+      {*实例定义*}
+    var
+      FManagers: array of TItem;
+      {*实例列表*}
   public
     FObjectPool: TObjectPoolManager;
     //对象缓冲池

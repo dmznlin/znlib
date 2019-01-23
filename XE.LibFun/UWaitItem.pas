@@ -6,13 +6,25 @@
   &.TWaitObject在EnterWait后进入阻塞,直到Wakeup唤醒.
   &.该对象多线程安全,即A线程EnterWait,B线程Wakeup.
   &.TWaitTimer实现微秒级间隔计数.
+  &.TWaitTimer多线程调用时,自动为每个线程分配计数对象;同线程多次调用时,自动匹配
+    计数对象.
+  &.TWaitTimer同线程调用逻辑:
+    TWaitTimer.StartHighResolutionTimer;      //1
+    sleep(1);
+    TWaitTimer.StartHighResolutionTimer;      //2
+    sleep(2);
+    TWaitTimer.StartHighResolutionTimer;      //3
+    Sleep(3);
+    TWaitTimer.GetHighResolutionTimerResult;  //与3配对
+    TWaitTimer.GetHighResolutionTimerResult;  //与2配对
+    TWaitTimer.GetHighResolutionTimerResult;  //与1配对
 *******************************************************************************}
 unit UWaitItem;
 
 interface
 
 uses
-  System.Classes, System.SysUtils, Winapi.Windows;
+  System.Classes, System.SysUtils, Winapi.Windows, UBaseObject, ULibFun;
 
 type
   TWaitObject = class(TObject)
@@ -67,9 +79,13 @@ type
     type
       PTimerItem = ^TTimerItem;
       TTimerItem = record
-        FThread: THandle;    //线程句柄
-        FLastActive: UInt64; //上次活动
+        FThread    : THandle;   //线程句柄
+        FLastActive: Cardinal;  //上次活动
+        FSerialID  : TSerialID; //序列编号
       end;
+  class var
+    FHasRegist: Boolean;
+    {*注册标记*}
   private
     FFrequency: Int64;
     {*CPU频率*}
@@ -79,8 +95,9 @@ type
     {*计时结果*}
   public
     constructor Create;
-    class procedure ManageTimer; static;
     {*创建释放*}
+    class procedure ManageTimer(const nInit: Boolean); static;
+    {*注册对象*}
     procedure StartTime;
     class procedure StartHighResolutionTimer; static;
     {*开始计时*}    
@@ -94,7 +111,7 @@ type
 implementation
 
 uses
-  UManagerGroup, ULibFun;
+  UManagerGroup;
 
 constructor TWaitObject.Create(nEventName: string);
 begin
@@ -249,10 +266,16 @@ end;
 
 //Date: 2017-04-17
 //Desc: 注册计时器对象
-class procedure TWaitTimer.ManageTimer;
+class procedure TWaitTimer.ManageTimer(const nInit: Boolean);
 var nItem: PTimerItem;
 begin
-  gMG.CheckSupport('TWaitTimer', ['TObjectPoolManager']);
+  if nInit then
+  begin
+    FHasRegist := False;
+    Exit;
+  end;
+
+  gMG.CheckSupport('TWaitTimer', ['TObjectPoolManager', 'TSerialIDManager']);
   //检查依赖
 
   gMG.FObjectPool.NewClass(TWaitTimer,
@@ -264,6 +287,7 @@ begin
 
       nItem.FThread := 0;
       nItem.FLastActive := 0;
+      nItem.FSerialID.FID := 0;
     end,
 
     procedure(const nObj: TObject; const nData: Pointer)
@@ -272,6 +296,8 @@ begin
       Dispose(PTimerItem(nData));
     end);
   //xxxxx
+
+  FHasRegist := True;
 end;
 
 //Date: 2017-04-17
@@ -283,32 +309,25 @@ var nCurID: THandle;
 begin
   nTimer := nil;
   try
+    if not FHasRegist then
+      ManageTimer(False);
     nCurID := GetCurrentThreadId;
+
     nTimer := gMG.FObjectPool.Lock(TWaitTimer, nil, @nItem,
       function(const nObj: TObject; const nData: Pointer;
        var nTimes: Integer): Boolean
       begin
         nItem := nData;
-        if nTimes = 1 then //首轮扫描
-        begin
-          Result := (not Assigned(nItem)) or (nItem.FThread = nCurID);
-          //相同线程
-        end else
-        begin
-          Result := (not Assigned(nItem)) or ((nItem.FThread = 0) or
-                    (GetTickCount - nItem.FLastActive > 60 * 60 * 1000));
-          //空闲对象
-        end;
-
-        if nTimes = 1 then
-          nTimes := 2;
-        //扫描2轮
+        Result := (not Assigned(nItem)) or ((nItem.FThread = 0) or
+          (TDateTimeHelper.GetTickCountDiff(nItem.FLastActive) > 60 * 60 * 1000));
+        //空闲对象
       end) as TWaitTimer;
     //xxxxx
 
     nTimer.StartTime;
     nItem.FThread := nCurID;
-    nItem.FLastActive := GetTickCount64;
+    nItem.FLastActive := GetTickCount;
+    nItem.FSerialID := gMG.FSerialIDManager.GetSerialID;
   finally
     gMG.FObjectPool.Release(nTimer);
   end;
@@ -320,10 +339,12 @@ class function TWaitTimer.GetHighResolutionTimerResult: Int64;
 var nCurID: THandle;
     nItem: PTimerItem;
     nTimer: TWaitTimer;
+    nMaxID: TSerialID;
 begin
   nTimer := nil;
   try
     Result := 0;
+    nMaxID.FID := 0;
     nCurID := GetCurrentThreadId;
 
     nTimer := gMG.FObjectPool.Lock(TWaitTimer, nil, @nItem,
@@ -331,7 +352,25 @@ begin
        var nTimes: Integer): Boolean
       begin
         nItem := nData;
-        Result := (not Assigned(nItem)) or (nItem.FThread = nCurID);
+        if nTimes = 1 then
+        begin
+          Result := False;
+          if nItem.FThread <> nCurID then Exit;
+
+          if (nMaxID.FID = 0) or gMG.FSerialIDManager.CompareID(nItem.FSerialID,
+             nMaxID, srBigger) then
+          begin
+            nMaxID := nItem.FSerialID;
+            //扫描最大序列号
+          end;
+        end else
+        begin
+          Result := (nMaxID.FID > 0) and (nItem.FSerialID.FID = nMaxID.FID);
+        end;
+
+        if nTimes = 1 then
+          nTimes := 2;
+        //扫描2轮
       end, True) as TWaitTimer;
     //xxxxx
 
@@ -347,7 +386,7 @@ begin
 end;
 
 initialization
-  TWaitTimer.ManageTimer;
+  TWaitTimer.ManageTimer(True);
 finalization
   //nothing
 end.

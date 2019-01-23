@@ -65,16 +65,7 @@ type
   //对象类
 
   TManagerBase = class
-  strict protected
-    type
-      TItem = record
-        FClass: TClass;
-        FManager: TManagerBase;
-      end;
-    class var
-      FManagers: array of TItem;
-      //管理器列表   
-  strict private
+  private
     FSyncLock: TCriticalSection;
     //同步锁定
   protected
@@ -118,17 +109,16 @@ type
     //获取状态
   end;
 
-  TSerialIDManager = class(TManagerBase)
-  public
-    type
-      PSerialID = ^TSerialID;
-      TSerialID = record
-        FID   : Cardinal; //编码基数
-        FLoop : Cardinal; //循环次数
-      end;
+  PSerialID = ^TSerialID;
+  TSerialID = record
+    FID   : Cardinal; //编码基数
+    FLoop : Cardinal; //循环次数
+  end;
 
-      TRelation = (srSame, srBigger, srSmaller);
-      //关系:相同,大于,小于
+  TSerialIDRelation = (srSame, srBigger, srSmaller);
+  //关系:相同,大于,小于
+
+  TSerialIDManager = class(TManagerBase)
   private
     FBase: TSerialID;
     //编码基数
@@ -144,7 +134,7 @@ type
     function GetSerialID: TSerialID;
     //获取标识
     function CompareID(const nA,nB: TSerialID;
-      const nRelation: TRelation): Boolean;
+      const nRelation: TSerialIDRelation): Boolean;
     //对比标识
     procedure GetStatus(const nList: TStrings;
       const nFriendly: Boolean = True); override;
@@ -266,8 +256,8 @@ class function TManagerBase.GetMe(const nClass: TClass;
   const nAutoNew: Boolean): Integer;
 var nIdx: Integer;
 begin
-  for nIdx := Low(FManagers) to High(FManagers) do
-  if FManagers[nIdx].FClass = nClass then
+  for nIdx := Low(gMG.FManagers) to High(gMG.FManagers) do
+  if gMG.FManagers[nIdx].FClass = nClass then
   begin
     Result := nIdx;
     Exit;
@@ -276,11 +266,11 @@ begin
   Result := -1;
   if not nAutoNew then Exit;
 
-  Result := Length(FManagers);
+  Result := Length(gMG.FManagers);
   nIdx := Result; 
-  SetLength(FManagers, nIdx + 1);
+  SetLength(gMG.FManagers, nIdx + 1);
 
-  with FManagers[nIdx] do
+  with gMG.FManagers[nIdx] do
   begin
     FClass := nClass;
     FManager := nil;
@@ -309,7 +299,7 @@ begin
   nIdx := GetMe(nClass, False);
   if nIdx < 0 then
        Result := nil
-  else Result := FManagers[nIdx].FManager; 
+  else Result := gMG.FManagers[nIdx].FManager;
 end;
 
 //------------------------------------------------------------------------------
@@ -334,13 +324,13 @@ begin
   nIdx := GetMe(TCommonObjectManager);
   if nReg then
   begin     
-    if not Assigned(FManagers[nIdx].FManager) then
-      FManagers[nIdx].FManager := TCommonObjectManager.Create;
-    gMG.FObjectManager := FManagers[nIdx].FManager as TCommonObjectManager; 
+    if not Assigned(gMG.FManagers[nIdx].FManager) then
+      gMG.FManagers[nIdx].FManager := TCommonObjectManager.Create;
+    gMG.FObjectManager := gMG.FManagers[nIdx].FManager as TCommonObjectManager;
   end else
   begin
     gMG.FObjectManager := nil;
-    FreeAndNil(FManagers[nIdx].FManager);    
+    FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
 end;
 
@@ -422,13 +412,13 @@ begin
   nIdx := GetMe(TSerialIDManager);
   if nReg then
   begin     
-    if not Assigned(FManagers[nIdx].FManager) then
-      FManagers[nIdx].FManager := TSerialIDManager.Create;
-    gMG.FSerialIDManager := FManagers[nIdx].FManager as TSerialIDManager; 
+    if not Assigned(gMG.FManagers[nIdx].FManager) then
+      gMG.FManagers[nIdx].FManager := TSerialIDManager.Create;
+    gMG.FSerialIDManager := gMG.FManagers[nIdx].FManager as TSerialIDManager;
   end else
   begin
     gMG.FSerialIDManager := nil;
-    FreeAndNil(FManagers[nIdx].FManager);    
+    FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
 end;
 
@@ -465,7 +455,7 @@ end;
 //Parm: 标识A,B;关系项
 //Desc: 判断nA,nB是否具有nRelation
 function TSerialIDManager.CompareID(const nA, nB: TSerialID;
-  const nRelation: TRelation): Boolean;
+  const nRelation: TSerialIDRelation): Boolean;
 begin
   case nRelation of
    srSame    : Result := (nA.FLoop = nB.FLoop) and (nA.FID = nB.FID);
