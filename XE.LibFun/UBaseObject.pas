@@ -79,7 +79,10 @@ type
     //创建释放    
     procedure SyncEnter;
     procedure SyncLeave;
-    //同步锁定          
+    //同步锁定
+    procedure RunAfterRegistAllManager; virtual;
+    procedure RunBeforUnregistAllManager; virtual;
+    //延迟运行
     procedure GetStatus(const nList: TStrings;
       const nFriendly: Boolean = True); virtual;
     function GetHealth(const nList: TStrings = nil): TObjectHealth; virtual;
@@ -275,6 +278,18 @@ begin
     FClass := nClass;
     FManager := nil;
   end;    
+end;
+
+//Desc: 全部管理器注册完毕后运行
+procedure TManagerBase.RunAfterRegistAllManager;
+begin
+  //sub-type do
+end;
+
+//Desc: 卸载管理器之前运行
+procedure TManagerBase.RunBeforUnregistAllManager;
+begin
+  //sub-type do
 end;
 
 //Desc: 对象状态

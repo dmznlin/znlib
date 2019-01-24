@@ -9,6 +9,7 @@ interface
 
 uses
   System.Rtti, System.SysUtils, UBaseObject, UObjectPool, UMemDataPool,
+  {$IFDEF EnableLogManager}UMgrLog,{$ENDIF}
   {$IFDEF EnableThreadPool}UThreadPool,{$ENDIF}
   {$IFDEF EnableChannelManager}UMgrChannel,{$ENDIF}
   ULibFun;
@@ -22,8 +23,8 @@ type
       {*常量定义*}
     type
       TItem = record
-        FClass: TClass;
-        FManager: TManagerBase;
+        FClass   : TClass;
+        FManager : TManagerBase;
       end;
       {*实例定义*}
     var
@@ -42,6 +43,8 @@ type
     //线程管理器
     {$IFDEF EnableChannelManager}FChannelManager: TChannelManager;{$ENDIF}
     //RemObjects通道管理器
+    {$IFDEF EnableLogManager}FLogManager: TLogManager;{$ENDIF}
+    //日志管理器
   public
     procedure RegistAll(const nReg: Boolean);
     //注册所有
@@ -67,20 +70,48 @@ var nCtx: TRttiContext;
     nRF: TRttiField;
     nMethod: TRttiMethod;
     nInstance: TRttiInstanceType;
-begin    
+begin
   nCtx := TRttiContext.Create;
   try
     nType := nCtx.GetType(TypeInfo(TManagerGroup));
-    for nRF in nType.GetFields do
-     if nRF.FieldType.TypeKind = tkClass then   
+    if not nReg then
+    begin
+      for nRF in nType.GetFields do
       begin
-        nInstance := nRF.FieldType.AsInstance; 
-        nMethod := nInstance.GetMethod('RegistMe');
-        
+        if nRF.FieldType.TypeKind <> tkClass then Continue;
+        nInstance := nRF.FieldType.AsInstance;
+        nMethod := nInstance.GetMethod('RunBeforUnregistAllManager');
+
         if Assigned(nMethod) then
-          nMethod.Invoke(nInstance.MetaclassType, [TValue.From(nReg)]);
-        //call function
-      end;    
+          nMethod.Invoke(nRF.GetValue(@gMG).AsObject, []);
+        //卸载前执行
+      end;
+    end;
+
+    for nRF in nType.GetFields do
+    begin
+      if nRF.FieldType.TypeKind <> tkClass then Continue;
+      nInstance := nRF.FieldType.AsInstance;
+      nMethod := nInstance.GetMethod('RegistMe');
+
+      if Assigned(nMethod) then
+        nMethod.Invoke(nInstance.MetaclassType, [TValue.From(nReg)]);
+      //call function
+    end;
+
+    if nReg then
+    begin
+      for nRF in nType.GetFields do
+      begin
+        if nRF.FieldType.TypeKind <> tkClass then Continue;
+        nInstance := nRF.FieldType.AsInstance;
+        nMethod := nInstance.GetMethod('RunAfterRegistAllManager');
+
+        if Assigned(nMethod) then
+          nMethod.Invoke(nRF.GetValue(@gMG).AsObject, []);
+        //注册后执行
+      end;
+    end;
   finally
     nCtx.Free;
   end;

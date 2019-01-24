@@ -31,6 +31,13 @@
   //启用通道管理器
 {$ENDIF}
 
+{$IFDEF LogManager}
+  {$DEFINE ThreadPool}
+  //启用线程池
+  {$DEFINE EnableLogManager}
+  //启用日志管理器
+{$ENDIF}
+
 {$IFDEF ThreadPool}
   {$DEFINE EnableThreadPool}
   //启用线程池

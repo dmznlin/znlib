@@ -96,6 +96,7 @@ type
     FLastCall     : Cardinal;                    //上次调用
     FStartCall    : Cardinal;                    //开始调用
     FStartDelete  : Cardinal;                    //开始删除
+    FWakeupCall   : Cardinal;                    //唤醒计数
   end;
 
   TThreadNameValue = record
@@ -223,6 +224,9 @@ type
       const nUpdateValid: Boolean = True); overload;
     procedure WorkerStop(const nParent: TObject); overload;
     {*启动停止*}
+    procedure WorkerWakeup(const nWorkerID: Cardinal); overload;
+    procedure WorkerWakeup(const nParent: TObject); overload;
+    {*唤醒对象*}
     property ThreadMin: Word read FRunnerMin write SetRunnerMin;
     property ThreadMax: Word read FRunnerMax write SetRunnerMax;
   end;
@@ -238,6 +242,7 @@ uses
 
 constructor TThreadPoolManager.Create;
 begin
+  inherited;
   FRunnerMin := cThreadMin;
   FRunnerMax := cThreadMax;
 
@@ -453,8 +458,14 @@ begin
         if nWorker.FWorkerID <> nWorkerID then Continue;
 
         if nWorker.FStartDelete < 1 then
+        begin
           nWorker.FStartDelete := GetTickCount;
-        //删除标记
+          //删除标记
+
+          if nUpdateValid then
+            ValidWorkerNumber(False);
+          //xxxxx
+        end;
 
         {删除时需要等待调用结束:
           1.若删除操作由主线程发起,则主线程处于锁定状态.
@@ -464,11 +475,7 @@ begin
         if (nWorker.FStartCall = 0) or nInMain then
         begin
           if (nWorker.FStartCall = 0) or (not nInMain) then
-            DeleteWorker(nIdx);
-          //主线程调用时延迟清理
-
-          if nUpdateValid then
-            ValidWorkerNumber(False);
+            DeleteWorker(nIdx); //主线程调用时延迟清理
           Exit;
         end;
 
@@ -599,6 +606,7 @@ begin
         begin
           nWorker.FWorker.FCallTimes := 0;
           //停止标记
+
           if nUpdateValid then
             ValidWorkerNumber(False);
           //xxxxx
@@ -622,6 +630,52 @@ begin
     if nExists then
          Sleep(10) //调用中等待
     else Exit;
+  end;
+end;
+
+//Date: 2019-01-24
+//Parm: 调用方
+//Desc: 取消nParent所有Worker的等待时间,立即执行
+procedure TThreadPoolManager.WorkerWakeup(const nParent: TObject);
+var nIdx: Integer;
+    nWorker: PThreadWorker;
+begin
+  SyncEnter;
+  try
+    for nIdx := FWorkers.Count-1 downto 0 do
+    begin
+      nWorker := FWorkers[nIdx];
+      if nWorker.FWorker.FParentObj = nParent then
+      begin
+        nWorker.FWakeupCall := GetTickCount();
+        //唤醒
+      end;
+    end;
+  finally
+    SyncLeave;
+  end;
+end;
+
+//Date: 2019-01-24
+//Parm: 对象标识
+//Desc: 取消nWorkerID的等待时间,立即执行
+procedure TThreadPoolManager.WorkerWakeup(const nWorkerID: Cardinal);
+var nIdx: Integer;
+    nWorker: PThreadWorker;
+begin
+  SyncEnter;
+  try
+    for nIdx := FWorkers.Count-1 downto 0 do
+    begin
+      nWorker := FWorkers[nIdx];
+      if nWorker.FWorkerID = nWorkerID then
+      begin
+        nWorker.FWakeupCall := GetTickCount(); //唤醒
+        Break;
+      end;
+    end;
+  finally
+    SyncLeave;
   end;
 end;
 
@@ -842,15 +896,15 @@ procedure TThreadMonitor.Execute;
 begin
   while not Terminated do
   try
-    FWaiter.EnterWait;
-    if Terminated then Break;
-
     FOwner.SyncEnter;
     try
       DoMonitor;
     finally
       FOwner.SyncLeave;
     end;
+
+    if Terminated then Exit;
+    FWaiter.EnterWait;
   except
     FOwner.IncErrorCounter('TThreadMonitor');
     //ignor any error
@@ -1078,13 +1132,24 @@ var nIdx: Integer;
        
       if (nWorker.FWorker.FCallInterval > 0) and (nWorker.FLastCall > 0) then
       begin
-        nVal := TDateTimeHelper.GetTickCountDiff(nWorker.FLastCall);
-        if nVal < nWorker.FWorker.FCallInterval then Continue;
-        //未到执行时间
-
-        nVal := nVal - nWorker.FWorker.FCallInterval;
-        if nVal > 0 then //两次调用间隔超过需要的间隔
+        if nWorker.FWakeupCall > 0 then
         begin
+          nVal := TDateTimeHelper.GetTickCountDiff(nWorker.FWakeupCall);
+          if nVal > 1000 then
+            nWorker.FWakeupCall := 0;
+          //被唤醒1秒内可重复执行
+        end;
+
+        nVal := TDateTimeHelper.GetTickCountDiff(nWorker.FLastCall);
+        if (nVal < nWorker.FWorker.FCallInterval) and
+           (nWorker.FWakeupCall < 1) then Continue;
+        //未到执行时间或未唤醒
+
+        if nVal > nWorker.FWorker.FCallInterval then
+        begin
+          nVal := nVal - nWorker.FWorker.FCallInterval;
+          //两次调用间隔超过需要的间隔
+
           if nVal > FOwner.FStatus.FRunDelayNow then
             FOwner.FStatus.FRunDelayNow := nVal;
           //当前最大延迟
@@ -1139,6 +1204,14 @@ var nIdx: Integer;
   //Desc: 运行后清理
   procedure DoAfterRun();
   begin
+    FActiveWorker.FRunner := -1;
+    FActiveWorker.FStartCall := 0;
+    FActiveWorker.FLastCall := GetTickCount;
+
+    Dec(FOwner.FStatus.FNumRunning);
+    Inc(FOwner.FStatus.FNumWorkerRun);
+    //counter
+
     if (FActiveWorker.FWorker.FCallTimes < INFINITE) and
        (FActiveWorker.FWorker.FCallTimes > 0) then
     begin
@@ -1169,14 +1242,6 @@ var nIdx: Integer;
         end;
       end;
     end;
-
-    FActiveWorker.FRunner := -1;
-    FActiveWorker.FStartCall := 0;
-    FActiveWorker.FLastCall := GetTickCount;
-
-    Dec(FOwner.FStatus.FNumRunning);
-    Inc(FOwner.FStatus.FNumWorkerRun);
-    //counter
   end;
 begin
   while not Terminated do
@@ -1198,6 +1263,7 @@ begin
       end;
 
       DoRun();
+      if Terminated then Exit;
       nInit := TDateTimeHelper.GetTickCountDiff(FActiveWorker.FStartCall);
 
       if nInit < FWorkInterval then
