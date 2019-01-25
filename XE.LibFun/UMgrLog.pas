@@ -32,12 +32,19 @@ type
 
   //****************************************************************************
   TLogManager = class;
+  TLogManagerStatus = record
+    FNumAll       : Integer;       //总处理日志数
+    FNumError     : Integer;       //处理错误次数
+    FNumLost      : Integer;       //抛弃日志数
+    FNumBufferMax : Integer;       //缓存最大记录数
+  end;
+
   TLogEvent = procedure (const nManager: TLogManager;
-    const nLogItem: PLogItem) of object;
+    const nItem: PLogItem) of object;
   TWriteLogProcedure = procedure (const nManager: TLogManager;
-    const nLogItems: TList);
+    const nItems: TList);
   TWriteLogEvent = procedure (const nManager: TLogManager;
-    const nLogItems: TList) of object;
+    const nItems: TList) of object;
   //日志事件,回调函数
 
   TLogManager = class(TManagerBase)
@@ -48,6 +55,8 @@ type
       FLogField: string;
       {*日志分隔符*}
   private
+    FStatus: TLogManagerStatus;
+    {*状态数据*}
     FItemID: Cardinal;
     {*数据标识*}
     FBuffer: TList;
@@ -57,9 +66,13 @@ type
     FWriteLock: TCrossProcWaitObject;
     FWriter: TThreadWorkerConfig;
     {*写日志线程*}
+    FSyncMainUI: Boolean;
+    {*同步至界面*}
     FOnNewLog: TLogEvent;
     FEvent: TWriteLogEvent;
     FProcedure: TWriteLogProcedure;
+    FSyncEvent: TWriteLogEvent;
+    FSyncProc: TWriteLogProcedure;
     {*事件变量*}
   protected
     procedure ClearList(const nList: TList; const nFree: Boolean = False);
@@ -79,7 +92,6 @@ type
     procedure RunAfterRegistAllManager; override;
     procedure RunBeforUnregistAllManager; override;
     {*延迟执行*}
-    function HasItem: Boolean;
     procedure InitItem(var nItem: TLogItem);
     {*初始化*}
     procedure AddLog(const nItem: PLogItem); overload;
@@ -98,11 +110,13 @@ type
     {*日志类型*}
     procedure GetStatus(const nList: TStrings;
       const nFriendly: Boolean = True); override;
-    function GetHealth(const nList: TStrings = nil): TObjectHealth; override;
     {*获取状态*}
     property OnNewLog: TLogEvent read FOnNewLog write FOnNewLog;
     property WriteEvent: TWriteLogEvent read FEvent write FEvent;
     property WriteProcedure: TWriteLogProcedure read FProcedure write FProcedure;
+    property SyncMainUI: Boolean read FSyncMainUI write FSyncMainUI;
+    property SyncEvent: TWriteLogEvent read FEvent write FEvent;
+    property SyncProcedure: TWriteLogProcedure read FProcedure write FProcedure;
     {*属性事件*}
   end;
 
@@ -120,6 +134,9 @@ begin
   inherited;
   FWritePath := '';
   FWriteLock := nil;
+
+  FSyncMainUI := False;
+  FillChar(FStatus, SizeOf(TLogManagerStatus), #0);
 end;
 
 destructor TLogManager.Destroy;
@@ -276,25 +293,6 @@ begin
   AddLog(TLogManager, '默认日志对象', nEvent, nType);
 end;
 
-function TLogManager.HasItem: Boolean;
-var nIdx,nCount: integer;
-begin
-  SyncEnter;
-  try
-    if FWriterBuffer.Count < 1 then
-    begin
-      nCount := FBuffer.Count - 1;
-      for nIdx:=0 to nCount do
-        FWriterBuffer.Add(FBuffer[nIdx]);
-      FBuffer.Clear;
-    end;
-
-    Result := FWriterBuffer.Count > 0;
-  finally
-    SyncLeave;
-  end;
-end;
-
 //Date: 2019-01-24
 //Parm: 日志目录;同步标识
 //Desc: 开启日志服务,在nPath中写入日志
@@ -336,19 +334,44 @@ begin
   end;
 end;
 
+//Date: 2019-01-25
+//Desc: 在线程中执行写入
 procedure TLogManager.DoThreadWrite(const nConfig: PThreadWorkerConfig;
   const nThread: TThread);
+var nIdx,nCount: integer;
 begin
-  if not HasItem then Exit;
-  //try save all when thread terminated
+  SyncEnter;
+  try
+    if FWriterBuffer.Count < 1 then
+    begin
+      nCount := FBuffer.Count - 1;
+      for nIdx:=0 to nCount do
+        FWriterBuffer.Add(FBuffer[nIdx]);
+      FBuffer.Clear;
+    end;
+
+    if FWriterBuffer.Count < 1 then Exit;
+    //no data need write
+    nCount := FBuffer.Count + FWriterBuffer.Count;
+
+    if nCount > FStatus.FNumBufferMax then
+      FStatus.FNumBufferMax := nCount;
+    //xxxxx
+  finally
+    SyncLeave;
+  end;
 
   if nConfig.FDataInteger[0] > 1 then
   begin
+    SyncEnter;
+    FStatus.FNumLost := FStatus.FNumLost + FWriterBuffer.Count;
+    SyncLeave;
+
     nConfig.FDataInteger[0] := 0;
     ClearList(FWriterBuffer);
+    Exit;//连续写入错误,则清空
   end;
 
-  if FWriterBuffer.Count > 0 then
   try
     if FWritePath <> '' then
       DoWriteFile(FWriterBuffer);
@@ -360,12 +383,33 @@ begin
        FProcedure(Self, FWriterBuffer);
     //xxxxx
 
+    if FSyncMainUI and (Assigned(FSyncEvent) or Assigned(FSyncProc)) then
+      TThread.Synchronize(nThread, procedure ()
+      begin
+        if Assigned(FSyncEvent) then
+          FSyncEvent(Self, FWriterBuffer);
+        //xxxxx
+
+        if Assigned(FSyncProc) then
+          FSyncProc(Self, FWriterBuffer);
+        //xxxxx
+      end);
+    //run in main-ui thread
+
+    SyncEnter;
+    FStatus.FNumAll := FStatus.FNumAll + FWriterBuffer.Count;
+    SyncLeave; //count all
+
     nConfig.FDataInteger[0] := 0;
     ClearList(FWriterBuffer);
   except
     if nConfig.FDataInteger[0] = 0 then
       WriteErrorLog(FWriterBuffer);
     Inc(nConfig.FDataInteger[0]);
+
+    SyncEnter;
+    Inc(FStatus.FNumError);
+    SyncLeave;
   end;
 end;
 
@@ -419,6 +463,7 @@ begin
 
   nItem.FLogTag := [ltWriteFile];
   nItem.FType := ltError;
+  nItem.FTime := Now();
   nItem.FWriter.FOjbect := TLogManager;
   nItem.FWriter.FDesc := '日志线程';
   nItem.FEvent := Format('有%d笔日志写入失败,再次尝试.', [nList.Count]);
@@ -467,16 +512,6 @@ begin
   end;
 end;
 
-function TLogManager.GetHealth(const nList: TStrings): TObjectHealth;
-begin
-  SyncEnter;
-  try
-    Result := hlNormal;
-  finally
-    SyncLeave;
-  end;
-end;
-
 procedure TLogManager.GetStatus(const nList: TStrings;
   const nFriendly: Boolean);
 begin
@@ -487,12 +522,17 @@ begin
 
     if not nFriendly then
     begin
-      //nList.Add('NumWorkerMax' + FNumWorkerMax.ToString);
-
+      nList.Add('NumAll=' + FStatus.FNumAll.ToString);
+      nList.Add('NumError=' + FStatus.FNumError.ToString);
+      nList.Add('NumLost=' + FStatus.FNumLost.ToString);
+      nList.Add('NumBufferMax=' + FStatus.FNumBufferMax.ToString);
       Exit;
     end;
 
-    //nList.Add(FixData('NumWorkerMax:', FStatus.FNumWorkerMax));
+    nList.Add(FixData('NumAll:', FStatus.FNumAll));
+    nList.Add(FixData('NumError:', FStatus.FNumError));
+    nList.Add(FixData('NumLost:', FStatus.FNumLost));
+    nList.Add(FixData('NumBufferMax:', FStatus.FNumBufferMax));
   finally
     SyncLeave;
   end;

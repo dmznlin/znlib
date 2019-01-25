@@ -196,9 +196,11 @@ begin
   end;
 
   for nIdx:=Low(FDataUsed) to High(FDataUsed) do
-   if FDataUsed[nIdx].FMain = nData then
-    FDataUsed[nIdx].FUsed := False;
-  //撤销已用标记
+  if (FDataUsed[nIdx].FMain = nData) and FDataUsed[nIdx].FUsed then
+  begin
+    FDataUsed[nIdx].FUsed := False; //撤销已用标记
+    Dec(Self.FNumLocked);
+  end;
 
   Dispose(nData);
   //释放主节点
