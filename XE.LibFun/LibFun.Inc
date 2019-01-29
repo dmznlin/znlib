@@ -19,6 +19,11 @@
  2.Target - All configurations - Conditional defines
  3.添加RemObjects开启RO支持,添加ThreadPool开启线程池等
 -------------------------------------------------------------------------------}
+{$IFNDEF NoLinkConfig}
+  {$Include Link.Inc}
+{$ENDIF}
+//不使用项目配置文件
+
 {$IFNDEF HasFMX}
   {$DEFINE HasVCL}
 {$ENDIF}
@@ -29,6 +34,15 @@
   //使用ver9.0的RemObjects
   {$DEFINE EnableChannelManager}
   //启用通道管理器
+{$ENDIF}
+
+{$IFDEF TaskMonitor}
+  {$DEFINE LogManager}
+  //启用日志管理器
+  {$DEFINE ThreadPool}
+  //启用线程池
+  {$DEFINE EnableTaskMonitor}
+  //启用任务监控服务
 {$ENDIF}
 
 {$IFDEF LogManager}

@@ -10,6 +10,7 @@ interface
 uses
   System.Rtti, System.SysUtils, UBaseObject, UObjectPool, UMemDataPool,
   {$IFDEF EnableLogManager}UMgrLog,{$ENDIF}
+  {$IFDEF EnableTaskMonitor}UTaskMonitor,{$ENDIF}
   {$IFDEF EnableThreadPool}UThreadPool,{$ENDIF}
   {$IFDEF EnableChannelManager}UMgrChannel,{$ENDIF}
   ULibFun;
@@ -39,12 +40,14 @@ type
     //编号管理器
     FObjectManager: TCommonObjectManager;
     //对象管理器
+    {$IFDEF EnableLogManager}FLogManager: TLogManager;{$ENDIF}
+    //日志管理器
+    {$IFDEF EnableTaskMonitor}FTaskMonitor: TTaskMonitor;{$ENDIF}
+    //任务管理器
     {$IFDEF EnableThreadPool}FThreadPool: TThreadPoolManager;{$ENDIF}
     //线程管理器
     {$IFDEF EnableChannelManager}FChannelManager: TChannelManager;{$ENDIF}
     //RemObjects通道管理器
-    {$IFDEF EnableLogManager}FLogManager: TLogManager;{$ENDIF}
-    //日志管理器
   public
     procedure RegistAll(const nReg: Boolean);
     //注册所有

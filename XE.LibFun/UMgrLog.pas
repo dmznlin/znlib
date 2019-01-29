@@ -7,8 +7,7 @@ unit UMgrLog;
 interface
 
 uses
-  System.Classes, System.SysUtils, UBaseObject, UThreadPool, UWaitItem,
-  ULibFun;
+  System.Classes, System.SysUtils, UBaseObject, UThreadPool, UWaitItem;
 
 type
   TLogType = (ltNull, ltInfo, ltWarn, ltError);
@@ -39,11 +38,11 @@ type
     FNumBufferMax : Integer;       //缓存最大记录数
   end;
 
-  TLogEvent = procedure (const nManager: TLogManager;
+  TLogEvent = procedure (const nManager: TObject;
     const nItem: PLogItem) of object;
-  TWriteLogProcedure = procedure (const nManager: TLogManager;
+  TWriteLogProcedure = procedure (const nManager: TObject;
     const nItems: TList);
-  TWriteLogEvent = procedure (const nManager: TLogManager;
+  TWriteLogEvent = procedure (const nManager: TObject;
     const nItems: TList) of object;
   //日志事件,回调函数
 
@@ -127,7 +126,7 @@ var
 implementation
 
 uses
-  UManagerGroup;
+  UManagerGroup, ULibFun;
 
 constructor TLogManager.Create;
 begin

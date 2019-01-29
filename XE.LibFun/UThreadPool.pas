@@ -768,7 +768,7 @@ begin
 
     if not nFriendly then
     begin
-      nList.Add('NumWorkerMax' + FNumWorkerMax.ToString);
+      nList.Add('NumWorkerMax=' + FNumWorkerMax.ToString);
       nList.Add('NumWorker=' + FNumWorkers.ToString);
       nList.Add('NumWorkerValid=' + FNumWorkerValid.ToString);
       nList.Add('NumThreadMax=' + FNumRunnerMax.ToString);
