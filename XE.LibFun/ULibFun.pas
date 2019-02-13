@@ -135,6 +135,7 @@ type
   end;
 
   TSQLBuilder = class
+  public
     type
       TFieldType = (sfStr, sfVal, sfDate, sfTime, sfDateTime);
       //string, date, time, value
@@ -188,6 +189,9 @@ type
 
   TDateTimeHelper = class
   public
+    type
+      TTickDefault = (tdZero, tdNow);
+      //value when tick=0
     class function Str2Date(const nStr: string): TDate; static;
     //change nStr to date value
     class function Str2Time(const nStr: string): TTime; static;
@@ -213,7 +217,8 @@ type
     //change time long to chinese string
     class function DateTimeSerial: string; static;
     //serial id by date
-    class function GetTickCountDiff(const nCount: Cardinal): Cardinal;
+    class function GetTickCountDiff(const nCount: Cardinal;
+      const nDefault: TTickDefault = tdNow): Cardinal;
     //result = gettickcount - nCount
   end;
 
@@ -1563,14 +1568,29 @@ begin
 end;
 
 //Date: 2019-01-11
-//Parm: 上一次调用GetTickCount的值
+//Parm: 上一次调用GetTickCount的值;默认值
 //Desc: 计算GetTickCount - nCount的差值,需校正溢出归零问题
-class function TDateTimeHelper.GetTickCountDiff(const nCount:Cardinal):Cardinal;
+class function TDateTimeHelper.GetTickCountDiff(const nCount:Cardinal;
+  const nDefault: TTickDefault):Cardinal;
 begin
-  Result := GetTickCount();
-  if Result >= nCount then
-       Result := Result - nCount
-  else Result := Result + High(Cardinal) - nCount + 1;
+  if nCount = 0 then
+  begin
+    Result := 0;
+    //default
+
+    case nDefault of
+     tdZero : Exit;
+     tdNow  : Result := GetTickCount();
+    end;
+  end else
+  begin
+    Result := GetTickCount();
+    //default
+
+    if Result >= nCount then
+         Result := Result - nCount
+    else Result := Result + High(Cardinal) - nCount + 1;
+  end;
 end;
 
 end.

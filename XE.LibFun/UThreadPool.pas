@@ -99,7 +99,7 @@ type
     FWakeupCall   : Cardinal;                    //唤醒计数
   end;
 
-  TThreadNameValue = record
+  TThreadNV = record
     FName         : string;                      //对象名称
     FValue        : Cardinal;                    //有效值
   end;
@@ -115,11 +115,14 @@ type
 
     FRunDelayNow     : Cardinal;                 //运行延迟
     FRunDelayMax     : Cardinal;                 //运行最大延迟
-    FRunMostFast     : TThreadNameValue;         //运行最快纪录
-    FRunMostSlow     : TThreadNameValue;         //运行最慢记录
-    FRunError        : TThreadNameValue;         //运行错误记录
+    FRunMostFast     : TThreadNV;                //运行最快纪录
+    FRunMostSlow     : TThreadNV;                //运行最慢记录
+    FRunErrorIndex   : Integer;                  //运行错误索引
+    FRunErrors       : array[0..9] of TThreadNV; //运行错误记录
     FMaxWorkInterval : Cardinal;                 //最大扫描间隔
     FMaxWorkIdleLong : Cardinal;                 //空大空闲计时
+    FWorkIdleInit    : Cardinal;                 //空闲计时开始
+    FWorkIdleCounter : Cardinal;                 //空闲时长累积
   end;
 
   TThreadRunner = class(TThread)
@@ -132,6 +135,7 @@ type
     {*当前运行*}
     FWorkInterval: Cardinal;
     FWorkIdleStart: Cardinal;
+    FWorkIdleLast: Cardinal;
     {*空闲计时*}
   protected
     procedure DoRun;
@@ -248,7 +252,10 @@ begin
 
   FWorkerIndex := 0;
   SetLength(FRunners, 0);
+
   FillChar(FStatus, SizeOf(FStatus), #0);
+  FStatus.FWorkIdleInit := GetTickCount();
+  FStatus.FRunErrorIndex := Low(FStatus.FRunErrors);
 
   FWorkers := TList.Create;
   FMonitor := TThreadMonitor.Create(Self);
@@ -687,8 +694,16 @@ procedure TThreadPoolManager.IncErrorCounter(const nName: string;
 begin
   if nLock then SyncEnter;
   try
-    Inc(FStatus.FRunError.FValue);
-    FStatus.FRunError.FName := nName;
+    with FStatus.FRunErrors[FStatus.FRunErrorIndex] do
+    begin
+      FName := nName;
+      FValue := GetTickCount();
+    end;
+
+    Inc(FStatus.FRunErrorIndex);
+    if FStatus.FRunErrorIndex > High(FStatus.FRunErrors) then
+      FStatus.FRunErrorIndex := Low(FStatus.FRunErrors);
+    //xxxxx
   finally
     if nLock then SyncLeave;
   end;
@@ -774,7 +789,6 @@ begin
       nList.Add('NumThreadMax=' + FNumRunnerMax.ToString);
       nList.Add('NumThread=' + FNumRunners.ToString);
       nList.Add('NumRunning=' + FNumRunning.ToString);
-      nList.Add('NumRunError=' + FRunError.FValue.ToString);
 
       nList.Add('NumWorkerRun=' + FNumWorkerRun.ToString);
       nList.Add('NowRunDelay=' + FRunDelayNow.ToString);
@@ -796,10 +810,6 @@ begin
     nList.Add(FixData('NumThread:', FStatus.FNumRunners));
     nList.Add(FixData('NumRunning:', FStatus.FNumRunning));
 
-    with FStatus.FRunError do
-     nList.Add(FixData('NumRunError:', FValue.ToString + '(' + FName + ')'));
-    //xxxxx
-
     nList.Add(FixData('NowWorkInterval:', nInt));
     nList.Add(FixData('MaxWorkInterval:', FStatus.FMaxWorkInterval));
     nList.Add(FixData('NowWorkIdleLong:', nVal));
@@ -816,6 +826,15 @@ begin
     with FStatus.FRunMostSlow do
      nList.Add(FixData('WorkerRunMostSlow:', FValue.ToString + '(' + FName + ')'));
     //xxxxx
+
+    for nInt := Low(FStatus.FRunErrors) to High(FStatus.FRunErrors) do
+    with FStatus.FRunErrors[nInt] do
+    begin
+      if FValue < 1 then Continue;
+      nList.Add(FixData(Format('Thread RunError %d:', [nInt + 1]),
+        Format('计时:%s 名称:%s', [FValue.ToString, FName])));
+      //xxxxx
+    end;
   finally
     SyncLeave;
   end;
@@ -949,8 +968,14 @@ var nIdx,nInt: Integer;
       Dec(FOwner.FStatus.FNumRunners);
     end;
 begin
-  FOwner.FStatus.FRunDelayNow := 0;
-  //调整运行对象,则重新计算延迟
+  with FOwner.FStatus do
+  begin
+    FRunDelayNow := 0;
+    //重新计算延迟
+    FWorkIdleInit := GetTickCount();
+    FWorkIdleCounter := 0;
+    //重新计算空闲时长计数
+  end;
 
   if nInc then //add
   begin
@@ -1024,17 +1049,25 @@ begin
     end;
   end;
 
-  for nIdx := Low(FOwner.FRunners) to High(FOwner.FRunners) do
-  if Assigned(FOwner.FRunners[nIdx]) and (
-     FOwner.FRunners[nIdx].FWorkIdleStart > 0) then //空闲线程
+  with FOwner.FStatus,TDateTimeHelper do
   begin
-    with FOwner.FRunners[nIdx] do
-      nVal := TDateTimeHelper.GetTickCountDiff(FWorkIdleStart);
-    //xxxxx
+    nVal := GetTickCountDiff(FWorkIdleInit, TTickDefault.tdZero);
+    nVal := Trunc(nVal / (60 * 1000)); //分钟数
 
-    if nVal >= 60 * 1000 then
-      AdjustRunner(False, 1, nIdx);
-    //空闲超时则关闭
+    if nVal >= 5 then
+    begin
+      nVal := Trunc(FWorkIdleCounter / (nVal * FNumRunners * 1000));
+      if nVal > 30 then
+      begin
+        AdjustRunner(False, 1);
+        //每分钟有30秒空闲
+      end else
+      begin
+        FWorkIdleInit := GetTickCount();
+        FWorkIdleCounter := 0;
+        //重新计时
+      end;
+    end;
   end;
 
   for nIdx := FOwner.FWorkers.Count-1 downto 0 do
@@ -1084,6 +1117,7 @@ begin
   FTag := ATag;
   FWorkInterval := 1;
   FWorkIdleStart := 0;
+  FWorkIdleLast := 0;
 end;
 
 destructor TThreadRunner.Destroy;
@@ -1168,6 +1202,7 @@ var nIdx: Integer;
     begin
       FWorkInterval := 1;
       FWorkIdleStart := 0;
+      FWorkIdleLast := 0;
 
       FActiveWorker.FRunner := FTag;
       FActiveWorker.FStartCall := GetTickCount;
@@ -1186,6 +1221,10 @@ var nIdx: Integer;
         if nVal > FOwner.FStatus.FMaxWorkIdleLong then
           FOwner.FStatus.FMaxWorkIdleLong := nVal;
         //最长空闲等待
+
+        Inc(FOwner.FStatus.FWorkIdleCounter, nVal - FWorkIdleLast);
+        //累计空闲时长
+        FWorkIdleLast := nVal;
       end;
 
       if FWorkInterval < cThreadMaxWorkInterval then
