@@ -1,0 +1,15 @@
+Documentation
+=============
+
+A comprehensive help file can be purchased from
+the Components4Developers site at:
+http://www.components4developers.com for a very small sum.
+
+Support
+=======
+
+Volunteer peer 2 peer support can be obtained by accessing the Components4Developers newsgroups
+at news://news.components4developers.com
+
+Alternatively priority support can be purchased at
+http://www.components4developers.com

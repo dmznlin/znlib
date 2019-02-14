@@ -1,0 +1,428 @@
+{ This is an automatically generated lazarus resource file }
+
+LazarusResources.Add('TForm1','FORMDATA',[
+  'TPF0'#6'TForm1'#5'Form1'#4'Left'#3#150#2#6'Height'#3'4'#2#3'Top'#3#186#1#5'W'
+  +'idth'#3#250#2#7'Caption'#6'RkbmMemTable demo. Created by Components4Develop'
+  +'ers (www.components4developers.com)'#12'ClientHeight'#3'4'#2#11'ClientWidth'
+  +#3#250#2#5'Color'#7#9'clBtnFace'#10'Font.Color'#7#12'clWindowText'#11'Font.H'
+  +'eight'#2#246#9'Font.Name'#6#13'MS Sans Serif'#8'OnCreate'#7#10'FormCreate'#9
+  +'OnDestroy'#7#11'FormDestroy'#10'LCLVersion'#6#7'1.2.4.0'#0#6'TPanel'#6'Pane'
+  +'l1'#4'Left'#3#235#0#6'Height'#3#21#2#3'Top'#2#0#5'Width'#3#15#2#5'Align'#7#8
+  +'alClient'#10'BevelOuter'#7#6'bvNone'#12'ClientHeight'#3#21#2#11'ClientWidth'
+  +#3#15#2#8'TabOrder'#2#0#0#7'TDBGrid'#7'DBGrid1'#4'Left'#2#0#6'Height'#3'~'#1
+  +#3'Top'#2#0#5'Width'#3#15#2#5'Align'#7#8'alClient'#5'Color'#7#8'clWindow'#7
+  +'Columns'#14#0#10'DataSource'#7#11'DataSource1'#7'Options'#11#9'dgEditing'#8
+  +'dgTitles'#11'dgIndicator'#14'dgColumnResize'#10'dgColLines'#10'dgRowLines'#6
+  +'dgTabs'#15'dgConfirmDelete'#14'dgCancelOnExit'#13'dgMultiselect'#0#8'TabOrd'
+  +'er'#2#0#15'TitleFont.Color'#7#12'clWindowText'#16'TitleFont.Height'#2#246#14
+  +'TitleFont.Name'#6#13'MS Sans Serif'#0#0#12'TDBNavigator'#12'DBNavigator1'#4
+  +'Left'#2#0#6'Height'#2#22#3'Top'#3#255#1#5'Width'#3#15#2#5'Align'#7#8'alBott'
+  +'om'#10'BevelOuter'#7#6'bvNone'#29'ChildSizing.EnlargeHorizontal'#7#14'crsSc'
+  +'aleChilds'#27'ChildSizing.EnlargeVertical'#7#14'crsScaleChilds'#28'ChildSiz'
+  +'ing.ShrinkHorizontal'#7#14'crsScaleChilds'#26'ChildSizing.ShrinkVertical'#7
+  +#14'crsScaleChilds'#18'ChildSizing.Layout'#7#29'cclLeftToRightThenTopToBotto'
+  +'m'#27'ChildSizing.ControlsPerLine'#2'd'#12'ClientHeight'#2#22#11'ClientWidt'
+  +'h'#3#15#2#10'DataSource'#7#11'DataSource1'#7'Options'#11#0#8'TabOrder'#2#1#0
+  +#0#6'TPanel'#6'Panel2'#4'Left'#2#0#6'Height'#3#129#0#3'Top'#3'~'#1#5'Width'#3
+  +#15#2#5'Align'#7#8'alBottom'#10'BevelOuter'#7#6'bvNone'#12'ClientHeight'#3
+  +#129#0#11'ClientWidth'#3#15#2#8'TabOrder'#2#2#0#8'TDBImage'#8'DBImage1'#4'Le'
+  +'ft'#2#0#6'Height'#3#129#0#3'Top'#2#0#5'Width'#3#138#0#5'Align'#7#6'alLeft'
+  +#10'DataSource'#7#11'DataSource1'#7'Stretch'#9#0#0#7'TDBMemo'#7'DBMemo1'#4'L'
+  +'eft'#3#138#0#6'Height'#3#129#0#3'Top'#2#0#5'Width'#3#204#0#5'Align'#7#8'alC'
+  +'lient'#8'TabOrder'#2#1#0#0#6'TPanel'#6'Panel6'#4'Left'#3'V'#1#6'Height'#3
+  +#129#0#3'Top'#2#0#5'Width'#3#185#0#5'Align'#7#7'alRight'#10'BevelOuter'#7#6
+  +'bvNone'#12'ClientHeight'#3#129#0#11'ClientWidth'#3#185#0#8'TabOrder'#2#0#0#6
+  +'TLabel'#7'Label34'#4'Left'#2#6#6'Height'#2#13#3'Top'#2#6#5'Width'#2'0'#7'Ca'
+  +'ption'#6#10'BytesField'#11'ParentColor'#8#0#0#7'TDBEdit'#7'DBEdit1'#4'Left'
+  +#2#6#6'Height'#2#21#3'Top'#2#22#5'Width'#2'y'#8'CharCase'#7#8'ecNormal'#9'Ma'
+  +'xLength'#2#0#8'TabOrder'#2#0#0#0#7'TButton'#8'Button22'#4'Left'#2#6#6'Heigh'
+  +'t'#2#25#3'Top'#2'6'#5'Width'#2'K'#7'Caption'#6#10'Clear Memo'#7'OnClick'#7
+  +#13'Button22Click'#8'TabOrder'#2#1#0#0#0#0#0#12'TPageControl'#12'PageControl'
+  +'1'#4'Left'#2#0#6'Height'#3#21#2#3'Top'#2#0#5'Width'#3#235#0#10'ActivePage'#7
+  +#9'TabSheet1'#5'Align'#7#6'alLeft'#9'MultiLine'#9#8'TabIndex'#2#0#8'TabOrder'
+  +#2#1#7'Options'#11#12'nboMultiLine'#0#0#9'TTabSheet'#9'TabSheet1'#7'Caption'
+  +#6#19'Basic functionality'#12'ClientHeight'#3#179#1#11'ClientWidth'#3#227#0#0
+  +#6'TLabel'#6'Label6'#4'Left'#2#7#6'Height'#2#26#3'Top'#2#7#5'Width'#2'u'#8'A'
+  +'utoSize'#8#7'Caption'#6'"Define some fields programatically'#11'ParentColor'
+  +#8#8'WordWrap'#9#0#0#6'TLabel'#6'Label7'#4'Left'#2#7#6'Height'#2#20#3'Top'#2
+  +'4'#5'Width'#3#130#0#8'AutoSize'#8#7'Caption'#6#20'Open the memorytable'#11
+  +'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabel'#6'Label8'#4'Left'#2#7#6'Height'#2
+  +#26#3'Top'#2'U'#5'Width'#3#137#0#8'AutoSize'#8#7'Caption'#6#21'Close the mem'
+  +'orytable'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabel'#6'Label9'#4'Left'#2
+  +#7#6'Height'#2#20#3'Top'#3#229#0#5'Width'#2'|'#8'AutoSize'#8#7'Caption'#6#20
+  +'Generate sample data'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabel'#7'Label'
+  +'25'#4'Left'#2#8#6'Height'#2'!'#3'Top'#2'p'#5'Width'#3#129#0#8'AutoSize'#8#7
+  +'Caption'#6' Number of records in sample data'#11'ParentColor'#8#8'WordWrap'
+  +#9#0#0#6'TLabel'#7'Label26'#4'Left'#2#8#6'Height'#2#13#3'Top'#3#176#1#5'Widt'
+  +'h'#2'F'#7'Caption'#6#12'Recordnumber'#11'ParentColor'#8#0#0#6'TLabel'#6'lRe'
+  +'cNo'#4'Left'#2'p'#6'Height'#2#13#3'Top'#3#176#1#5'Width'#2#3#7'Caption'#6#1
+  +'-'#11'ParentColor'#8#0#0#6'TLabel'#7'Label35'#4'Left'#2#8#6'Height'#2#13#3
+  +'Top'#3#152#1#5'Width'#2'6'#7'Caption'#6#9'Old VALUE'#11'ParentColor'#8#0#0#6
+  +'TLabel'#9'lOldValue'#4'Left'#2'p'#6'Height'#2#13#3'Top'#3#152#1#5'Width'#2#3
+  +#7'Caption'#6#1'.'#11'ParentColor'#8#0#0#7'TButton'#7'Button6'#4'Left'#3#156
+  +#0#6'Height'#2#20#3'Top'#2#7#5'Width'#2'='#7'Caption'#6#11'Def. Fields'#7'On'
+  +'Click'#7#12'Button6Click'#8'TabOrder'#2#0#0#0#7'TButton'#7'Button7'#4'Left'
+  +#3#156#0#6'Height'#2#20#3'Top'#2'4'#5'Width'#2'='#7'Caption'#6#4'Open'#7'OnC'
+  +'lick'#7#12'Button7Click'#8'TabOrder'#2#1#0#0#7'TButton'#7'Button8'#4'Left'#3
+  +#156#0#6'Height'#2#20#3'Top'#2'U'#5'Width'#2'='#7'Caption'#6#5'Close'#7'OnCl'
+  ,'ick'#7#12'Button8Click'#8'TabOrder'#2#2#0#0#7'TButton'#7'Button1'#4'Left'#3
+  +#156#0#6'Height'#2#20#3'Top'#3#221#0#5'Width'#2'='#7'Caption'#6#8'Generate'#7
+  +'OnClick'#7#12'Button1Click'#8'TabOrder'#2#3#0#0#5'TEdit'#12'eRecordCount'#4
+  +'Left'#3#156#0#6'Height'#2#21#3'Top'#2'p'#5'Width'#2'='#8'TabOrder'#2#4#4'Te'
+  +'xt'#6#3'100'#0#0#9'TCheckBox'#16'chbEnableIndexes'#4'Left'#2#8#6'Height'#2
+  +#19#3'Top'#3#152#0#5'Width'#2'^'#7'Caption'#6#14'Update indexes'#7'Checked'#9
+  +#7'OnClick'#7#21'chbEnableIndexesClick'#5'State'#7#9'cbChecked'#8'TabOrder'#2
+  +#5#0#0#9'TCheckBox'#14'chbRandomColor'#4'Left'#2#8#6'Height'#2#19#3'Top'#3
+  +#176#0#5'Width'#2'|'#7'Caption'#6#17'Random COLOR data'#7'Checked'#9#5'State'
+  +#7#9'cbChecked'#8'TabOrder'#2#6#0#0#9'TCheckBox'#16'chbGenerateMemos'#4'Left'
+  +#2#8#6'Height'#2#19#3'Top'#3#200#0#5'Width'#2'd'#7'Caption'#6#14'Generate me'
+  +'mos'#7'Checked'#9#5'State'#7#9'cbChecked'#8'TabOrder'#2#7#0#0#7'TButton'#8
+  +'Button13'#4'Left'#3#128#0#6'Height'#2#20#3'Top'#3#253#0#5'Width'#2'Y'#7'Cap'
+  +'tion'#6#12'AppendRecord'#7'OnClick'#7#13'Button13Click'#8'TabOrder'#2#8#0#0
+  +#7'TButton'#8'Button10'#4'Left'#3#142#0#6'Height'#2#17#3'Top'#3'('#1#5'Width'
+  +#2'K'#7'Caption'#6#7'Goto 10'#7'OnClick'#7#13'Button10Click'#8'TabOrder'#2#9
+  +#0#0#7'TButton'#8'Button25'#4'Left'#3#142#0#6'Height'#2#17#3'Top'#3'K'#1#5'W'
+  +'idth'#2'K'#7'Caption'#6#4'Pack'#7'OnClick'#7#13'Button25Click'#8'TabOrder'#2
+  +#10#0#0#7'TButton'#8'Button26'#4'Left'#3#142#0#6'Height'#2#17#3'Top'#3'i'#1#5
+  +'Width'#2'K'#7'Caption'#6#5'Empty'#7'OnClick'#7#13'Button26Click'#8'TabOrder'
+  +#2#11#0#0#0#9'TTabSheet'#9'TabSheet2'#7'Caption'#6#9'Load/Save'#12'ClientHei'
+  +'ght'#2#0#11'ClientWidth'#2#0#0#6'TLabel'#7'Label19'#4'Left'#2#13#6'Height'#2
+  +#30#3'Top'#3#3#1#5'Width'#3#210#0#8'AutoSize'#8#7'Caption'#6'KCheck this, pr'
+  +'ess the save above, after always with this checked press Load'#11'ParentCol'
+  +'or'#8#8'WordWrap'#9#0#0#6'TLabel'#6'lblLZH'#4'Left'#2#12#6'Height'#2#13#3'T'
+  +'op'#3'&'#1#5'Width'#2#5#7'Caption'#6#1' '#10'Font.Color'#7#12'clWindowText'
+  +#11'Font.Height'#2#244#9'Font.Name'#6#13'MS Sans Serif'#10'Font.Style'#11#6
+  +'fsBold'#0#11'ParentColor'#8#10'ParentFont'#8#0#0#12'TPageControl'#12'PageCo'
+  +'ntrol2'#4'Left'#2#0#6'Height'#3'i'#1#3'Top'#2'H'#5'Width'#3#227#0#10'Active'
+  +'Page'#7#9'TabSheet5'#5'Align'#7#8'alClient'#8'TabIndex'#2#0#8'TabOrder'#2#0
+  +#11'TabPosition'#7#8'tpBottom'#0#9'TTabSheet'#9'TabSheet5'#7'Caption'#6#16'C'
+  +'opy, Save, Load'#12'ClientHeight'#2#0#11'ClientWidth'#2#0#0#6'TLabel'#6'Lab'
+  +'el1'#4'Left'#2#7#6'Height'#2#26#3'Top'#2'\'#5'Width'#3#137#0#8'AutoSize'#8#7
+  +'Caption'#6'/Copy structur and data from another datasource.'#11'ParentColor'
+  +#8#8'WordWrap'#9#0#0#6'TLabel'#6'Label2'#4'Left'#2#7#6'Height'#2#26#3'Top'#3
+  +#229#0#5'Width'#3#137#0#8'AutoSize'#8#7'Caption'#6'$Save contents in a file,'
+  +' incl. blobs'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabel'#6'Label3'#4'Lef'
+  +'t'#2#7#6'Height'#2#26#3'Top'#3#12#1#5'Width'#3#137#0#8'AutoSize'#8#7'Captio'
+  +'n'#6#21'Load data from a file'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabel'
+  +#7'Label20'#4'Left'#2#6#6'Height'#2'='#3'Top'#2#21#5'Width'#3#209#0#8'AutoSi'
+  +'ze'#8#7'Caption'#6#130'Check Blob InMemory Compression before loading the t'
+  +'able and the Blob fIelds will be transparently de/compressed using less mem'
+  +'ory'#11'ParentColor'#8#8'WordWrap'#9#0#0#7'TButton'#7'Button9'#4'Left'#3#156
+  +#0#6'Height'#2#19#3'Top'#2'\'#5'Width'#2'='#7'Caption'#6#4'Copy'#7'OnClick'#7
+  +#12'Button9Click'#8'TabOrder'#2#0#0#0#7'TButton'#7'Button2'#4'Left'#3#156#0#6
+  +'Height'#2#19#3'Top'#3#229#0#5'Width'#2'='#7'Caption'#6#4'Save'#7'OnClick'#7
+  +#12'Button2Click'#8'TabOrder'#2#1#0#0#7'TButton'#7'Button3'#4'Left'#3#156#0#6
+  +'Height'#2#19#3'Top'#3#12#1#5'Width'#2'='#7'Caption'#6#4'Load'#7'OnClick'#7
+  +#12'Button3Click'#8'TabOrder'#2#2#0#0#9'TCheckBox'#15'BlobCompression'#4'Lef'
+  +'t'#2#6#6'Height'#2#17#3'Top'#2#255#5'Width'#3#204#0#7'Caption'#6#25'Blob In'
+  +'Memory Compression'#8'TabOrder'#2#3#0#0#9'TCheckBox'#10'BinarySave'#4'Left'
+  +#2#7#6'Height'#2#14#3'Top'#3#130#0#5'Width'#3#143#0#7'Caption'#6#19'Save/Loa'
+  +'d as binary'#7'OnClick'#7#15'BinarySaveClick'#8'TabOrder'#2#4#0#0#9'TCheckB'
+  +'ox'#15'chbSaveIndexDef'#4'Left'#2#8#6'Height'#2#17#3'Top'#3#152#0#5'Width'#3
+  +#201#0#7'Caption'#6#26'Save index definitions too'#8'TabOrder'#2#5#0#0#9'TCh'
+  +'eckBox'#13'chbSaveDeltas'#4'Left'#2#8#6'Height'#2#17#3'Top'#3#176#0#5'Width'
+  +#3#209#0#7'Caption'#6'(Save deltas too (only if binary checked)'#7'Enabled'#8
+  +#8'TabOrder'#2#6#0#0#9'TCheckBox'#11'chbNoQuotes'#4'Left'#2#8#6'Height'#2#17
+  +#3'Top'#3#200#0#5'Width'#2'a'#7'Caption'#6#9'No quotes'#8'TabOrder'#2#7#0#0#0
+  +#9'TTabSheet'#9'TabSheet6'#7'Caption'#6#9'CommaText'#12'ClientHeight'#2#0#11
+  +'ClientWidth'#2#0#0#6'TLabel'#6'Label4'#4'Left'#2#7#6'Height'#2';'#3'Top'#2#7
+  +#5'Width'#2'o'#8'AutoSize'#8#7'Caption'#6'JSave contents in CSV format in th'
+  +'e memo. Note that Blobs doesnt get saved.'#11'ParentColor'#8#8'WordWrap'#9#0
+  +#0#6'TLabel'#6'Label5'#4'Left'#2#7#6'Height'#2' '#3'Top'#2'O'#5'Width'#2'o'#8
+  ,'AutoSize'#8#7'Caption'#6'&Load contents from CSV formatted memo.'#11'Parent'
+  +'Color'#8#8'WordWrap'#9#0#0#7'TButton'#7'Button4'#4'Left'#2'|'#6'Height'#2#19
+  +#3'Top'#2#27#5'Width'#2'['#7'Caption'#6#13'Get CommaText'#7'OnClick'#7#12'Bu'
+  +'tton4Click'#8'TabOrder'#2#0#0#0#7'TButton'#7'Button5'#4'Left'#2'|'#6'Height'
+  +#2#20#3'Top'#2'U'#5'Width'#2'['#7'Caption'#6#13'Set CommaText'#7'OnClick'#7
+  +#12'Button5Click'#8'TabOrder'#2#1#0#0#5'TMemo'#5'Memo1'#4'Left'#2#0#6'Height'
+  +#3#132#0#3'Top'#3#203#0#5'Width'#3#219#0#5'Align'#7#8'alBottom'#8'TabOrder'#2
+  +#2#0#0#0#0#6'TPanel'#6'Panel4'#4'Left'#2#0#6'Height'#2'H'#3'Top'#2#0#5'Width'
+  +#3#227#0#5'Align'#7#5'alTop'#10'BevelOuter'#7#6'bvNone'#12'ClientHeight'#2'H'
+  +#11'ClientWidth'#3#227#0#8'TabOrder'#2#1#0#6'TLabel'#7'Label21'#4'Left'#2#5#6
+  +'Height'#2'+'#3'Top'#2#21#5'Width'#3#215#0#8'AutoSize'#8#7'Caption'#6'iRemem'
+  +'ber to check this before loading from a compressed file or before saving to'
+  +' a file with compression.'#11'ParentColor'#8#8'WordWrap'#9#0#0#9'TCheckBox'
+  +#13'LZHCompressed'#4'Left'#2#4#6'Height'#2#17#3'Top'#2#1#5'Width'#3#204#0#7
+  +'Caption'#6#31'(De)Compress CSV file/CommaText'#8'TabOrder'#2#0#0#0#0#0#9'TT'
+  +'abSheet'#9'TabSheet3'#7'Caption'#6#17'Sorting/Searching'#12'ClientHeight'#2
+  +#0#11'ClientWidth'#2#0#7'OnEnter'#7#14'TabSheet3Enter'#0#6'TLabel'#7'Label10'
+  +#4'Left'#2#7#6'Height'#2#13#3'Top'#2#1#5'Width'#2'|'#8'AutoSize'#8#7'Caption'
+  +#6#17'Sort the table on'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabel'#7'Lab'
+  +'el12'#4'Left'#2#7#6'Height'#2#20#3'Top'#2'd'#5'Width'#3#137#0#8'AutoSize'#8
+  +#7'Caption'#6#18'What to search for'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'T'
+  +'Label'#7'Label13'#4'Left'#2#7#6'Height'#2#26#3'Top'#2'~'#5'Width'#2'['#8'Au'
+  +'toSize'#8#7'Caption'#6#17'Locate for PERIOD'#11'ParentColor'#8#8'WordWrap'#9
+  +#0#0#6'TLabel'#7'Label14'#4'Left'#2#7#6'Height'#2'('#3'Top'#3#163#0#5'Width'
+  +#2'['#8'AutoSize'#8#7'Caption'#6'2Locate for VALUE. If sorted will do binary'
+  +' locate.'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabel'#7'Label15'#4'Left'#2
+  +#7#6'Height'#2#26#3'Top'#3#214#0#5'Width'#2'['#8'AutoSize'#8#7'Caption'#6#15
+  +'Locate for CALC'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabel'#7'Label16'#4
+  +'Left'#2#7#6'Height'#2#27#3'Top'#3'3'#1#5'Width'#2'['#8'AutoSize'#8#7'Captio'
+  +'n'#6#17'Lookup for PERIOD'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabel'#7
+  +'Label17'#4'Left'#2#7#6'Height'#2#20#3'Top'#3'T'#1#5'Width'#3#137#0#8'AutoSi'
+  +'ze'#8#7'Caption'#6#23'What has been looked up'#11'ParentColor'#8#8'WordWrap'
+  +#9#0#0#6'TLabel'#7'Label24'#4'Left'#2#8#6'Height'#2#13#3'Top'#3#248#0#5'Widt'
+  +'h'#2'_'#7'Caption'#6#17'FindNearest VALUE'#11'ParentColor'#8#0#0#6'TLabel'#7
+  +'Label47'#4'Left'#2#8#6'Height'#2#13#3'Top'#3#24#1#5'Width'#2'L'#7'Caption'#6
+  +#13'FindKey VALUE'#11'ParentColor'#8#0#0#7'TButton'#8'Button11'#4'Left'#3#152
+  +#0#6'Height'#2#20#3'Top'#2#15#5'Width'#2'='#7'Caption'#6#4'Sort'#7'OnClick'#7
+  +#13'Button11Click'#8'TabOrder'#2#0#0#0#7'TButton'#15'btnLocatePeriod'#4'Left'
+  +#2'o'#6'Height'#2#21#3'Top'#2'}'#5'Width'#2'f'#7'Caption'#6#13'Locate Period'
+  +#7'OnClick'#7#20'btnLocatePeriodClick'#8'TabOrder'#2#5#0#0#5'TEdit'#7'eSearc'
+  +'h'#4'Left'#3#156#0#6'Height'#2#21#3'Top'#2'd'#5'Width'#2'9'#8'TabOrder'#2#4
+  +#0#0#7'TButton'#14'btnLocateValue'#4'Left'#2'o'#6'Height'#2#22#3'Top'#3#169#0
+  +#5'Width'#2'f'#7'Caption'#6#12'Locate Value'#7'OnClick'#7#19'btnLocateValueC'
+  +'lick'#8'TabOrder'#2#6#0#0#9'TCheckBox'#18'chbCaseInsensitive'#4'Left'#2#7#6
+  +'Height'#2#17#3'Top'#2'6'#5'Width'#3#162#0#7'Caption'#6#15'CaseInsensitive'#8
+  +'TabOrder'#2#2#0#0#9'TCheckBox'#13'chbPartialKey'#4'Left'#2#7#6'Height'#2#17
+  +#3'Top'#2'J'#5'Width'#2'a'#7'Caption'#6#10'PartialKey'#7'Checked'#9#5'State'
+  +#7#9'cbChecked'#8'TabOrder'#2#3#0#0#7'TButton'#13'btnLookupCalc'#4'Left'#2'o'
+  +#6'Height'#2#22#3'Top'#3'1'#1#5'Width'#2'f'#7'Caption'#6#12'Period->Calc'#7
+  +'OnClick'#7#18'btnLookupCalcClick'#8'TabOrder'#2#8#0#0#7'TButton'#13'btnLoca'
+  +'teCalc'#4'Left'#2'o'#6'Height'#2#21#3'Top'#3#206#0#5'Width'#2'f'#7'Caption'
+  +#6#11'Locate CALC'#7'OnClick'#7#18'btnLocateCalcClick'#8'TabOrder'#2#7#0#0#5
+  +'TEdit'#7'eResult'#4'Left'#3#156#0#6'Height'#2#21#3'Top'#3'M'#1#5'Width'#2'9'
+  +#8'TabOrder'#2#9#0#0#9'TCheckBox'#13'chbDescending'#4'Left'#2#7#6'Height'#2
+  +#14#3'Top'#2''''#5'Width'#2'N'#7'Caption'#6#10'Descending'#8'TabOrder'#2#1#0
+  +#0#9'TComboBox'#11'cbSortField'#4'Left'#2#7#6'Height'#2#21#3'Top'#2#13#5'Wid'
+  +'th'#2'['#10'ItemHeight'#2#13#5'Style'#7#14'csDropDownList'#8'TabOrder'#2#10
+  +#0#0#7'TButton'#14'btnFindNearest'#4'Left'#2'o'#6'Height'#2#21#3'Top'#3#240#0
+  +#5'Width'#2'f'#7'Caption'#6#11'FindNearest'#7'OnClick'#7#19'btnFindNearestCl'
+  +'ick'#8'TabOrder'#2#11#0#0#7'TButton'#8'Button23'#4'Left'#2'o'#6'Height'#2#21
+  +#3'Top'#3#16#1#5'Width'#2'f'#7'Caption'#6#7'FindKey'#7'OnClick'#7#13'Button2'
+  +'3Click'#8'TabOrder'#2#12#0#0#0#9'TTabSheet'#9'TabSheet4'#7'Caption'#6#13'Ma'
+  +'ster/Detail'#12'ClientHeight'#2#0#11'ClientWidth'#2#0#0#7'TDBGrid'#7'DBGrid'
+  +'2'#4'Left'#2#254#6'Height'#3#246#0#3'Top'#2'o'#5'Width'#3#227#0#7'Anchors'
+  ,#11#5'akTop'#6'akLeft'#7'akRight'#8'akBottom'#0#5'Color'#7#8'clWindow'#7'Col'
+  +'umns'#14#0#10'DataSource'#7#8'dsMaster'#7'Options'#11#9'dgEditing'#8'dgTitl'
+  +'es'#11'dgIndicator'#14'dgColumnResize'#10'dgColLines'#10'dgRowLines'#6'dgTa'
+  +'bs'#15'dgConfirmDelete'#14'dgCancelOnExit'#13'dgMultiselect'#0#8'TabOrder'#2
+  +#0#15'TitleFont.Color'#7#12'clWindowText'#16'TitleFont.Height'#2#246#14'Titl'
+  +'eFont.Name'#6#13'MS Sans Serif'#0#0#6'TPanel'#6'Panel3'#4'Left'#2#0#6'Heigh'
+  +'t'#2'j'#3'Top'#2#0#5'Width'#3#227#0#5'Align'#7#5'alTop'#10'BevelOuter'#7#9
+  +'bvLowered'#12'ClientHeight'#2'j'#11'ClientWidth'#3#227#0#8'TabOrder'#2#1#0#6
+  +'TLabel'#7'Label18'#4'Left'#2#5#6'Height'#2'['#3'Top'#2#5#5'Width'#3#215#0#8
+  +'AutoSize'#8#7'Caption'#6#205'This shows masterdetail relations, by using a '
+  +'TTable as master, and copying the contents of another TTable into the memor'
+  +'y table and then specifying mastersource/fields and indexfields on the memo'
+  +'ry table.'#11'ParentColor'#8#8'WordWrap'#9#0#0#7'TButton'#8'Button12'#4'Lef'
+  +'t'#2'$'#6'Height'#2#20#3'Top'#2'K'#5'Width'#3#150#0#7'Caption'#6#18'Open Ma'
+  +'ster/Detail'#7'OnClick'#7#13'Button12Click'#8'TabOrder'#2#0#0#0#0#6'TPanel'
+  +#6'Panel5'#4'Left'#2#0#6'Height'#2#19#3'Top'#3#158#1#5'Width'#3#227#0#5'Alig'
+  +'n'#7#8'alBottom'#10'BevelOuter'#7#9'bvLowered'#12'ClientHeight'#2#19#11'Cli'
+  +'entWidth'#3#227#0#8'TabOrder'#2#2#0#6'TLabel'#7'Label27'#4'Left'#2#6#6'Heig'
+  +'ht'#2#13#3'Top'#2#2#5'Width'#2'#'#7'Caption'#6#6'Rec.no'#11'ParentColor'#8#0
+  +#0#6'TLabel'#12'lMasterRecNo'#4'Left'#2'V'#6'Height'#2#13#3'Top'#2#2#5'Width'
+  +#2#3#7'Caption'#6#1'-'#11'ParentColor'#8#0#0#0#12'TDBNavigator'#12'DBNavigat'
+  +'or2'#4'Left'#2#0#6'Height'#2#25#3'Top'#3#133#1#5'Width'#3#227#0#5'Align'#7#8
+  +'alBottom'#10'BevelOuter'#7#6'bvNone'#29'ChildSizing.EnlargeHorizontal'#7#14
+  +'crsScaleChilds'#27'ChildSizing.EnlargeVertical'#7#14'crsScaleChilds'#28'Chi'
+  +'ldSizing.ShrinkHorizontal'#7#14'crsScaleChilds'#26'ChildSizing.ShrinkVertic'
+  +'al'#7#14'crsScaleChilds'#18'ChildSizing.Layout'#7#29'cclLeftToRightThenTopT'
+  +'oBottom'#27'ChildSizing.ControlsPerLine'#2'd'#12'ClientHeight'#2#25#11'Clie'
+  +'ntWidth'#3#227#0#10'DataSource'#7#8'dsMaster'#7'Options'#11#0#8'TabOrder'#2
+  +#3#0#0#7'TButton'#8'Button30'#4'Left'#2#3#6'Height'#2#25#3'Top'#3'k'#1#5'Wid'
+  +'th'#3#128#0#7'Caption'#6#20'Sort on detail EmpNo'#7'OnClick'#7#13'Button30C'
+  +'lick'#8'TabOrder'#2#4#0#0#0#9'TTabSheet'#9'TabSheet7'#7'Caption'#6#9'Bookma'
+  +'rks'#12'ClientHeight'#2#0#11'ClientWidth'#2#0#10'ImageIndex'#2#4#0#6'TLabel'
+  +#7'Label11'#4'Left'#2'h'#6'Height'#2'9'#3'Top'#2#0#5'Width'#2'y'#8'AutoSize'
+  +#8#7'Caption'#6'GGets a bookmark which can be used to reposition to the same'
+  +' place later'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabel'#7'Label29'#4'Le'
+  +'ft'#2'h'#6'Height'#2'A'#3'Top'#2'8'#5'Width'#2'y'#8'AutoSize'#8#7'Caption'#6
+  +'+Goto the bookmark retrieved by Get Bookmark'#11'ParentColor'#8#8'WordWrap'
+  +#9#0#0#7'TButton'#14'btnGetBookmark'#4'Left'#2#8#6'Height'#2#25#3'Top'#2#8#5
+  +'Width'#2'Y'#7'Caption'#6#12'Get bookmark'#7'OnClick'#7#19'btnGetBookmarkCli'
+  +'ck'#8'TabOrder'#2#0#0#0#7'TButton'#15'btnGotoBookmark'#4'Left'#2#8#6'Height'
+  +#2#25#3'Top'#2'8'#5'Width'#2'Y'#7'Caption'#6#13'Goto bookmark'#7'OnClick'#7
+  +#20'btnGotoBookmarkClick'#8'TabOrder'#2#1#0#0#0#9'TTabSheet'#9'TabSheet8'#7
+  +'Caption'#6#7'Indexes'#12'ClientHeight'#2#0#11'ClientWidth'#2#0#10'ImageInde'
+  +'x'#2#5#7'OnEnter'#7#14'TabSheet8Enter'#0#6'TLabel'#7'Label30'#4'Left'#2'h'#6
+  +'Height'#2#25#3'Top'#2#16#5'Width'#2'q'#8'AutoSize'#8#7'Caption'#6#28'Rebuil'
+  +'d all defined indexes.'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabel'#7'Lab'
+  +'el31'#4'Left'#2#8#6'Height'#2#17#3'Top'#2'8'#5'Width'#2'y'#8'AutoSize'#8#7
+  +'Caption'#6#21'Specify index to use.'#11'ParentColor'#8#8'WordWrap'#9#0#0#6
+  +'TLabel'#7'Label32'#4'Left'#2'x'#6'Height'#2#17#3'Top'#3#160#0#5'Width'#2'i'
+  +#8'AutoSize'#8#7'Caption'#6#16'Add COLOR index.'#11'ParentColor'#8#8'WordWra'
+  +'p'#9#0#0#6'TLabel'#7'Label33'#4'Left'#2'x'#6'Height'#2#17#3'Top'#3#224#0#5
+  +'Width'#2'i'#8'AutoSize'#8#7'Caption'#6#19'Delete COLOR index.'#11'ParentCol'
+  +'or'#8#8'WordWrap'#9#0#0#6'TLabel'#7'Label48'#4'Left'#2'x'#6'Height'#2#17#3
+  +'Top'#3#192#0#5'Width'#2'i'#8'AutoSize'#8#7'Caption'#6#19'Add index Period<7'
+  +'0'#11'ParentColor'#8#8'WordWrap'#9#0#0#7'TButton'#13'btnRebuildIdx'#4'Left'
+  +#2#8#6'Height'#2#25#3'Top'#2#16#5'Width'#2'K'#7'Caption'#6#7'Rebuild'#7'OnCl'
+  +'ick'#7#18'btnRebuildIdxClick'#8'TabOrder'#2#0#0#0#9'TComboBox'#9'cbIndexes'
+  +#4'Left'#2#8#6'Height'#2#21#3'Top'#2'H'#5'Width'#3#201#0#10'ItemHeight'#2#13
+  +#8'OnChange'#7#15'cbIndexesChange'#5'Style'#7#14'csDropDownList'#8'TabOrder'
+  +#2#1#0#0#7'TButton'#11'btnAddIndex'#4'Left'#2#8#6'Height'#2#25#3'Top'#3#152#0
+  +#5'Width'#2'K'#7'Caption'#6#9'Add Index'#7'OnClick'#7#16'btnAddIndexClick'#8
+  +'TabOrder'#2#2#0#0#7'TButton'#14'btnDeleteIndex'#4'Left'#2#8#6'Height'#2#25#3
+  +'Top'#3#216#0#5'Width'#2'K'#7'Caption'#6#12'Delete Index'#7'OnClick'#7#19'bt'
+  +'nDeleteIndexClick'#8'TabOrder'#2#3#0#0#9'TCheckBox'#14'chbColorUnique'#4'Le'
+  ,'ft'#2#8#6'Height'#2#17#3'Top'#2'h'#5'Width'#2'a'#7'Caption'#6#12'Unique ind'
+  +'ex'#7'Checked'#9#5'State'#7#9'cbChecked'#8'TabOrder'#2#4#0#0#9'TCheckBox'#18
+  +'chbColorDescending'#4'Left'#2#8#6'Height'#2#17#3'Top'#3#128#0#5'Width'#2'a'
+  +#7'Caption'#6#10'Descending'#7'Checked'#9#5'State'#7#9'cbChecked'#8'TabOrder'
+  +#2#5#0#0#7'TButton'#8'Button24'#4'Left'#2#8#6'Height'#2#25#3'Top'#3#184#0#5
+  +'Width'#2'a'#7'Caption'#6#18'Add filtered Index'#7'OnClick'#7#13'Button24Cli'
+  +'ck'#8'TabOrder'#2#6#0#0#0#9'TTabSheet'#10'TabSheet10'#7'Caption'#6#10'Versi'
+  +'oning'#12'ClientHeight'#2#0#11'ClientWidth'#2#0#10'ImageIndex'#2#7#0#6'TLab'
+  +'el'#7'Label36'#4'Left'#2'`'#6'Height'#2'9'#3'Top'#2#16#5'Width'#2'y'#8'Auto'
+  +'Size'#8#7'Caption'#6'TDefine the base for versioning. Only changes from thi'
+  +'s checkpoint will be versioned.'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLab'
+  +'el'#7'Label37'#4'Left'#2'`'#6'Height'#2')'#3'Top'#3#144#0#5'Width'#3#129#0#8
+  +'AutoSize'#8#7'Caption'#6'2Save versioning delta to the file ''c:\deltas.dat'
+  +'''.'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabel'#7'Label38'#4'Left'#2'`'#6
+  +'Height'#2'A'#3'Top'#3#192#0#5'Width'#3#129#0#8'AutoSize'#8#7'Caption'#6'RIf'
+  +' checked keep all versions of a record, otherwise keep only newest and orig'
+  +'inal.'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabel'#7'Label39'#4'Left'#2'`'
+  +#6'Height'#2'9'#3'Top'#2'P'#5'Width'#2'y'#8'AutoSize'#8#7'Caption'#6'1Using '
+  +'the TDemoDeltaHandler resolves all changes.'#11'ParentColor'#8#8'WordWrap'#9
+  +#0#0#7'TButton'#8'Button14'#4'Left'#2#8#6'Height'#2#25#3'Top'#2#16#5'Width'#2
+  +'K'#7'Caption'#6#10'Checkpoint'#7'OnClick'#7#13'Button14Click'#8'TabOrder'#2
+  +#0#0#0#9'TCheckBox'#13'chbVersionAll'#4'Left'#2#8#6'Height'#2#17#3'Top'#3#200
+  +#0#5'Width'#2'I'#7'OnClick'#7#18'chbVersionAllClick'#8'TabOrder'#2#1#0#0#7'T'
+  +'Button'#8'Button15'#4'Left'#2#8#6'Height'#2#25#3'Top'#3#144#0#5'Width'#2'K'
+  +#7'Caption'#6#4'Save'#7'OnClick'#7#13'Button15Click'#8'TabOrder'#2#2#0#0#7'T'
+  +'Button'#8'Button16'#4'Left'#2#8#6'Height'#2#25#3'Top'#2'P'#5'Width'#2'K'#7
+  +'Caption'#6#7'Resolve'#7'OnClick'#7#13'Button16Click'#8'TabOrder'#2#3#0#0#0#9
+  +'TTabSheet'#10'TabSheet11'#7'Caption'#6#9'Snapshots'#12'ClientHeight'#2#0#11
+  +'ClientWidth'#2#0#10'ImageIndex'#2#8#0#6'TLabel'#7'Label40'#4'Left'#3#128#0#6
+  +'Height'#2'1'#3'Top'#2#16#5'Width'#2'a'#8'AutoSize'#8#7'Caption'#6'''Get a s'
+  +'napshot into a variant variable.'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLa'
+  +'bel'#7'Label41'#4'Left'#3#128#0#6'Height'#2'1'#3'Top'#2'H'#5'Width'#2'a'#8
+  +'AutoSize'#8#7'Caption'#6'''Set the table contents from a snapshot.'#11'Pare'
+  +'ntColor'#8#8'WordWrap'#9#0#0#7'TButton'#8'Button17'#4'Left'#2#8#6'Height'#2
+  +#25#3'Top'#2#16#5'Width'#2'q'#7'Caption'#6#16'Save to snapshot'#7'OnClick'#7
+  +#13'Button17Click'#8'TabOrder'#2#0#0#0#7'TButton'#8'Button18'#4'Left'#2#8#6
+  +'Height'#2#25#3'Top'#2'H'#5'Width'#2'q'#7'Caption'#6#18'Load from snapshot'#7
+  +'OnClick'#7#13'Button18Click'#8'TabOrder'#2#1#0#0#0#9'TTabSheet'#10'TabSheet'
+  +'12'#7'Caption'#6#12'Transactions'#12'ClientHeight'#2#0#11'ClientWidth'#2#0
+  +#10'ImageIndex'#2#9#0#6'TLabel'#7'Label42'#4'Left'#2#8#6'Height'#2#13#3'Top'
+  +#3#160#1#5'Width'#2'Q'#7'Caption'#6#17'Transaction level'#11'ParentColor'#8#0
+  +#0#6'TLabel'#17'lTransactionLevel'#4'Left'#3#128#0#6'Height'#2#13#3'Top'#3
+  +#160#1#5'Width'#2#20#7'Caption'#6#3'N/A'#11'ParentColor'#8#0#0#6'TLabel'#7'L'
+  +'abel43'#4'Left'#2'x'#6'Height'#3#153#0#3'Top'#2#8#5'Width'#2'i'#8'AutoSize'
+  +#8#7'Caption'#6#161'Starts a new transaction (several transactions can be ac'
+  +'tive at the same time but remember to commit or rollback as many times as y'
+  +'ou have started a transaction.'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabe'
+  +'l'#7'Label44'#4'Left'#2'z'#6'Height'#2'A'#3'Top'#3#168#0#5'Width'#2'i'#8'Au'
+  +'toSize'#8#7'Caption'#6'3Keep the changes made since last start transaction.'
+  +#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabel'#7'Label45'#4'Left'#2'z'#6'Hei'
+  +'ght'#2'9'#3'Top'#3#240#0#5'Width'#2'i'#8'AutoSize'#8#7'Caption'#6'1Discard '
+  +'all changes made since start transaction.'#11'ParentColor'#8#8'WordWrap'#9#0
+  +#0#7'TButton'#8'Button19'#4'Left'#2#8#6'Height'#2#25#3'Top'#2#8#5'Width'#2'a'
+  +#7'Caption'#6#17'Start transaction'#7'OnClick'#7#13'Button19Click'#8'TabOrde'
+  +'r'#2#0#0#0#7'TButton'#8'Button20'#4'Left'#2#8#6'Height'#2#25#3'Top'#3#168#0
+  +#5'Width'#2'K'#7'Caption'#6#6'Commit'#7'OnClick'#7#13'Button20Click'#8'TabOr'
+  +'der'#2#1#0#0#7'TButton'#8'Button21'#4'Left'#2#8#6'Height'#2#25#3'Top'#3#240
+  +#0#5'Width'#2'K'#7'Caption'#6#8'Rollback'#7'OnClick'#7#13'Button21Click'#8'T'
+  +'abOrder'#2#2#0#0#0#9'TTabSheet'#10'TabSheet13'#7'Caption'#6#16'Filtering/Ra'
+  +'nges'#12'ClientHeight'#2#0#11'ClientWidth'#2#0#10'ImageIndex'#2#10#0#6'TLab'
+  +'el'#7'Label28'#4'Left'#2#8#6'Height'#2#13#3'Top'#2#8#5'Width'#2#22#7'Captio'
+  +'n'#6#6'Filter'#11'ParentColor'#8#0#0#6'TLabel'#7'Label22'#4'Left'#2#8#6'Hei'
+  +'ght'#2'!'#3'Top'#2'H'#5'Width'#2'a'#8'AutoSize'#8#7'Caption'#6#28'Set range'
+  +' where 50<Period<70'#11'ParentColor'#8#8'WordWrap'#9#0#0#6'TLabel'#7'Label2'
+  ,'3'#4'Left'#2#8#6'Height'#2#13#3'Top'#2'p'#5'Width'#2'?'#7'Caption'#6#12'Can'
+  +'cel range'#11'ParentColor'#8#0#0#5'TEdit'#7'eFilter'#4'Left'#2'4'#6'Height'
+  +#2#21#3'Top'#2#8#5'Width'#3#161#0#8'TabOrder'#2#0#4'Text'#6#9'PERIOD>10'#0#0
+  +#9'TCheckBox'#21'TableFilteredCheckBox'#4'Left'#2#7#6'Height'#2#17#3'Top'#2
+  +'#'#5'Width'#2'R'#7'Caption'#6#10'Use Filter'#7'OnClick'#7#26'TableFilteredC'
+  +'heckBoxClick'#8'TabOrder'#2#1#7'Visible'#8#0#0#7'TButton'#12'btnSetFilter'#4
+  +'Left'#2't'#6'Height'#2#21#3'Top'#2' '#5'Width'#2'a'#7'Caption'#6#10'Set fil'
+  +'ter'#7'OnClick'#7#17'btnSetFilterClick'#8'TabOrder'#2#2#0#0#7'TButton'#11'b'
+  +'tnSetRange'#4'Left'#3#136#0#6'Height'#2#22#3'Top'#2'H'#5'Width'#2'K'#7'Capt'
+  +'ion'#6#9'Set range'#7'OnClick'#7#16'btnSetRangeClick'#8'TabOrder'#2#3#0#0#7
+  +'TButton'#14'btnCancelRange'#4'Left'#3#136#0#6'Height'#2#22#3'Top'#2'h'#5'Wi'
+  +'dth'#2'K'#7'Caption'#6#12'Cancel range'#7'OnClick'#7#19'btnCancelRangeClick'
+  +#8'TabOrder'#2#4#0#0#0#9'TTabSheet'#9'TabSheet9'#7'Caption'#6#8'Group by'#12
+  +'ClientHeight'#2#0#11'ClientWidth'#2#0#10'ImageIndex'#2#10#0#6'TLabel'#7'Lab'
+  +'el49'#4'Left'#2#3#6'Height'#2#13#3'Top'#2'('#5'Width'#2'J'#7'Caption'#6#15
+  +'Resulting group'#11'ParentColor'#8#0#0#7'TButton'#8'Button27'#4'Left'#2#3#6
+  +'Height'#2#25#3'Top'#2#8#5'Width'#2'd'#7'Caption'#6#14'Group by Color'#7'OnC'
+  +'lick'#7#13'Button27Click'#8'TabOrder'#2#0#0#0#7'TDBGrid'#7'DBGrid3'#4'Left'
+  +#2#3#6'Height'#3'K'#1#3'Top'#2'5'#5'Width'#3#221#0#7'Anchors'#11#5'akTop'#6
+  +'akLeft'#7'akRight'#8'akBottom'#0#5'Color'#7#8'clWindow'#7'Columns'#14#0#10
+  +'DataSource'#7#11'DataSource2'#8'TabOrder'#2#1#15'TitleFont.Color'#7#12'clWi'
+  +'ndowText'#16'TitleFont.Height'#2#246#14'TitleFont.Name'#6#13'MS Sans Serif'
+  +#0#0#7'TButton'#8'Button28'#4'Left'#2'm'#6'Height'#2#25#3'Top'#2#8#5'Width'#2
+  +'d'#7'Caption'#6#12'Group global'#7'OnClick'#7#13'Button28Click'#8'TabOrder'
+  +#2#2#0#0#7'TButton'#8'Button29'#4'Left'#2#7#6'Height'#2#25#3'Top'#3#140#1#5
+  +'Width'#3#137#0#7'Caption'#6#19'Sort on Color_COUNT'#7'OnClick'#7#13'Button2'
+  +'9Click'#8'TabOrder'#2#3#0#0#0#9'TTabSheet'#10'TabSheet14'#7'Caption'#6#9'Ag'
+  +'gregate'#12'ClientHeight'#2#0#11'ClientWidth'#2#0#10'ImageIndex'#2#11#0#7'T'
+  +'Button'#8'Button31'#4'Left'#2#3#6'Height'#2#25#3'Top'#2#3#5'Width'#3#221#0#7
+  +'Caption'#6#27'Aggregate Max on ColorField'#7'OnClick'#7#13'Button31Click'#8
+  +'TabOrder'#2#0#0#0#7'TButton'#8'Button32'#4'Left'#2#4#6'Height'#2#25#3'Top'#2
+  +'"'#5'Width'#3#221#0#7'Caption'#6'&Aggregate StdDev/Average on ColorField'#7
+  +'OnClick'#7#13'Button32Click'#8'TabOrder'#2#1#0#0#0#0#6'TPanel'#6'Panel7'#4
+  +'Left'#2#0#6'Height'#2#31#3'Top'#3#21#2#5'Width'#3#250#2#5'Align'#7#8'alBott'
+  +'om'#10'BevelOuter'#7#6'bvNone'#12'ClientHeight'#2#31#11'ClientWidth'#3#250#2
+  +#8'TabOrder'#2#2#0#6'TLabel'#7'Label46'#4'Left'#2#6#6'Height'#2#13#3'Top'#2#6
+  +#5'Width'#2','#7'Caption'#6#9'Progress:'#11'ParentColor'#8#0#0#6'TLabel'#9'l'
+  +'Progress'#4'Left'#2'>'#6'Height'#2#13#3'Top'#2#6#5'Width'#2#20#7'Caption'#6
+  +#3'N/A'#11'ParentColor'#8#0#0#0#11'TDataSource'#11'DataSource1'#7'DataSet'#7
+  +#12'kbmMemTable1'#4'left'#3'('#1#3'top'#3'`'#1#0#0#12'TkbmMemTable'#12'kbmMe'
+  +'mTable1'#16'DesignActivation'#9#19'AttachedAutoRefresh'#9#14'AttachMaxCount'
+  +#2#1#15'AutoIncMinValue'#2#255#9'FieldDefs'#14#0#14'AutoReposition'#9#9'Inde'
+  +'xDefs'#14#0#11'SortOptions'#11#0#11'Performance'#7#9'mtpfSmall'#14'Persiste'
+  +'ntFile'#6#15'C:\test_org.csv'#16'PersistentBackup'#8#13'ProgressFlags'#11#8
+  +'mtpcLoad'#8'mtpcSave'#8'mtpcCopy'#0#16'LoadedCompletely'#8#15'SavedComplete'
+  +'ly'#8#16'EnableVersioning'#9#14'VersioningMode'#7#22'mtvmAllSinceCheckPoint'
+  +#13'FilterOptions'#11#18'foNoPartialCompare'#0#7'Version'#6#24'7.63.00 Stand'
+  +'ard Edition'#10'LanguageID'#2#0#6'SortID'#2#0#13'SubLanguageID'#2#1#8'Local'
+  +'eID'#3#0#4#10'OnProgress'#7#20'kbmMemTable1Progress'#20'OnCompressBlobStrea'
+  +'m'#7#30'kbmMemTable1CompressBlobStream'#22'OnDecompressBlobStream'#7' kbmMe'
+  +'mTable1DecompressBlobStream'#9'AfterEdit'#7#21'kbmMemTable1AfterEdit'#9'Aft'
+  +'erPost'#7#23'kbmMemTable1AfterScroll'#11'AfterScroll'#7#23'kbmMemTable1Afte'
+  +'rScroll'#12'OnCalcFields'#7#19'MemTable1CalcFields'#14'OnFilterRecord'#7#24
+  +'kbmMemTable1FilterRecord'#4'left'#3'('#1#3'top'#3#128#1#0#0#9'TSQLQuery'#6
+  +'Table1'#9'FieldDefs'#14#0#6'Params'#14#0#4'left'#3'H'#1#3'top'#3#128#1#0#0#9
+  +'TSQLQuery'#7'tMaster'#9'FieldDefs'#14#0#11'AfterScroll'#7#18'tMasterAfterSc'
+  +'roll'#6'Params'#14#0#4'left'#3'('#1#3'top'#3' '#1#0#0#11'TDataSource'#8'dsM'
+  +'aster'#7'DataSet'#7#7'tMaster'#4'left'#3'H'#1#3'top'#3' '#1#0#0#9'TSQLQuery'
+  +#15'tDetailTemplate'#9'FieldDefs'#14#0#6'Params'#14#0#4'left'#3'('#1#3'top'#3
+  +'@'#1#0#0#22'TkbmBinaryStreamFormat'#8'sfBinary'#7'Version'#6#4'3.00'#12'sfU'
+  +'singIndex'#11#16'sfSaveUsingIndex'#0#6'sfData'#11#10'sfSaveData'#10'sfLoadD'
+  +'ata'#0#12'sfCalculated'#11#0#8'sfLookup'#11#0#12'sfNonVisible'#11#16'sfSave'
+  +'NonVisible'#16'sfLoadNonVisible'#0#7'sfBlobs'#11#11'sfSaveBlobs'#11'sfLoadB'
+  +'lobs'#0#5'sfDef'#11#9'sfSaveDef'#9'sfLoadDef'#0#10'sfIndexDef'#11#14'sfSave'
+  ,'IndexDef'#14'sfLoadIndexDef'#0#10'sfFiltered'#11#14'sfSaveFiltered'#0#13'sf'
+  +'IgnoreRange'#11#17'sfSaveIgnoreRange'#0#20'sfIgnoreMasterDetail'#11#24'sfSa'
+  +'veIgnoreMasterDetail'#0#8'sfDeltas'#11#0#18'sfDontFilterDeltas'#11#0#8'sfAp'
+  +'pend'#11#0#11'sfFieldKind'#11#15'sfSaveFieldKind'#0#11'sfFromStart'#11#15's'
+  +'fLoadFromStart'#0#16'sfDataTypeHeader'#11#20'sfSaveDataTypeHeader'#20'sfLoa'
+  +'dDataTypeHeader'#0#14'sfDisplayWidth'#11#0#10'BufferSize'#3#0'@'#4'left'#3
+  +'+'#1#3'top'#3#159#1#0#0#19'TkbmCSVStreamFormat'#5'sfCSV'#11'CommentChar'#6#1
+  +#0#10'EscapeChar'#6#1'%'#22'DefaultStringFieldSize'#3#255#0#8'CSVQuote'#6#1
+  +'"'#17'CSVFieldDelimiter'#6#1','#18'CSVRecordDelimiter'#6#1','#13'CSVTrueStr'
+  +'ing'#6#4'True'#14'CSVFalseString'#6#5'False'#13'sfLocalFormat'#11#13'sfLoad'
+  +'AsASCII'#0#18'sfQuoteOnlyStrings'#11#0#10'sfNoHeader'#11#0#7'Version'#6#4'3'
+  +'.10'#6'sfData'#11#10'sfSaveData'#10'sfLoadData'#0#12'sfCalculated'#11#0#8's'
+  +'fLookup'#11#0#12'sfNonVisible'#11#16'sfSaveNonVisible'#16'sfLoadNonVisible'
+  +#0#7'sfBlobs'#11#11'sfSaveBlobs'#11'sfLoadBlobs'#0#5'sfDef'#11#9'sfSaveDef'#9
+  +'sfLoadDef'#0#10'sfIndexDef'#11#14'sfSaveIndexDef'#14'sfLoadIndexDef'#0#14's'
+  +'fPlaceHolders'#11#0#10'sfFiltered'#11#14'sfSaveFiltered'#0#13'sfIgnoreRange'
+  +#11#17'sfSaveIgnoreRange'#0#20'sfIgnoreMasterDetail'#11#24'sfSaveIgnoreMaste'
+  +'rDetail'#0#8'sfDeltas'#11#0#18'sfDontFilterDeltas'#11#0#8'sfAppend'#11#0#11
+  +'sfFieldKind'#11#15'sfSaveFieldKind'#0#11'sfFromStart'#11#15'sfLoadFromStart'
+  +#0#14'sfDisplayWidth'#11#0#9'sfAutoInc'#11#0#4'left'#3'K'#1#3'top'#3#159#1#0
+  +#0#22'TkbmBinaryStreamFormat'#18'sfBinaryWithDeltas'#7'Version'#6#4'3.00'#12
+  +'sfUsingIndex'#11#16'sfSaveUsingIndex'#0#6'sfData'#11#10'sfSaveData'#10'sfLo'
+  +'adData'#0#12'sfCalculated'#11#0#8'sfLookup'#11#0#12'sfNonVisible'#11#16'sfS'
+  +'aveNonVisible'#16'sfLoadNonVisible'#0#7'sfBlobs'#11#11'sfSaveBlobs'#11'sfLo'
+  +'adBlobs'#0#5'sfDef'#11#9'sfSaveDef'#9'sfLoadDef'#0#10'sfIndexDef'#11#14'sfS'
+  +'aveIndexDef'#14'sfLoadIndexDef'#0#10'sfFiltered'#11#14'sfSaveFiltered'#0#13
+  +'sfIgnoreRange'#11#17'sfSaveIgnoreRange'#0#20'sfIgnoreMasterDetail'#11#24'sf'
+  +'SaveIgnoreMasterDetail'#0#8'sfDeltas'#11#12'sfSaveDeltas'#0#18'sfDontFilter'
+  +'Deltas'#11#0#8'sfAppend'#11#0#11'sfFieldKind'#11#15'sfSaveFieldKind'#0#11's'
+  +'fFromStart'#11#15'sfLoadFromStart'#0#16'sfDataTypeHeader'#11#20'sfSaveDataT'
+  +'ypeHeader'#20'sfLoadDataTypeHeader'#0#14'sfDisplayWidth'#11#0#10'BufferSize'
+  +#3#0'@'#4'left'#3'k'#1#3'top'#3#159#1#0#0#12'TkbmMemTable'#12'kbmMemTable2'
+  +#16'DesignActivation'#9#19'AttachedAutoRefresh'#9#14'AttachMaxCount'#2#1#9'F'
+  +'ieldDefs'#14#0#9'IndexDefs'#14#0#11'SortOptions'#11#0#16'PersistentBackup'#8
+  +#13'ProgressFlags'#11#8'mtpcLoad'#8'mtpcSave'#8'mtpcCopy'#0#16'LoadedComplet'
+  +'ely'#8#15'SavedCompletely'#8#13'FilterOptions'#11#0#7'Version'#6#24'7.63.00'
+  +' Standard Edition'#10'LanguageID'#2#0#6'SortID'#2#0#13'SubLanguageID'#2#1#8
+  +'LocaleID'#3#0#4#15'OnUserAggregate'#7#25'kbmMemTable2UserAggregate'#4'left'
+  +#3#171#0#3'top'#3#11#1#0#0#11'TDataSource'#11'DataSource2'#7'DataSet'#7#12'k'
+  +'bmMemTable2'#4'left'#3#172#0#3'top'#3','#1#0#0#0
+]);

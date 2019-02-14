@@ -1,0 +1,230 @@
+Install instructions for kbmMemTable/kbmSQL
+===========================================
+
+All preinstallation:
+ - Unless you have specific reasons not to, remove old kbmMemTable
+   installation completely, including all kbmMem* and kbmSQL* 
+     dcu's, bpl's, dcp's, obj's, dll's, dcuil's, bpi's, lib's, 
+     ppu's, o's etc.
+
+kbmMemTable exists in 3 versions:
+  CodeGear Edition (CG)
+  Standard Edition (Std)
+  Professional Edition (Pro)
+
+Please, in the following, substitute XXX with relevant CG,Std,Pro matching the edition you are installing.
+
+If you want to use kbmMemTable with both Delphi and C++Builder personality, you
+will need to set the kbmMemRunxxxxxx Project option:
+Delphi Compiler/C++ Output/C++ Output File Generation
+to "Generate All C++Builder Files"
+before compilation of the kbmMemTable runtime package.
+
+Then configure Tools/Options/C++ Builder Directories and Paths to
+locate include files in the relevant output directory for your
+generated hpp and object files (which is typically in
+Dxxx\Winxx\Debug or release if compiled in release mode).
+
+------------------------------------------------------------------
+RAD Studio 10.1 Berlin / Delphi 10.1 Berlin for Win32, Win64, OSX32, IOS 32/64 and Android
+------------------------------------------------------------------
+ - Open kbmMemRunD101XXX.dproj
+ - Compile
+ - Add <the kbmMemTable source dir>\D101\Win32 or ...\...Win64 or ...\...OSX32 or
+     ...\...IOS32 or ...\...IOS64 or ...\...Android directory
+     to the search path depending on what environment you want to compile against.
+ - Open kbmMemDesD101XXX.dproj
+ - Compile
+ - Install.
+
+ - To compile mobile applications, please add the kbmMemTable source directory to
+   Tools/Options/Library/Library Path for the relevant
+   target (Android, IOS Device, IOS Simulator etc)
+
+------------------------------------------------------------------
+RAD Studio 10 Seattle / Delphi 10 Seattle for Win32, Win64, OSX32, IOS 32/64 and Android
+------------------------------------------------------------------
+ - Open kbmMemRunD10XXX.dproj
+ - Compile
+ - Add <the kbmMemTable source dir>\D10\Win32 or ...\...Win64 or ...\...OSX32 or
+     ...\...IOS32 or ...\...IOS64 or ...\...Android directory
+     to the search path depending on what environment you want to compile against.
+ - Open kbmMemDesD10XXX.dproj
+ - Compile
+ - Install.
+
+ - To compile mobile applications, please add the kbmMemTable source directory to
+   Tools/Options/Library/Library Path for the relevant
+   target (Android, IOS Device, IOS Simulator etc)
+
+------------------------------------------------------------------
+RAD Studio XE8 / Delphi XE8 for Win32, Win64, OSX32, IOS and Android
+------------------------------------------------------------------
+ - Open kbmMemRunDXE8XXX.dproj
+ - Compile
+ - Add <the kbmMemTable source dir>\DXE6\Win32 or ...\...Win64 or ...\...OSX32 or
+     ...\...IOS or ...\...Android directory
+     to the search path depending on what environment you want to compile against.
+ - Open kbmMemDesDXE8XXX.dproj
+ - Compile
+ - Install.
+
+ - To compile mobile applications, please add the kbmMemTable source directory to
+   Tools/Options/Library/Library Path for the relevant
+   target (Android, IOS Device, IOS Simulator etc)
+
+------------------------------------------------------------------
+RAD Studio XE7 / Delphi XE7 for Win32, Win64, OSX32, IOS and Android
+------------------------------------------------------------------
+ - Open kbmMemRunDXE7XXX.dproj
+ - Compile
+ - Add <the kbmMemTable source dir>\DXE6\Win32 or ...\...Win64 or ...\...OSX32 or
+     ...\...IOS or ...\...Android directory
+     to the search path depending on what environment you want to compile against.
+ - Open kbmMemDesDXE7XXX.dproj
+ - Compile
+ - Install.
+
+ - To compile mobile applications, please add the kbmMemTable source directory to
+   Tools/Options/Library/Library Path for the relevant
+   target (Android, IOS Device, IOS Simulator etc)
+
+------------------------------------------------------------------
+RAD Studio XE6 / Delphi XE6 for Win32, Win64, OSX32, IOS and Android
+------------------------------------------------------------------
+ - Open kbmMemRunDXE6XXX.dproj
+ - Compile
+ - Add <the kbmMemTable source dir>\DXE6\Win32 or ...\...Win64 or ...\...OSX32 or 
+     ...\...IOS or ...\...Android directory
+     to the search path depending on what environment you want to compile against.
+ - Open kbmMemDesDXE6XXX.dproj
+ - Compile
+ - Install.
+
+ - To compile mobile applications, please add the kbmMemTable source directory to 
+   Tools/Options/Library/Library Path for the relevant 
+   target (Android, IOS Device, IOS Simulator etc)
+
+------------------------------------------------------------------
+RAD Studio XE5 / Delphi XE5 for Win32, Win64 and OSX32, IOS and Android
+------------------------------------------------------------------
+ - Open kbmMemRunDXE5XXX.dproj
+ - Compile
+ - Add <the kbmMemTable source dir>\DXE5\Win32 or ...\...Win64 or ...\...OSX32
+     to the search path depending on what environment you want to compile against.
+ - Open kbmMemDesDXE5XXX.dproj
+ - Compile
+ - Install.
+
+ - To compile mobile applications, please add the kbmMemTable source directory to 
+   Tools/Options/Library/Library Path for the relevant 
+   target (Android, IOS Device, IOS Simulator etc)
+
+------------------------------------------------------------------
+RAD Studio XE4 / Delphi XE4 for Win32, Win64 and OSX32
+------------------------------------------------------------------
+ - Open kbmMemRunDXE4XXX.dproj
+ - Compile
+ - Add <the kbmMemTable source dir>\DXE4\Win32 or ...\...Win64 or ...\...OSX32
+     to the search path depending on what environment you want to compile against.
+ - Open kbmMemDesDXE4XXX.dproj
+ - Compile
+ - Install.
+
+------------------------------------------------------------------
+RAD Studio XE3 / Delphi XE3 for Win32, Win64 and OSX32
+------------------------------------------------------------------
+ - Open kbmMemRunDXE3XXX.dproj
+ - Compile
+ - Add <the kbmMemTable source dir>\DXE3\Win32 or ...\...Win64 or ...\...OSX32
+     to the search path depending on what environment you want to compile against.
+ - Open kbmMemDesDXE3XXX.dproj
+ - Compile
+ - Install.
+
+------------------------------------------------------------------
+C++Builder XE2 for Win32 (standalone)
+------------------------------------------------------------------
+ - Open kbmMemRunCXE2XXX.cbproj
+ - Compile
+ - Add <the kbmMemTable source dir>\CXE2\Win32 to the search path.
+ - Open kbmMemDesCXE2XXX.cbproj
+ - Compile
+ - Install.
+
+------------------------------------------------------------------
+RAD Studio XE2 / Delphi XE2 for Win32, Win64 and OSX32
+------------------------------------------------------------------
+ - Open kbmMemRunDXE2XXX.dproj
+ - Compile
+ - Add <the kbmMemTable source dir>\DXE2\Win32 or ...\...Win64 or ...\...OSX32
+     to the search path depending on what environment you want to compile against.
+ - Open kbmMemDesDXE2XXX.dproj
+ - Compile
+ - Install.
+
+------------------------------------------------------------------
+C++Builder XE for Win32 (standalone)
+------------------------------------------------------------------
+ - Open kbmMemRunCXEXXX.cbproj
+ - Compile
+ - Add <the kbmMemTable source dir>\CXE\Win32 to the search path.
+ - Open kbmMemDesCXEXXX.cbproj
+ - Compile
+ - Install.
+
+------------------------------------------------------------------
+RAD Studio XE / Delphi XE for Win32
+------------------------------------------------------------------
+ - Open kbmMemRunDXEXXX.dproj
+ - Compile
+ - Add <the kbmMemTable source dir>\DXE\Win32 to the search path.
+ - Open kbmMemDesDXEXXX.dproj
+ - Compile
+ - Install.
+
+------------------------------------------------------------------
+C++Builder 2010 for Win32 (standalone)
+------------------------------------------------------------------
+ - Open kbmMemRunC2010XXX.cbproj
+ - Compile
+ - Add <the kbmMemTable source dir>\C2010\Win32 to the search path.
+ - Open kbmMemDesC2010XXX.cbproj
+ - Compile
+ - Install.
+
+------------------------------------------------------------------
+RAD Studio 2010 / Delphi 2010 for Win32
+------------------------------------------------------------------
+ - Open kbmMemRunD2010XXX.dproj
+ - Compile
+ - Add <the kbmMemTable source dir>\D2010\Win32 to the search path.
+ - Open kbmMemDesD2010XXX.dproj
+ - Compile
+ - Install.
+
+------------------------------------------------------------------
+Delphi 2009 for Win32
+------------------------------------------------------------------
+ - Open kbmMemRunD2009XXX.dproj
+ - Compile
+ - Add <the kbmMemTable source dir>\D2009\Win32 to the search path.
+ - Open kbmMemDesD2009XXX.dproj
+ - Compile
+ - Install.
+
+------------------------------------------------------------------
+Lazarus 1.2.4 with FreePascal 2.6.4 or newer
+------------------------------------------------------------------
+ - Open Package: kbmMemRunLazXXX.lpk
+ - Recompile Clean (in the More.. button on the package toolbar)
+ - Open Package: kbmMemDesLazXXX.lpk
+ - Recompile Clean (in the More.. button on the package toolbar)
+ - Install (Recompile IDE)
+
+If the installation fails (linker says it cant find kbmMemRunLazXXX), 
+please click on Tools/Build Lazarus with profile: Build All
+Then the package should be installed.
+
+You will find 4 new components in the 'kbmMemTable' tab
+after a successfull installation.

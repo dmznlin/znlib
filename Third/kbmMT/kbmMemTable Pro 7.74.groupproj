@@ -1,0 +1,48 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{F17C82BA-0CAF-45ED-92EA-B12CE481CD88}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="Source\kbmMemRunD102Pro.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="Source\kbmMemDesD102Pro.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="kbmMemRunD102Pro">
+        <MSBuild Projects="Source\kbmMemRunD102Pro.dproj"/>
+    </Target>
+    <Target Name="kbmMemRunD102Pro:Clean">
+        <MSBuild Projects="Source\kbmMemRunD102Pro.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="kbmMemRunD102Pro:Make">
+        <MSBuild Projects="Source\kbmMemRunD102Pro.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="kbmMemDesD102Pro">
+        <MSBuild Projects="Source\kbmMemDesD102Pro.dproj"/>
+    </Target>
+    <Target Name="kbmMemDesD102Pro:Clean">
+        <MSBuild Projects="Source\kbmMemDesD102Pro.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="kbmMemDesD102Pro:Make">
+        <MSBuild Projects="Source\kbmMemDesD102Pro.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="kbmMemRunD102Pro;kbmMemDesD102Pro"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="kbmMemRunD102Pro:Clean;kbmMemDesD102Pro:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="kbmMemRunD102Pro:Make;kbmMemDesD102Pro:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>
