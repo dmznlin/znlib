@@ -68,7 +68,8 @@ implementation
 //Parm: 是否注册
 //Desc: 扫描Group中所有Manager,调用Manager的注册方法.
 procedure TManagerGroup.RegistAll(const nReg: Boolean);
-var nCtx: TRttiContext;
+var nObj: TObject;
+    nCtx: TRttiContext;
     nType: TRttiType;
     nRF: TRttiField;
     nMethod: TRttiMethod;
@@ -86,8 +87,12 @@ begin
         nMethod := nInstance.GetMethod('RunBeforUnregistAllManager');
 
         if Assigned(nMethod) then
-          nMethod.Invoke(nRF.GetValue(@gMG).AsObject, []);
-        //卸载前执行
+        begin
+          nObj := nRF.GetValue(@gMG).AsObject;
+          if Assigned(nObj) then
+            nMethod.Invoke(nObj, []);
+          //卸载前执行
+        end;
       end;
     end;
 
@@ -111,8 +116,12 @@ begin
         nMethod := nInstance.GetMethod('RunAfterRegistAllManager');
 
         if Assigned(nMethod) then
-          nMethod.Invoke(nRF.GetValue(@gMG).AsObject, []);
-        //注册后执行
+        begin
+          nObj := nRF.GetValue(@gMG).AsObject;
+          if Assigned(nObj) then
+            nMethod.Invoke(nObj, []);
+          //注册后执行
+        end;
       end;
     end;
   finally
