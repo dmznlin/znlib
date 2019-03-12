@@ -22,7 +22,7 @@ type
     FValHas       : Double;            //已装量:平稳后的有效值
     FValMax       : Double;            //最大数据:地磅出现的最大数值
     FValTunnel    : Double;            //通道数据:当前地磅数据
-    FValUpdate    : Int64;             //通道更新:通道数据的更新时间
+    FValUpdate    : Cardinal;          //通道更新:通道数据的更新时间
     FValAdjust    : Double;            //冲击修正:定值,物料下落产生的重量
     FValPercent   : Double;            //比例修正:百分比,防止发超的保留量
     FWeightMax    : Double;            //修正后可装量:定值,装车中允许的最大量
@@ -469,7 +469,7 @@ begin
       FActive := FOwner.FTunnels[nIdx];
       if (FActive.FBill = '') or (FActive.FValue <= 0) then Continue; //无业务
 
-      nItv := GetTickCount - FActive.FInitFresh;
+      nItv := GetTickCountDiff(FActive.FInitFresh);
       if nItv >= FActive.FTOProceFresh then
       begin
         if FActive.FValFresh <> FActive.FValTunnel then
@@ -485,7 +485,7 @@ begin
         //刷新仪表数值
       end;
 
-      nItv := GetTickCount - FActive.FInitWeight;
+      nItv := GetTickCountDiff(FActive.FInitWeight);
       if (FActive.FValMax <= 0) and (nItv >= FActive.FTONoWeight) then
       begin
         FOwner.DoChangeEvent(FActive, bsClose);
@@ -496,7 +496,7 @@ begin
         Continue;
       end;
       
-      nItv := GetTickCount - FActive.FValUpdate;
+      nItv := GetTickCountDiff(FActive.FValUpdate);
       if nItv >= FActive.FTONoData then //地磅故障
       begin
         FOwner.DoChangeEvent(FActive, bsClose);

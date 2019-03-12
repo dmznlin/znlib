@@ -121,7 +121,7 @@ type
     //当前通道
     FWaiter: TWaitObject;
     //等待对象
-    FLastSave: Int64;
+    FLastSave: Cardinal;
     //上次保存
   protected
     procedure Execute; override;
@@ -438,7 +438,7 @@ var nBool: Boolean;
     nIdx,nInt: Integer;
     nTunnel: PMultiJSTunnel;
 begin
-  nBool := GetTickCount - FLastSave >= cMultiJS_SaveInterval;
+  nBool := GetTickCountDiff(FLastSave) >= cMultiJS_SaveInterval;
   if nBool then
     FLastSave := GetTickCount;
   //reset save time

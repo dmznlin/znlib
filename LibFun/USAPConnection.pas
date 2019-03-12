@@ -13,7 +13,7 @@ interface
 
 uses
   Windows, Classes, ComObj, SysUtils, SyncObjs, UWaitItem, UMgrHashDict,
-  USysLoger, SAPLogonCtrl_TLB, SAPFunctionsOCX_TLB;
+  USysLoger, ULibFun, SAPLogonCtrl_TLB, SAPFunctionsOCX_TLB;
 
 const
   cErr_SAPConn_NoParam     = $0001;            //无连接参数
@@ -556,7 +556,7 @@ begin
     Result := GetConnection(nID, nErrCode);
     if Assigned(Result) then Break;
 
-    if (nErrCode = cErr_SAPConn_Closing) and (GetTickCount - nInt < 5000) then
+    if (nErrCode = cErr_SAPConn_Closing) and (GetTickCountDiff(nInt) < 5000) then
          Sleep(10)
     else Break;
   end;

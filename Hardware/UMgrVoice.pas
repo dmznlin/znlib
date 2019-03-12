@@ -374,7 +374,7 @@ begin
 end;
 
 procedure TVoiceControler.Execute;
-var nInit: Int64;
+var nInit: Cardinal;
 begin
   nInit := 0;
   //init
@@ -417,8 +417,8 @@ begin
       //no content
 
       if (FParam.FVoiceTime < FParam.FTimes) and
-         (GetTickCount - nInit >= 10 * 1000) and
-         (GetTickCount - FParam.FVoiceLast >= FParam.FInterval * 1000) then
+         (GetTickCountDiff(nInit) >= 10 * 1000) and
+         (GetTickCountDiff(FParam.FVoiceLast) >= FParam.FInterval * 1000) then
       begin
         DoExuecte;
         nInit := GetTickCount;

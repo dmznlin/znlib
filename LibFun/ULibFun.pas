@@ -30,6 +30,9 @@ type
   TDynamicStrArray = array of string;
   //字符串数组
 
+  TTickDefault = (tdZero, tdNow);
+  //value when tick=0
+
 //------------------------------------------------------------------------------
 function MI(const nMacro,nValue: string): TMacroItem;
 function MacroValue(const nData: string; const nMacro: array of TMacroItem): string;
@@ -158,6 +161,9 @@ function Date2Week(nPrefix: string = ''; nDate: TDateTime = 0): string;
 //get the week of nDate
 function DateTimeSerial: string;
 //serial id by date
+function GetTickCountDiff(const nCount: Cardinal;
+  const nDefault: TTickDefault = tdNow): Int64;
+//result = gettickcount - nCount
 
 implementation
 
@@ -1471,6 +1477,32 @@ function DateTimeSerial: string;
 begin
   Sleep(1); //must be
   Result := FormatDateTime('yyyymmddhhnnsszzz', Now());
+end;
+
+//Date: 2019-01-11
+//Parm: 上一次调用GetTickCount的值;默认值
+//Desc: 计算GetTickCount - nCount的差值,需校正溢出归零问题
+function GetTickCountDiff(const nCount: Cardinal;
+  const nDefault: TTickDefault): Int64;
+begin
+  if nCount = 0 then
+  begin
+    Result := 0;
+    //default
+
+    case nDefault of
+     tdZero : Exit;
+     tdNow  : Result := GetTickCount();
+    end;
+  end else
+  begin
+    Result := GetTickCount();
+    //default
+
+    if Result >= nCount then
+         Result := Result - nCount
+    else Result := Result + High(Cardinal) - nCount + 1;
+  end;
 end;
 
 initialization

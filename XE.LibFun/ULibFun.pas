@@ -218,7 +218,7 @@ type
     class function DateTimeSerial: string; static;
     //serial id by date
     class function GetTickCountDiff(const nCount: Cardinal;
-      const nDefault: TTickDefault = tdNow): Cardinal;
+      const nDefault: TTickDefault = tdNow): Int64;
     //result = gettickcount - nCount
   end;
 
@@ -457,7 +457,8 @@ begin
          nStr := gFormConfig
     else nStr := nFile;
 
-    if not FileExists(nStr) then Exit;
+    if nStr = '' then
+      raise Exception.Create('ULibFun.LoadFormConfig: Invalidate ConfigFile!');
     nIni := TIniFile.Create(nStr);
   end else nIni := nIniF;
 
@@ -506,7 +507,7 @@ begin
         Top := nValue;
       end else
       begin
-        if Position = poDesigned then
+        if (Position = poDesigned) or (Position = poDefaultPosOnly) then
           Position := poDesktopCenter;
         //初次加载时居中,避免设计时分辨率不同越界
       end;
@@ -546,8 +547,8 @@ begin
     else nStr := nFile;
 
     if nStr = '' then
-         raise Exception.Create('Invalidate ConfigFile!')
-    else nIni := TIniFile.Create(nStr);
+      raise Exception.Create('ULibFun.SaveFormConfig: Invalidate ConfigFile!');
+    nIni := TIniFile.Create(nStr);
   end else nIni := nIniF;
 
   nBool := False;
@@ -1571,7 +1572,7 @@ end;
 //Parm: 上一次调用GetTickCount的值;默认值
 //Desc: 计算GetTickCount - nCount的差值,需校正溢出归零问题
 class function TDateTimeHelper.GetTickCountDiff(const nCount:Cardinal;
-  const nDefault: TTickDefault):Cardinal;
+  const nDefault: TTickDefault): Int64;
 begin
   if nCount = 0 then
   begin

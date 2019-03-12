@@ -87,7 +87,7 @@ type
     FResource : TList;                 //资源内容
 
     FVoiceData: TVoiceDataItem;        //语音数据
-    FVoiceLast: Int64;                 //上次播发
+    FVoiceLast: Cardinal;              //上次播发
     FVoiceTime: Byte;                  //播发次数
     FVoiceKeep: Integer;               //保持时间
     FParam    : PVoiceContentParam;    //播发参数
@@ -626,7 +626,7 @@ function TNetVoiceConnector.IsCardBusy(const nCard: PVoiceCardHost): Boolean;
 var nBuf: TIdBytes;
     nData: TVoiceDataItem;
 begin
-  Result := GetTickCount - nCard.FVoiceLast < nCard.FVoiceKeep;
+  Result := GetTickCountDiff(nCard.FVoiceLast) < nCard.FVoiceKeep;
   if Result then Exit; //keep short time
   if (not FClient.Connected) or (FClient.Host <> nCard.FHost) then Exit;
 
@@ -672,7 +672,7 @@ begin
     while nIdx < FBuffer.Count do
     begin
       nTxt := FBuffer[nIdx];
-      if GetTickCount - nTxt.FAddTime > cVoice_Content_Keep then
+      if GetTickCountDiff(nTxt.FAddTime) > cVoice_Content_Keep then
       begin
         nStr := '语音卡[ %s ]内容超时.';
         nStr := Format(nStr, [nTxt.FCard]);
@@ -803,7 +803,7 @@ begin
   //不发送标记
   if nCard.FVoiceTime >= nCard.FParam.FTimes then Exit;
   //发送次数完成
-  if GetTickCount - nCard.FVoiceLast < nCard.FParam.FInterval * 1000 then Exit;
+  if GetTickCountDiff(nCard.FVoiceLast) < nCard.FParam.FInterval * 1000 then Exit;
   //发送间隔未到
 
   if FClient.Host <> nCard.FHost then

@@ -1,0 +1,57 @@
+﻿<?xml version="1.0" encoding="gb2312"?>
+<!--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+节点: ParamItems->ParamItem
+*.Name: 参数名称
+*.Detail: 明细项,每种参数可包含多个明细项
+
+节点: Params->ParamItem->Field
+*.Name: 参数项名称;ID,Name必填
+*.Type: attribution,属性项;sub,子项
+*.Value: string,字符串;integer,整数;float,浮点
+*.From: 取其它参数的明细
+*.Data: 取FieldData定义的值
+*.DESC: 参数项描述
+
+节点: FieldData->DataItem
+*.Name: 数据名称
+*.Encode: 编码方式(base64)
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-->
+<Description>
+  <Params>
+    <ParamItem Name="Packs" Detail="PackItem" DESC="参数包">
+      <Field Name="ID" Type="attribution" Value="string" DESC="参数标识" />
+      <Field Name="Name" Type="attribution" Value="string" DESC="参数名称" />
+      <Field Name="SAP" Type="sub" Value="string" From="SAPList" DESC="SAP配置项" />
+      <Field Name="DB" Type="sub" Value="string" From="DBList" DESC="DB配置项" />
+      <Field Name="Perform" Type="sub" Value="string" From="PerformList" DESC="性能参数" />
+    </ParamItem>
+    <ParamItem Name="DBList" Detail="DBItem" DESC="数据库">
+      <Field Name="ID" Type="attribution" Value="string" Data="DB_ID" DESC="参数标识" />
+      <Field Name="Name" Type="attribution" Value="string" Data="DB_Name" DESC="参数名称" />
+      <Field Name="Host" Type="sub" Value="string" DESC="服务器地址" />
+      <Field Name="Port" Type="sub" Value="integer" DESC="服务器端口" />
+      <Field Name="DBName" Type="sub" Value="string" DESC="数据库名称" />
+      <Field Name="User" Type="sub" Value="string" DESC="登录用户" />
+      <Field Name="Password" Type="sub" Value="string" DESC="登录密码" />
+      <Field Name="ConnStr" Type="sub" Value="string" Data="DB_Conn" DESC="连接字符串" />
+    </ParamItem>
+    <ParamItem Name="PerformList" Detail="Perform" DESC="性能配置">
+      <Field Name="ID" Type="attribution" Value="string" DESC="参数标识" />
+      <Field Name="Name" Type="attribution" Value="string" DESC="参数名称" />
+      <Field Name="PortTCP" Type="sub" Value="integer" DESC="服务器地址" />
+      <Field Name="PortHttp" Type="sub" Value="integer" DESC="服务器端口" />
+      <Field Name="PoolSizeSAP" Type="sub" Value="integer" DESC="数据库名称" />
+      <Field Name="PoolSizeConn" Type="sub" Value="integer" DESC="登录用户" />
+      <Field Name="PoolSizeBusiness" Type="sub" Value="integer" DESC="登录密码" />
+      <Field Name="PoolBehaviorConn" Type="sub" Value="string" DESC="连接字符串" />
+      <Field Name="PoolBehaviorBus" Type="sub" Value="string" DESC="连接字符串" />
+      <Field Name="MaxRecordCount" Type="sub" Value="integer" DESC="连接字符串" />
+      <Field Name="MonInterval" Type="sub" Value="integer" DESC="连接字符串" />
+    </ParamItem>
+  </Params>
+  <FieldData>
+    <DataItem Name="DB_ID">Local;DB_K3</DataItem>
+    <DataItem Name="DB_Name">本地数据库;远程数据库</DataItem>
+    <DataItem Name="DB_Conn" Encode="base64">UHJvdmlkZXI9U1FMT0xFREIuMTtQYXNzd29yZD0kUHdkO1BlcnNpc3QgU2VjdXJpdHkgSW5mbz1UcnVlO1VzZXIgSUQ9JFVzZXI7SW5pdGlhbCBDYXRhbG9nPSREQk5hbWU7RGF0YSBTb3VyY2U9JEhvc3Q=</DataItem>
+  </FieldData>
+</Description>

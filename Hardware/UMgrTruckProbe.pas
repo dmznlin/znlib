@@ -67,7 +67,7 @@ type
     FPort    : Integer;              //端口
     FStatusI : TProberIOAddress;     //输入状态
     FStatusO : TProberIOAddress;     //输出状态
-    FStatusL : Int64;                //状态时间
+    FStatusL : Cardinal;             //状态时间
 
     FInSignalOn: Byte;
     FInSignalOff: Byte;              //输入信号
@@ -89,7 +89,7 @@ type
 
     FOut     : TProberIOAddress;     //输出地址
     FAutoOFF : Integer;              //自动关闭
-    FLastOn  : Int64;                //上次打开
+    FLastOn  : Cardinal;             //上次打开
     FScreen  : Integer;              //显示屏号
     FEnable  : Boolean;              //是否启用
   end;
@@ -808,7 +808,7 @@ begin
       nPH := FHosts[nIdx];
       //xxxxx
 
-      if GetTickCount - nPH.FStatusL >= 2 * cProber_Query_Interval then
+      if GetTickCountDiff(nPH.FStatusL) >= 2 * cProber_Query_Interval then
       begin
         Result := Format('车辆检测器[ %s ]状态查询超时.', [nHost.FName]);
         Exit;
@@ -866,7 +866,7 @@ begin
 
   FSyncLock.Enter;
   try
-    if GetTickCount - nPT.FHost.FStatusL >= 2 * cProber_Query_Interval then
+    if GetTickCountDiff(nPT.FHost.FStatusL) >= 2 * cProber_Query_Interval then
     begin
       WriteLog(Format('车辆检测器[ %s ]状态查询超时.', [nPT.FHost.FName]));
       Exit;
@@ -1118,7 +1118,7 @@ begin
       if FHost <> FActiveHost then Continue;
       //not match
 
-      if (FLastOn > 0) and (GetTickCount - FLastOn >= FAutoOFF) then
+      if (FLastOn > 0) and (GetTickCountDiff(FLastOn) >= FAutoOFF) then
       begin
         FLastOn := 0;
         TunnelOC(FTunnels[nIdx].FID, True);
@@ -1169,7 +1169,7 @@ begin
     nHost.FClient.Connect;
   //xxxxx
   
-  if GetTickCount - nHost.FStatusL >= cProber_Query_Interval - 500 then
+  if GetTickCountDiff(nHost.FStatusL) >= cProber_Query_Interval - 500 then
   begin
     FillChar(FQueryFrame, cSize_Prober_Control, cProber_NullASCII);
     //init

@@ -525,7 +525,7 @@ begin
     for nIdx:=FCards.Count - 1 downto 0 do
     begin
       nPCard := FCards[nIdx];
-      if nPCard.FOldOne or (GetTickCount - nPCard.FLast > 5 * 60 * 1000) then
+      if nPCard.FOldOne or (GetTickCountDiff(nPCard.FLast) > 5 * 60 * 1000) then
       begin
         gMemDataManager.UnLockData(nPCard);
         nPCard := nil;
@@ -537,7 +537,7 @@ begin
       if Assigned(nPCard.FHost) and (nPCard.FHost.FType = rtOnce) then
       begin
         if (nPCard.FEvent) and
-           (GetTickCount - nPCard.FLast > FKeepReadone) then
+           (GetTickCountDiff(nPCard.FLast) > FKeepReadone) then
         begin
           nPCard.FOldOne := True;
         end;
@@ -545,7 +545,7 @@ begin
 
       if Assigned(nPCard.FHost) and (nPCard.FHost.FType = rtKeep) then
       begin
-        if GetTickCount - nPCard.FLast > FKeepReadkeep then
+        if GetTickCountDiff(nPCard.FLast) > FKeepReadkeep then
         begin
           nPCard.FEvent := False;
           nPCard.FOldOne := True;
@@ -558,7 +558,7 @@ begin
         if (nPCard.FHost.FEEnable) and             //使用电子签
            (nPCard.FHost.FRealLabel <> '') and     
            (not nPCard.FHost.FETimeOut) and        //业务未超时
-           (GetTickCount - nPCard.FHost.FELast > FKeepELabel * 1000) then
+           (GetTickCountDiff(nPCard.FHost.FELast) > FKeepELabel * 1000) then
         begin
           nPCard.FEvent := False;
           nPCard.FHost.FETimeOut := True;
@@ -664,7 +664,7 @@ begin
         //换道操作
       end;
 
-      if GetTickCount - nPCard.FLast >= 2 * 1000 then
+      if GetTickCountDiff(nPCard.FLast) >= 2 * 1000 then
       begin
         nPCard.FEvent := False;
         //间隔后生效

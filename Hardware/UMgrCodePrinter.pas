@@ -26,7 +26,7 @@ type
     FEnable    : Boolean;           //启用
     FResponse  : Boolean;           //带应答
     FOnline    : Boolean;           //在线
-    FLastOn    : Int64;             //上次在线
+    FLastOn    : Cardinal;          //上次在线
     FOptions   : TStrings;          //附加选项
   end;
 
@@ -196,7 +196,7 @@ begin
         Inc(FMonIdx);
 
         if not nPrinter.FEnable then Continue;
-        if GetTickCount - nPrinter.FLastOn < cCP_KeepOnLine then Continue;
+        if GetTickCountDiff(nPrinter.FLastOn) < cCP_KeepOnLine then Continue;
       finally
         FSyncLock.Leave;
       end;
@@ -599,7 +599,7 @@ end;
 function TCodePrinterBase.IsOnline(const nPrinter: PCodePrinter): Boolean;
 begin
   if (not nPrinter.FEnable) or
-     (GetTickCount - nPrinter.FLastOn < cCP_KeepOnLine) then
+     (GetTickCountDiff(nPrinter.FLastOn) < cCP_KeepOnLine) then
   begin
     Result := True;
     Exit;

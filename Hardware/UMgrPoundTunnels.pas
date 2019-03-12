@@ -8,7 +8,7 @@ interface
 
 uses
   Windows, Classes, SysUtils, SyncObjs, CPort, CPortTypes, IdComponent,
-  IdTCPConnection, IdTCPClient, IdGlobal, IdSocketHandle, NativeXml, ULibFun,
+  IdTCPConnection, IdTCPClient, IdUDPServer, IdGlobal, IdSocketHandle, NativeXml, ULibFun,
   UWaitItem, USysLoger;
 
 const
@@ -65,7 +65,7 @@ type
     FPicQuality: Integer;            //图像质量
   end;
 
-  TPTConnType = (ctTCP, ctCOM);
+  TPTConnType = (ctTCP, ctUDP, ctCOM);
   //链路类型: 网络,串口
          
   TPTPortItem = record
@@ -136,6 +136,9 @@ type
     //停止线程
   end;
 
+  TPoundParseWeight = function (const nPort: PPTPortItem): Boolean;
+  //自定义数据解析
+
   TPoundTunnelManager = class(TObject)
   private
     FPorts: TList;
@@ -146,18 +149,26 @@ type
     //通道列表
     FStrList: TStrings;
     //字符列表
+    FUDPServerUser: Integer;
+    FUDPServer: TIdUDPServer;
+    //UDP链路
     FSyncLock: TCriticalSection;
     //同步锁定
     FConnector: TPoundTunnelConnector;
     //套接字链路
     FOnTunnelData: TOnTunnelDataEventEx;
     //数据触发事件
+    FOnUserParseWeight: TPoundParseWeight;
+    //自定义解析
   protected
     procedure ClearList(const nFree: Boolean);
     //清理资源
     function ParseWeight(const nPort: PPTPortItem): Boolean;
     procedure OnComData(Sender: TObject; Count: Integer);
     //读取数据
+    procedure DoUDPRead(AThread: TIdUDPListenerThread;
+      AData: TIdBytes; ABinding: TIdSocketHandle);
+    //UDP链路
     procedure DisconnectClient(const nClient: TIdTCPClient);
     //关闭链路
   public
@@ -176,6 +187,8 @@ type
     function GetTunnel(const nID: string): PPTTunnelItem;
     //检索数据
     property Tunnels: TList read FTunnels;
+    property OnUserParseWeight: TPoundParseWeight read FOnUserParseWeight
+      write FOnUserParseWeight;
     property OnData: TOnTunnelDataEventEx read FOnTunnelData write FOnTunnelData;
     //属性相关
   end;
@@ -195,6 +208,9 @@ constructor TPoundTunnelManager.Create;
 begin
   FConnector := nil;
   FOnTunnelData := nil;
+  FUDPServer := nil;
+  FUDPServerUser := 0;
+
   FPorts := TList.Create;
   FCameras := TList.Create;
 
@@ -208,6 +224,12 @@ begin
   if Assigned(FConnector) then
     FConnector.StopMe;
   //xxxxx
+
+  if Assigned(FUDPServer) then
+  begin
+    FUDPServer.Active := False;
+    FreeAndNil(FUDPServer);
+  end;
   
   ClearList(True);
   FStrList.Free;
@@ -346,9 +368,10 @@ begin
              nStr := nTmp.ValueAsString
         else nStr := 'com';
 
-        if CompareText('tcp', nStr) = 0 then
-             nPort.FConn := ctTCP
-        else nPort.FConn := ctCOM;
+        if CompareText('tcp', nStr) = 0 then nPort.FConn := ctTCP else
+        if CompareText('udp', nStr) = 0 then nPort.FConn := ctUDP else
+           nPort.FConn := ctCOM;
+        //xxxxxx
 
         FPort := NodeByName('port').ValueAsString;
         FRate := StrToBaudRate(NodeByName('rate').ValueAsString);
@@ -661,8 +684,29 @@ begin
           WriteLog(E.Message);
         end;
       end;
-    end;
+    end else
 
+    if nPT.FPort.FConn = ctUDP then
+    begin
+      try
+        if not Assigned(FUDPServer) then
+        begin
+          FUDPServer := TIdUDPServer.Create;
+          FUDPServer.DefaultPort := nPT.FPort.FHostPort;
+          FUDPServer.OnUDPRead := DoUDPRead;
+        end;
+
+        if not FUDPServer.Active then
+          FUDPServer.Active := True;
+        Inc(FUDPServerUser); //增加链路计数        
+      except
+        on E: Exception do
+        begin
+          WriteLog(E.Message);
+        end;
+      end;
+    end;
+    
     Result := True;
   finally
     FSyncLock.Leave;
@@ -694,6 +738,10 @@ begin
 
       DisconnectClient(nPT.FPort.FClient);
       //关闭链路
+
+      if FUDPServerUser > 0 then Dec(FUDPServerUser);
+      if FUDPServerUser < 1 then FUDPServer.Active := False;
+      //关闭UDP
     end;
   finally
     FSyncLock.Leave;
@@ -772,6 +820,12 @@ var nStr: string;
     nVal: Double;
     i,nIdx,nPos,nEnd: Integer;
 begin
+  if Assigned(FOnUserParseWeight) then
+  begin
+    Result := FOnUserParseWeight(nPort);
+    Exit;
+  end;
+  
   Result := False;
   if Length(nPort.FCOMData) < nPort.FPackLen then Exit;
   //数据不够整包长度
@@ -988,6 +1042,69 @@ begin
   if Assigned(FActiveTunnel.FOnDataEx) then
     FActiveTunnel.FOnDataEx(FActivePort.FCOMValue, FActivePort);
   //xxxxx
+end;
+
+//Date: 2019-03-09
+//Desc: 处理UDP数据包,由外部数据
+procedure TPoundTunnelManager.DoUDPRead(AThread: TIdUDPListenerThread;
+  AData: TIdBytes; ABinding: TIdSocketHandle);
+var nIdx: Integer;
+    nVal: Double;
+    nPort: PPTPortItem;
+    nTunnel: PPTTunnelItem;
+begin
+  FSyncLock.Enter;
+  try
+    for nIdx:=FTunnels.Count-1 downto 0 do
+    begin
+      nTunnel := FTunnels[nIdx];
+      if (nTunnel.FPort.FConn <> ctUDP) or
+         (nTunnel.FPort.FHostIP <> ABinding.PeerIP) then Continue;
+      //match tunnel
+
+      nPort := nTunnel.FPort;
+      try
+        if not (Assigned(FOnTunnelData) or (Assigned(nPort.FEventTunnel) and
+            Assigned(nPort.FEventTunnel.FOnData))) then Exit;
+        //无接收事件
+
+        nPort.FCOMBuff := BytesToString(AData, Indy8BitEncoding);
+        //udp data
+
+        if ParseWeight(nPort) then
+        begin
+          nVal := StrToFloat(nPort.FCOMData) * nPort.FDataEnlarge;
+          nVal := Float2Float(nVal, nPort.FDataPrecision, False);
+
+          nPort.FCOMValue := nVal;
+          nPort.FCOMData := '';
+          //clear data
+
+          if Assigned(FOnTunnelData) then
+            FOnTunnelData(nPort.FCOMValue, nPort);
+          //xxxxx
+
+          if Assigned(nPort.FEventTunnel) then
+          begin
+            if Assigned(nPort.FEventTunnel.FOnData) then
+              nPort.FEventTunnel.FOnData(nPort.FCOMValue);
+            //xxxxx
+                        
+            if Assigned(nPort.FEventTunnel.FOnDataEx) then
+              nPort.FEventTunnel.FOnDataEx(nPort.FCOMValue, nPort);
+            //xxxxx
+          end;
+        end;
+      except
+        on E: Exception do
+        begin
+          WriteLog(E.Message);
+        end;
+      end;
+    end;
+  finally
+    FSyncLock.Leave;
+  end;
 end;
 
 initialization

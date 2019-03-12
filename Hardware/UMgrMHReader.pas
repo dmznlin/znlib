@@ -165,6 +165,8 @@ type
     FPort: Integer;          //端口
     FBaud: Integer;          //波特率
 
+    FFullData: Boolean;      //全块写入
+    FEncryptKey: string;     //加密密钥
     FHwnd: LongInt;          //端口句柄
     FBuf,FData: string;      //数据缓存
   end;
@@ -205,7 +207,7 @@ type
     //载入配置
     function ReadCardID(const nID: string = ''): string;
     //读取编号
-    function ReadCardData(const nID: string = ''): string;
+    function ReadCardData(const nID: string = ''; nLen: Integer = 0): string;
     function WriteCardData(const nData: string; const nID: string = ''): Boolean;
     //读写数据
     property LastError: Integer read FErrorCode;
@@ -360,8 +362,8 @@ end;
 //Desc: 载入nFile配置文件
 procedure TMHReaderManager.LoadConfig(const nFile: string);
 var nIdx: Integer;
-    nNode: TXmlNode;
     nXML: TNativeXml;
+    nNode,nTmp: TXmlNode;
 begin
   nXML := TNativeXml.Create;
   try
@@ -380,6 +382,16 @@ begin
         FPort := NodeByName('port').ValueAsInteger;
         FBaud := NodeByName('baud').ValueAsInteger;
         FEnable := NodeByName('enable').ValueAsString <> 'N';
+
+        nTmp := NodeByName('encrypt');
+        if Assigned(nTmp) then
+             FEncryptKey := nTmp.ValueAsString
+        else FEncryptKey := sKey;
+
+        nTmp := NodeByName('fulldata');
+        if Assigned(nTmp) then
+             FFullData := nTmp.ValueAsString <> 'N'
+        else FFullData := True;
       end;
     end;
   finally
@@ -507,11 +519,11 @@ begin
 end;
 
 //Date: 2016-09-01
-//Parm: 读头标识
+//Parm: 读头标识;待读取长度
 //Desc: 读取nID上的卡片数据
-function TMHReaderManager.ReadCardData(const nID: string): string;
+function TMHReaderManager.ReadCardData(const nID: string; nLen: Integer): string;
 var nStr: string;
-    nIdx,nHwnd,nLen: Integer;
+    nIdx,nHwnd: Integer;
     nLInt: LongInt;
     nBuf: array[0..15] of Char;
     nMode,nSection,nBlock: SmallInt;
@@ -524,6 +536,9 @@ begin
 
   with FReaders[nIdx] do
   try
+    if (not FFullData) and (nLen < 1) then Exit;
+    //invalid data length
+
     FData := '';
     nHwnd := rf_card(FHwnd, 1, @nLInt);
     
@@ -533,8 +548,9 @@ begin
       Exit;
     end; //no card
 
-    nLen := 0;
-    //card data length
+    if FFullData then
+      nLen := 0;
+    //init card data length
 
     nSection := 1;
     nBlock := 4;
@@ -544,7 +560,7 @@ begin
     begin
       if nBlock mod 4 = 0 then
       begin
-        nHwnd := rf_load_key_hex(FHwnd, nMode, nSection, PChar(sKey));
+        nHwnd := rf_load_key_hex(FHwnd, nMode, nSection, PChar(FEncryptKey));
         if nHwnd <> 0 then
         begin
           WriteReaderLog(nIdx, nHwnd, 'LOADKEY', '失败');
@@ -569,7 +585,7 @@ begin
       FBuf := nBuf;
       //block data
 
-      if nBlock = 4 then //2扇区1区块
+      if (nBlock = 4) and FFullData then //2扇区1区块
       begin
         nStr := Copy(FBuf, 1, cPrefixLen);
         if Pos(sDataPrefix, nStr) <> 1 then
@@ -664,7 +680,7 @@ begin
     begin
       if nBlock mod 4 = 0 then
       begin
-        nHwnd := rf_load_key_hex(FHwnd, nMode, nSection, PChar(sKey));
+        nHwnd := rf_load_key_hex(FHwnd, nMode, nSection, PChar(FEncryptKey));
         if nHwnd <> 0 then
         begin
           WriteReaderLog(nIdx, nHwnd, 'LOADKEY', '失败');
@@ -679,7 +695,7 @@ begin
         end;
       end; //new section,load key and auth
 
-      if nBlock = 4 then //2扇区1区块
+      if (nBlock = 4) and FFullData then //2扇区1区块
       begin
         nStr := IntToStr(nLen);
         nInt := cPrefixLen - 1 - Length(nStr);

@@ -9,7 +9,7 @@ interface
 
 uses
   Windows, Classes, SysUtils, NativeXml, IdTCPConnection, IdTCPClient, IdGlobal,
-  UWaitItem, USysLoger;
+  UWaitItem, ULibFun, USysLoger;
 
 const
   cERelay_Frame_OC    = $10;       //开合帧(open close)
@@ -91,7 +91,7 @@ type
     //待发送数据
     FWaiter: TWaitObject;
     //等待对象
-    FLastSend: Int64;
+    FLastSend: Cardinal;
     FClient: TIdTCPClient;
     //客户端
   protected
@@ -700,7 +700,7 @@ begin
   for nIdx:=0 to FBuffer.Count - 1 do
   with FClient.Socket do
   begin
-    nInt := GetTickCount - FLastSend;
+    nInt := GetTickCountDiff(FLastSend);
     if nInt < 420 then
     begin
       nInt := 420 - nInt;

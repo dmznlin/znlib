@@ -15,7 +15,7 @@
 
 {-------------------------------------------------------------------------------
  以下功能模块,需要在项目中定义编译条件,操作方法(以Delphi_10.2为例):
- 1.菜单 - Project - Options - Delphi Compiler - Compiling
+ 1.菜单 - Project - Options - Delphi Compiler
  2.Target - All configurations - Conditional defines
  3.添加RemObjects开启RO支持,添加ThreadPool开启线程池等
 -------------------------------------------------------------------------------}

@@ -452,7 +452,7 @@ begin
   end;
 
   nInit := GetTickCount();
-  while GetTickCount - nInit <= nTimeout do
+  while GetTickCountDiff(nInit) <= nTimeout do
   begin
     Result := SyncCardNo(nDispenser, False);
     if Result = '' then
@@ -749,7 +749,7 @@ begin
     end else
     begin
       if (FActiveDispenser.FLastActive > 0) and
-         (GetTickCount - FActiveDispenser.FLastActive >= 5 * 1000) then
+         (GetTickCountDiff(FActiveDispenser.FLastActive) >= 5 * 1000) then
         FActiveDispenser.FLastActive := 0;
       //无需准备卡片时,自动转为不活动
     end;
@@ -874,7 +874,7 @@ begin
   end; //卡在读卡位且卡号为空,重新读卡
   
   if (nDispenser.FStatusKeep > 0) and //某个状态保持时间过长
-     (GetTickCount - nDispenser.FStatusKeep >= nDispenser.FTimeout * 1000) then
+     (GetTickCountDiff(nDispenser.FStatusKeep) >= nDispenser.FTimeout * 1000) then
   begin
     if nDispenser.FLastStatus = '' then
     begin
@@ -1013,7 +1013,7 @@ var nInit: Int64;
     nInt: Integer;
 begin
   nInit := GetTickCount;
-  while (nLen > 0) and (GetTickCount - nInit < cDispenser_Wait_Timeout) do
+  while (nLen > 0) and (GetTickCountDiff(nInit) < cDispenser_Wait_Timeout) do
   begin
     FActiveDispenser.FCOMBuff := '';
     FActiveDispenser.FCOMPort.ReadStr(FActiveDispenser.FCOMBuff, nLen);
@@ -1089,7 +1089,7 @@ begin
       Result := False;
     end;
     
-    nItv := GetTickCount - FActiveDispenser.FLastSend;
+    nItv := GetTickCountDiff(FActiveDispenser.FLastSend);
     nItv := cTTCE_Frame_SendInterval - nItv;
     if nItv > 0 then Sleep(nItv); //限制发送速度
     FActiveDispenser.FLastSend := GetTickCount();
@@ -1144,7 +1144,7 @@ begin
       FActiveDispenser.FCOMData := '';
       
       if not ReadCOMData(5) then Exit;
-      nBuf := ToBytes(FActiveDispenser.FCOMData, en8Bit);
+      nBuf := ToBytes(FActiveDispenser.FCOMData, Indy8BitEncoding);
     end else
     begin
       Socket.Write(nBuf); //确认执行
@@ -1166,7 +1166,7 @@ begin
     if FActiveDispenser.FConn = ctCOM then
     begin
       if not ReadCOMData(nLen + 2) then Exit;
-      nBuf := ToBytes(FActiveDispenser.FCOMData, en8Bit);
+      nBuf := ToBytes(FActiveDispenser.FCOMData, Indy8BitEncoding);
     end else
     begin
       Socket.ReadBytes(nBuf, nLen + 2, True);
@@ -1221,7 +1221,7 @@ begin
       Result := False;
     end;
 
-    nItv := GetTickCount - FActiveDispenser.FLastSend;
+    nItv := GetTickCountDiff(FActiveDispenser.FLastSend);
     nItv := cTTCE_Frame_SendInterval - nItv;
     if nItv > 0 then Sleep(nItv); //限制发送速度
     FActiveDispenser.FLastSend := GetTickCount();
@@ -1233,7 +1233,7 @@ begin
 
       FActiveDispenser.FCOMData := '';
       if not ReadCOMData(3) then Exit;
-      nBuf := ToBytes(FActiveDispenser.FCOMData, en8Bit);
+      nBuf := ToBytes(FActiveDispenser.FCOMData, Indy8BitEncoding);
     end else
     begin
       Socket.Write(SendData2Bytes(nSend));
@@ -1341,7 +1341,7 @@ begin
   nStr := '';
   nInit := GetTickCount();
   
-  while GetTickCount - nInit < cDispenser_Wait_Timeout do
+  while GetTickCountDiff(nInit) < cDispenser_Wait_Timeout do
   begin
     nStr := QueryStatuse();
     if HasStatus(nStr, cTTCE_K7_PosRead) then //卡已发到读卡位
@@ -1454,7 +1454,7 @@ begin
   nStr := '';
   nInit := GetTickCount();
   
-  while GetTickCount - nInit < cDispenser_Wait_Timeout do
+  while GetTickCountDiff(nInit) < cDispenser_Wait_Timeout do
   begin
     nStr := QueryStatuse();
     if HasStatus(nStr, cTTCE_K7_PosOut) then //卡已发到取卡位
@@ -1489,7 +1489,7 @@ begin
   nStr := '';
   nInit := GetTickCount();
 
-  while GetTickCount - nInit < cDispenser_Wait_Timeout do
+  while GetTickCountDiff(nInit) < cDispenser_Wait_Timeout do
   begin
     nStr := QueryStatuse();
     if HasStatus(nStr, cTTCE_K7_TDNoCard) or
@@ -1522,7 +1522,7 @@ begin
   nStr := '';
   nInit := GetTickCount();
   
-  while GetTickCount - nInit < cDispenser_Wait_Timeout do
+  while GetTickCountDiff(nInit) < cDispenser_Wait_Timeout do
   begin
     nStr := QueryStatuse();
     if HasStatus(nStr, cTTCE_K7_PosNew) or

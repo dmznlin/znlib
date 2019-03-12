@@ -5,6 +5,8 @@
 *.id,name: 节点标识
 *.port: 串口索引(0-3)
 *.baud: 波特率
+*.encrypt: 密钥
+*.fulldata: 全块写入(Y/N): 驱动自动拆分数据,写入连续的区块中.
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-->
 <MH_RF35LT>
   <readers>
@@ -12,11 +14,15 @@
       <enable>Y</enable>
       <port>2</port>
       <baud>115200</baud>
+      <encrypt>112233</encrypt>
+      <fulldata>N</fulldata>
     </reader>
     <reader id="0102" name="读写器">
       <enable>Y</enable>
       <port>2</port>
       <baud>115200</baud>
+      <encrypt>113344</encrypt>
+      <fulldata>Y</fulldata>
     </reader>
   </readers>
 </MH_RF35LT>

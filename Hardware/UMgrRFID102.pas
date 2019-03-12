@@ -41,8 +41,8 @@ type
     FTunnel : string;          //通道号
     FEnable : Boolean;         //是否启用
     FLocked : Boolean;         //是否锁定
-    FCardLast: Int64;          //有卡时间
-    FLastActive: Int64;        //上次活动
+    FCardLast: Cardinal;       //有卡时间
+    FLastActive: Cardinal;     //上次活动
 
     FVirtual: Boolean;         //虚拟读头
     FVReader: string;          //读头标识
@@ -53,10 +53,10 @@ type
 
     FKeepOnce: Integer;        //单次保持
     FKeepPeer: Boolean;        //保持模式
-    FKeepLast: Int64;          //上次活动
+    FKeepLast: Cardinal;       //上次活动
 
     FRelayConn: Boolean;       //是否吸合
-    FConnLast: Int64;          //上次吸合
+    FConnLast: Cardinal;       //上次吸合
     FConnKeep: Integer;        //吸合保持
     FClient : TIdTCPClient;    //通信链路
 
@@ -386,7 +386,7 @@ begin
     if nIdx < 0 then Exit;
 
     nItem := FReaders[nIdx];
-    if GetTickCount - nItem.FCardLast <= 20 * 1000 then
+    if GetTickCountDiff(nItem.FCardLast) <= 20 * 1000 then
       Result := nItem.FCard;
     //valid card
   finally
@@ -769,7 +769,7 @@ begin
     end else
     begin
       if (FActiveReader.FLastActive > 0) and
-         (GetTickCount - FActiveReader.FLastActive >= 5 * 1000) then
+         (GetTickCountDiff(FActiveReader.FLastActive) >= 5 * 1000) then
         FActiveReader.FLastActive := 0;
       //无卡片时,自动转为不活动
     end;
@@ -1021,7 +1021,7 @@ begin
     begin
       if Pos(FEPCList[0], nReader.FCard) > 0 then
       begin
-        if GetTickCount - nReader.FKeepLast < nReader.FKeepOnce then
+        if GetTickCountDiff(nReader.FKeepLast) < nReader.FKeepOnce then
         begin
           if not nReader.FKeepPeer then
             nReader.FKeepLast := GetTickCount;
@@ -1062,7 +1062,7 @@ var nIdx: Integer;
 begin
   Result := False;
   if (nReader.FRelayConn) and 
-     (GetTickCount - nReader.FConnLast > nReader.FConnKeep) then
+     (GetTickCountDiff(nReader.FConnLast) > nReader.FConnKeep) then
   begin
     nReader.FConnLast := 0;
     nReader.FRelayConn := False;

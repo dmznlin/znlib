@@ -114,7 +114,7 @@ type
     FText          : string;                      //显示内容
     FTextMode      : TBXDisplayMode;              //显示方式
     FTextSend      : Boolean;                     //是否需要发送
-    FLastSend      : Int64;                       //最后发送时间
+    FLastSend      : Cardinal;                    //最后发送时间
 
     FUserTimeout   : Integer;                     //自定义超时
     FUserMode      : TBXDisplayMode;              //自定义模式
@@ -808,7 +808,7 @@ var nStr: string;
       else nInt := nCardArea.FDefaultTimeout;
 
       if (nCardArea.FLastSend > 0) and
-         (GetTickCount - nCardArea.FLastSend >= nInt * 1000) then
+         (GetTickCountDiff(nCardArea.FLastSend) >= nInt * 1000) then
         nCardArea.FDefaultSend := True;
       //timeout,send default
       

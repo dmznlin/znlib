@@ -7,7 +7,7 @@ unit UTaskMonitor;
 interface
 
 uses
-  Windows, Classes, SysUtils, SyncObjs, USysLoger, UWaitItem;
+  Windows, Classes, SysUtils, SyncObjs, USysLoger, UWaitItem, ULibFun;
 
 const
   cTaskTimeoutLong  = 5 * 1000;  //长超时
@@ -18,7 +18,7 @@ type
   TTaskItem = record
     FTaskID: Int64;              //任务标识
     FDesc: string;               //任务描述
-    FStart: Int64;               //开始时间
+    FStart: Cardinal;            //开始时间
     FTimeOut: Int64;             //超时时间
     FIsFree: Boolean;            //空闲任务
   end;
@@ -132,7 +132,7 @@ begin
           continue;
         end;
 
-        nInt := GetTickCount - nTask.FStart;
+        nInt := GetTickCountDiff(nTask.FStart);
         if nInt > nTask.FTimeOut then
         begin
           WriteLog(Format('任务超时,耗时: %d,描述: %s', [nInt, nTask.FDesc]));
@@ -244,7 +244,7 @@ begin
     if not Assigned(nTask) then Exit;
 
     if nLog and (not nTask.FIsFree) and (nTask.FStart > 0) then
-      WriteLog(Format('耗时:%d,任务:%s', [GetTickCount - nTask.FStart, nTask.FDesc]));
+      WriteLog(Format('耗时:%d,任务:%s', [GetTickCountDiff(nTask.FStart), nTask.FDesc]));
     nTask.FIsFree := True;
   finally
     FSyncLock.Leave;
