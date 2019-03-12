@@ -108,12 +108,16 @@ type
     procedure StartService;
     procedure StopService;
     //起停服务
-    function IsTunnelBusy(const nTunnel: string): Boolean;
+    function IsTunnelBusy(const nTunnel: string;
+     const nData: PBWTunnel = nil): Boolean;
     //通道忙
     procedure StartWeight(const nTunnel,nBill: string; const nValue: Double;
      const nHasVal: Double = 0; const nParams: string = '');
     procedure StopWeight(const nTunnel: string);
     //起停称重
+    procedure AppendParam(const nTunnel,nName,nValue: string);
+    //增加参数
+    property TunnelManager: TPoundTunnelManager read FTunnelManager;
     property OnStatusChange: TBWStatusChange read FChangeProc write FChangeProc;
     property OnStatusEvent: TBWStatusChangeEvent read FchangeEvent write FchangeEvent;
     //属性相关
@@ -272,9 +276,10 @@ begin
 end;
 
 //Date: 2018-12-27
-//Parm: 通道号
+//Parm: 通道号;返回通道数据
 //Desc: 判断nTunnel是否空闲
-function TBasisWeightManager.IsTunnelBusy(const nTunnel: string): Boolean;
+function TBasisWeightManager.IsTunnelBusy(const nTunnel: string;
+  const nData: PBWTunnel): Boolean;
 var nIdx: Integer;
     nPT: PBWTunnel;
 begin
@@ -288,6 +293,10 @@ begin
     Result := (nPT.FBill <> '') and
               (nPT.FValue > 0) and (nPT.FValue < nPT.FValHas);
     //未装完
+
+    if Assigned(nData) then
+      nData^ := nPT^;
+    //xxxxx
   finally
     FSyncLock.Leave;
   end;   
@@ -336,6 +345,25 @@ begin
   try
     InitTunnelData(FTunnels[nIdx], False);
     DoChangeEvent(FTunnels[nIdx], bsClose);
+  finally
+    FSyncLock.Leave;
+  end;
+end;
+
+//Date: 2019-03-12
+//Parm: 通道号;参数名;参数值
+//Desc: 为nTunnel增加一个nName=nValue的参数
+procedure TBasisWeightManager.AppendParam(const nTunnel, nName, nValue: string);
+var nIdx: Integer;
+begin
+  if Trim(nName) = '' then Exit;
+  //invalid name
+  nIdx := FindTunnel(nTunnel, True);
+  if nIdx < 0 then Exit;
+
+  FSyncLock.Enter;
+  try
+    PBWTunnel(FTunnels[nIdx]).FParams.Values[nName] := nValue;
   finally
     FSyncLock.Leave;
   end;
