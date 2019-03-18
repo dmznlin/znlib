@@ -114,9 +114,10 @@ type
       nFlag: string = ''; const nFlagEnd: Boolean = True;      
       const nListYet: Boolean = True): string; overload; static;
     //格式化列表字符串
-    class function FixWidth(const nStr: string; 
-      const nWidth: Byte; const nStyle: TFillPos = fpRight;  
-      const nFixChar: Char = #32): string; static;
+    class function FixWidth(const nStr: string;
+      const nWidth: Word; const nStyle: TFillPos = fpRight;
+      const nFixChar: Char = #32; const nClip: Boolean = False;
+      const nAnsiLen: Boolean = False): string; static;
     //定长字符串
     class function SplitValue(const nStr: string; 
       const nList: TStrings): Boolean; static;
@@ -927,16 +928,36 @@ begin
 end;
 
 //Date: 2017-03-17
-//Parm: 字符串;长度;填充方式;填充负责
+//Parm: 字符串;长度;填充方式;填充符;是否裁剪;单字节长度
 //Desc: 使用nFixChar填充nStr,使其保持nWidth定长.
-class function TStringHelper.FixWidth(const nStr: string; const nWidth: Byte;
-const nStyle: TFillPos; const nFixChar: Char): string;
-var nLen,nHalf: Integer;
+class function TStringHelper.FixWidth(const nStr: string; const nWidth: Word;
+const nStyle: TFillPos; const nFixChar: Char; const nClip,nAnsiLen: Boolean): string;
+var nAnsi: AnsiString;
+    nLen,nHalf: Integer;
 begin
-  nLen := Length(nStr);
+  if nAnsiLen then
+  begin
+    nAnsi := AnsiString(nStr);
+    nLen := Length(nAnsi);
+  end else
+  begin
+    nLen := Length(nStr);
+    //wide string
+  end;
+
   if nLen >= nWidth then
   begin
-    Result := nStr; 
+    if nClip and (nLen > nWidth) then
+    begin
+      if nAnsiLen then
+           Result := string(Copy(nAnsi, 1, nWidth))
+      else Result := Copy(nStr, 1, nWidth);
+    end else
+    begin
+      Result := nStr;
+      //default
+    end;
+
     Exit;
   end;
 

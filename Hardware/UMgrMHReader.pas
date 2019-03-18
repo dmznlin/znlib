@@ -477,9 +477,9 @@ end;
 //Parm: 读头标识
 //Desc: 读取nID上当前磁卡的0扇区0区块,默认为卡号
 function TMHReaderManager.ReadCardID(const nID: string): string;
-var nStr: string;
-    nCr: LongInt;
-    nIdx,nHwnd: Integer;
+var nCr: LongInt;
+    nIdx,nInt: Integer;
+    nBuf: array[0..3] of Byte;
 begin
   Result := '';
   nIdx := GetReader(nID);
@@ -489,24 +489,16 @@ begin
 
   with FReaders[nIdx] do
   try
-    nHwnd := rf_card(FHwnd, 1, @nCr);
-    if nHwnd <> 0 then
+    nInt := rf_card(FHwnd, 1, @nCr);
+    if nInt <> 0 then
     begin
-      WriteReaderLog(nIdx, nHwnd, '读取卡号', '失败');
+      WriteReaderLog(nIdx, nInt, '读取卡号', '失败');
       Exit;
     end;
 
-    nStr := Format('%x', [nCr]);
-    if Length(nStr) <> 8 then
-    begin
-      WriteReaderLog(nIdx, 50, '读取卡号', '失败');
-      Exit;
-    end;
-
-    Result := nStr[7] + nStr[8] +
-              nStr[5] + nStr[6] +
-              nStr[3] + nStr[4] +
-              nStr[1] + nStr[2];
+    Move(nCr, nBuf[0], 4);
+    for nInt:=0 to 3 do
+      Result := Result + IntToHex(nBuf[nInt], 2);
     //xxxxx
   finally
     if Result = '' then

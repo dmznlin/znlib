@@ -77,7 +77,7 @@ function AdjustListStrFormat2(const nList: TStrings; const nSymbol: string;
 //格式化列表字符串
 
 function StrWithWidth(const nStr: string; const nWidth,nStyle: Byte;
-  const nFixChar: Char = #32): string;
+  const nFixChar: Char = #32; const nClip: Boolean = False): string;
 //定长字符串
 function StrPosR(nSub,nStr: string; const nNoCase: Boolean = False): Integer;
 //从字符串右边检索
@@ -599,13 +599,17 @@ end;
 
 //Desc: 定长字符串,不足则用nFixChar填充
 function StrWithWidth(const nStr: string; const nWidth,nStyle: Byte;
- const nFixChar: Char = #32): string;
+ const nFixChar: Char; const nClip: Boolean): string;
 var nLen,nHalf: Integer;
 begin
   nLen := Length(nStr);
   if nLen >= nWidth then
   begin
-    Result := nStr; Exit;
+    if nClip and (nLen > nWidth) then
+         Result := Copy(nStr, 1, nWidth)
+    else Result := nStr;
+
+    Exit;
   end;
 
   nLen := nWidth - nLen;
