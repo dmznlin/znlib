@@ -23,6 +23,7 @@ type
     FValMax       : Double;            //最大数据:地磅出现的最大数值
     FValTunnel    : Double;            //通道数据:当前地磅数据
     FValUpdate    : Cardinal;          //通道更新:通道数据的更新时间
+    FValLastUse   : Cardinal;          //数据使用:最后使用数据的时间
     FValAdjust    : Double;            //冲击修正:定值,物料下落产生的重量
     FValPercent   : Double;            //比例修正:百分比,防止发超的保留量
     FWeightMax    : Double;            //修正后可装量:定值,装车中允许的最大量
@@ -36,9 +37,9 @@ type
     //TimeOut
     FTONoData     : Integer;           //长时间无数据
     FTONoWeight   : Integer;           //长时间未上磅
-    FInitWeight   : Int64;             //开始业务计时
+    FInitWeight   : Cardinal;          //开始业务计时
     FTOProceFresh : Integer;           //装车进度刷新
-    FInitFresh    : Int64;             //进度刷新计时
+    FInitFresh    : Cardinal;          //进度刷新计时
     FValFresh     : Double;            //进度刷新数据
 
     FTunnel       : PPTTunnelItem;     //通道参数
@@ -241,6 +242,7 @@ begin
     nTunnel.FValHas := 0;
     nTunnel.FValMax := 0;
     nTunnel.FValTunnel := 0;
+    nTunnel.FValLastUse := 0;
     nTunnel.FValUpdate := GetTickCount;
 
     nTunnel.FValFresh := 0;
@@ -535,9 +537,16 @@ begin
         Continue;
       end;
 
-      if (nItv >= 3200) or (nItv < 300) then Continue;
-      //更新超时 或 更新过频
+      if nItv >= 3200 then Continue;
+      //更新超时: 不予认可
+      if nItv < 200 then
+      begin
+        nItv := GetTickCountDiff(FActive.FValLastUse);
+        if nItv < 200 then Continue;
+        //更新过频: 减速
+      end;
 
+      FActive.FValLastUse := GetTickCount();
       DoBasisWeight;
       if Terminated then Break;
     finally
