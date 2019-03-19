@@ -44,6 +44,7 @@ type
 
     FTunnel       : PPTTunnelItem;     //通道参数
     FParams       : TStrings;          //参数项
+    FFixParams    : TStrings;          //固定参数
     FSampleIndex  : Integer;           //采样索引
     FValSamples   : array of Double;   //数据采样
   end;
@@ -76,6 +77,9 @@ type
   TBWStatusChange = procedure (const nTunnel: PBWTunnel);
   TBWStatusChangeEvent = procedure (const nTunnel: PBWTunnel) of object;
   //事件定义
+
+  TBWEnumTunnels = procedure (const nTunnels: TList);
+  //通道枚举回调
 
   TBasisWeightManager = class(TObject)
   private
@@ -116,8 +120,11 @@ type
      const nHasVal: Double = 0; const nParams: string = '');
     procedure StopWeight(const nTunnel: string);
     //起停称重
-    procedure AppendParam(const nTunnel,nName,nValue: string);
+    procedure AppendParam(const nTunnel,nName,nValue: string;
+     const nFix: Boolean = False);
     //增加参数
+    procedure EnumTunnels(const nCallback: TBWEnumTunnels);
+    //检索通道
     property TunnelManager: TPoundTunnelManager read FTunnelManager;
     property OnStatusChange: TBWStatusChange read FChangeProc write FChangeProc;
     property OnStatusEvent: TBWStatusChangeEvent read FchangeEvent write FchangeEvent;
@@ -167,6 +174,7 @@ begin
   begin
     nTunnel := FTunnels[nIdx];
     FreeAndNil(nTunnel.FParams);
+    FreeAndNil(nTunnel.FFixParams);
 
     Dispose(nTunnel);
     FTunnels.Delete(nIdx);
@@ -353,10 +361,12 @@ begin
 end;
 
 //Date: 2019-03-12
-//Parm: 通道号;参数名;参数值
+//Parm: 通道号;参数名;参数值;固定参数
 //Desc: 为nTunnel增加一个nName=nValue的参数
-procedure TBasisWeightManager.AppendParam(const nTunnel, nName, nValue: string);
+procedure TBasisWeightManager.AppendParam(const nTunnel, nName, nValue: string;
+  const nFix: Boolean);
 var nIdx: Integer;
+    nPT: PBWTunnel;
 begin
   if Trim(nName) = '' then Exit;
   //invalid name
@@ -365,10 +375,34 @@ begin
 
   FSyncLock.Enter;
   try
-    PBWTunnel(FTunnels[nIdx]).FParams.Values[nName] := nValue;
+    nPT := FTunnels[nIdx];
+    //xxxxxx
+
+    if nFix then
+    begin
+      if not Assigned(nPT.FFixParams) then
+        nPT.FFixParams := TStringList.Create;
+      nPT.FFixParams.Values[nName] := nValue;
+    end else
+    begin
+      nPT.FParams.Values[nName] := nValue;
+    end;
   finally
     FSyncLock.Leave;
   end;
+end;
+
+//Date: 2019-03-19
+//Parm: 枚举回调
+//Desc: 获取通道列表项
+procedure TBasisWeightManager.EnumTunnels(const nCallback: TBWEnumTunnels);
+begin
+  FSyncLock.Enter;
+  try
+    nCallback(FTunnels);
+  finally
+    FSyncLock.Leave;
+  end;   
 end;
 
 procedure TBasisWeightManager.LoadConfig(const nFile: string);
@@ -388,6 +422,7 @@ begin
     
     nTunnel.FID := nTunnel.FTunnel.FID;
     nTunnel.FParams := TStringList.Create;
+    nTunnel.FFixParams := nil;
     SetLength(nTunnel.FValSamples, nTunnel.FTunnel.FSampleNum);
 
     if Assigned(nTunnel.FTunnel.FOptions) then
