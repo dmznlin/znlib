@@ -33,6 +33,9 @@ type
   TTickDefault = (tdZero, tdNow);
   //value when tick=0
 
+  TBitCount = (Bit_8 = 8, Bit_16 = 16, Bit_32 = 32);
+  //字节个数
+
 //------------------------------------------------------------------------------
 function MI(const nMacro,nValue: string): TMacroItem;
 function MacroValue(const nData: string; const nMacro: array of TMacroItem): string;
@@ -95,6 +98,13 @@ function Float2Float(const nValue: Double; const nPrecision: Integer;
 function FloatRelation(const nA,nB: Double; const nType: TFloatRelationType;
  const nPrecision: Integer = 100): Boolean;
 //浮点关系判定
+
+function GetNumberBit(const nNum: Integer; const nBit: Byte;
+ const nBitCount: TBitCount): Byte;
+//查询指定位是0或1
+function SetNumberBit(const nNum: Integer; const nBit,nValue: Byte;
+ const nBitCount: TBitCount): Integer;
+//设置指定位的值为0或1
 
 //------------------------------------------------------------------------------
 function GetFileVersionStr(const nFile: string): string;
@@ -790,6 +800,34 @@ begin
    rtEqual: Result := nIA = nIB;
    rtLE: Result := nIA <= nIB;
    rtLess: Result := nIA < nIB;
+  end;
+end;
+
+//Date: 2019-03-20
+//Parm: 待查询值;待查询位;nNum位数
+//Desc: 查询nNum第nBit位的bit值
+function GetNumberBit(const nNum: Integer; const nBit: Byte;
+ const nBitCount: TBitCount): Byte;
+begin
+  if nBit > Byte(nBitCount) then
+       Result := nNum
+  else Result := Byte((nNum shr (nBit - 1)) and 1);
+end;
+
+//Date: 2019-03-20
+//Parm: 待设置值;待设置位;待设置值;nNum位数
+//Desc: 设置nNum第nBit位的值为nValue
+function SetNumberBit(const nNum: Integer; const nBit,nValue: Byte;
+ const nBitCount: TBitCount): Integer;
+begin
+  if nBit > Byte(nBitCount) then
+  begin
+    Result := nNum;
+  end else
+  begin
+    if nValue = 0 then
+         Result := nNum and not(1 shl (nBit - 1))
+    else Result := nNum or (1 shl (nBit - 1));
   end;
 end;
 

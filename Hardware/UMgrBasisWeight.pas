@@ -26,6 +26,7 @@ type
     FValLastUse   : Cardinal;          //数据使用:最后使用数据的时间
     FValAdjust    : Double;            //冲击修正:定值,物料下落产生的重量
     FValPercent   : Double;            //比例修正:百分比,防止发超的保留量
+    FValTruckP    : Double;            //车辆皮重
     FWeightMax    : Double;            //修正后可装量:定值,装车中允许的最大量
 
     FStatusNow    : TBWStatus;         //当前状态
@@ -117,12 +118,16 @@ type
      const nData: PBWTunnel = nil): Boolean;
     //通道忙
     procedure StartWeight(const nTunnel,nBill: string; const nValue: Double;
-     const nHasVal: Double = 0; const nParams: string = '');
+     const nPValue: Double = 0; const nParams: string = '');
     procedure StopWeight(const nTunnel: string);
     //起停称重
-    procedure AppendParam(const nTunnel,nName,nValue: string;
+    procedure SetTruckPValue(const nTunnel: string; const nPValue: Double);
+    //设置皮重
+    procedure SetParam(const nTunnel,nName,nValue: string;
      const nFix: Boolean = False);
-    //增加参数
+    function GetParam(const nTunnel,nName: string;
+     const nFix: Boolean = False): string;
+    //通道参数
     procedure EnumTunnels(const nCallback: TBWEnumTunnels);
     //检索通道
     property TunnelManager: TPoundTunnelManager read FTunnelManager;
@@ -253,6 +258,8 @@ begin
     nTunnel.FValLastUse := 0;
     nTunnel.FValUpdate := GetTickCount;
 
+    nTunnel.FValTruckP := 0;
+    nTunnel.FWeightMax := 0;
     nTunnel.FValFresh := 0;
     nTunnel.FInitFresh := 0;
     nTunnel.FInitWeight := GetTickCount;
@@ -260,7 +267,7 @@ begin
 
   for nIdx:=Low(nTunnel.FValSamples) to High(nTunnel.FValSamples) do
     nTunnel.FValSamples[nIdx] := 0;
-  nTunnel.FSampleIndex := 0;
+  nTunnel.FSampleIndex := Low(nTunnel.FValSamples);
 end;
 
 //Date: 2018-12-27
@@ -313,10 +320,10 @@ begin
 end;
 
 //Date: 2018-12-27
-//Parm: 通道号;交货单;应装;已装;参数
+//Parm: 通道号;交货单;应装;皮重;参数
 //Desc: 开启新的称重业务
 procedure TBasisWeightManager.StartWeight(const nTunnel, nBill: string;
-  const nValue, nHasVal: Double; const nParams: string);
+  const nValue, nPValue: Double; const nParams: string);
 var nIdx: Integer;
     nPT: PBWTunnel;
 begin
@@ -331,7 +338,14 @@ begin
       InitTunnelData(nPT, False);
       nPT.FBill := nBill;
       nPT.FValue := nValue;
-      nPT.FWeightMax := nValue + nPT.FValAdjust - nValue * nPT.FValPercent;
+
+      if nPValue > 0 then
+      begin
+        nPT.FValTruckP := nPValue;
+        nPT.FWeightMax := nValue + nPValue +
+                          nPT.FValAdjust - nValue * nPT.FValPercent;
+        //表头最大重量
+      end;
     end;
 
     if nParams <> '' then
@@ -360,10 +374,37 @@ begin
   end;
 end;
 
+//Date: 2019-03-19
+//Parm: 通道号;皮重
+//Desc: 设置nTunnel通道的皮重值
+procedure TBasisWeightManager.SetTruckPValue(const nTunnel: string;
+  const nPValue: Double);
+var nIdx: Integer;
+    nPT: PBWTunnel;
+begin
+  if nPValue <= 0 then Exit;
+  nIdx := FindTunnel(nTunnel, True);
+  if nIdx < 0 then Exit;
+
+  FSyncLock.Enter;
+  try
+    nPT := FTunnels[nIdx];
+    if (nPT.FBill <> '') and (nPT.FValue > 0) then
+    begin
+      nPT.FValTruckP := nPValue;
+      nPT.FWeightMax := nPT.FValue + nPValue +
+                        nPT.FValAdjust - nPT.FValue * nPT.FValPercent;
+      //表头最大重量
+    end;
+  finally
+    FSyncLock.Leave;
+  end;
+end;
+
 //Date: 2019-03-12
 //Parm: 通道号;参数名;参数值;固定参数
 //Desc: 为nTunnel增加一个nName=nValue的参数
-procedure TBasisWeightManager.AppendParam(const nTunnel, nName, nValue: string;
+procedure TBasisWeightManager.SetParam(const nTunnel, nName, nValue: string;
   const nFix: Boolean);
 var nIdx: Integer;
     nPT: PBWTunnel;
@@ -386,6 +427,40 @@ begin
     end else
     begin
       nPT.FParams.Values[nName] := nValue;
+    end;
+  finally
+    FSyncLock.Leave;
+  end;
+end;
+
+//Date: 2019-03-20
+//Parm: 通道名称;参数名;固定参数
+//Desc: 获取nTunnel名称为nName的参数值
+function TBasisWeightManager.GetParam(const nTunnel, nName: string;
+  const nFix: Boolean): string;
+var nIdx: Integer;
+    nPT: PBWTunnel;
+begin
+  Result := '';
+  if Trim(nName) = '' then Exit;
+  //invalid name
+  
+  nIdx := FindTunnel(nTunnel, True);
+  if nIdx < 0 then Exit;
+
+  FSyncLock.Enter;
+  try
+    nPT := FTunnels[nIdx];
+    //xxxxxx
+
+    if nFix then
+    begin
+      if Assigned(nPT.FFixParams) then
+        Result := nPT.FFixParams.Values[nName];
+      //xxxxxx
+    end else
+    begin
+      Result := nPT.FParams.Values[nName];
     end;
   finally
     FSyncLock.Leave;
@@ -621,7 +696,7 @@ end;
 
 procedure TBasisWeightWorker.DoBasisWeight;
 begin
-  if (not FActive.FWeightDone) and
+  if (not FActive.FWeightDone) and (FActive.FWeightMax > 0) and
      (FActive.FValTunnel >= FActive.FWeightMax) then //未装车完成
   begin
     FActive.FWeightDone := True;
