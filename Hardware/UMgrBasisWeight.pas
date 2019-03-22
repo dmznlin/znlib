@@ -25,13 +25,16 @@ type
     FValUpdate    : Cardinal;          //通道更新:通道数据的更新时间
     FValLastUse   : Cardinal;          //数据使用:最后使用数据的时间
     FValAdjust    : Double;            //冲击修正:定值,物料下落产生的重量
-    FValPercent   : Double;            //比例修正:百分比,防止发超的保留量
+    FValKPFix     : Double;            //防超修正:定值,防止发超的保留量
+    FValKPPercent : Double;            //防超修正:百分比,防止发超的保留量
+    FValTwiceDiff : Double;            //数据差额:定值,两次平稳数据的有效差额
     FValTruckP    : Double;            //车辆皮重
     FWeightMax    : Double;            //修正后可装量:定值,装车中允许的最大量
 
     FStatusNow    : TBWStatus;         //当前状态
     FStatusNew    : TBWStatus;         //新状态
     FStableDone   : Boolean;           //平稳状态
+    FStableLast   : Cardinal;          //平稳计时
     FWeightDone   : Boolean;           //装车完成:完成装车量
     FWeightOver   : Boolean;           //装车结束:完成并保存完毕
 
@@ -247,6 +250,7 @@ begin
   begin
     nTunnel.FBill := '';
     nTunnel.FParams.Clear;
+    nTunnel.FStableLast := 0;
     nTunnel.FStableDone := False;
     nTunnel.FWeightOver := False;
     nTunnel.FWeightDone := False;
@@ -308,7 +312,7 @@ begin
   try
     nPT := FTunnels[nIdx];
     Result := (nPT.FBill <> '') and
-              (nPT.FValue > 0) and (nPT.FValue < nPT.FValHas);
+              (nPT.FValue > 0) and (nPT.FValue > nPT.FValHas - nPT.FValTruckP);
     //未装完
 
     if Assigned(nData) then
@@ -342,8 +346,8 @@ begin
       if nPValue > 0 then
       begin
         nPT.FValTruckP := nPValue;
-        nPT.FWeightMax := nValue + nPValue +
-                          nPT.FValAdjust - nValue * nPT.FValPercent;
+        nPT.FWeightMax := nValue + nPValue + nPT.FValAdjust - nPT.FValKPFix -
+                          nValue * nPT.FValKPPercent;
         //表头最大重量
       end;
     end;
@@ -392,8 +396,8 @@ begin
     if (nPT.FBill <> '') and (nPT.FValue > 0) then
     begin
       nPT.FValTruckP := nPValue;
-      nPT.FWeightMax := nPT.FValue + nPValue +
-                        nPT.FValAdjust - nPT.FValue * nPT.FValPercent;
+      nPT.FWeightMax := nPT.FValue + nPValue + nPT.FValAdjust - nPT.FValKPFix -
+                        nPT.FValue * nPT.FValKPPercent;
       //表头最大重量
     end;
   finally
@@ -517,15 +521,25 @@ begin
            nTunnel.FTOProceFresh := StrToInt(nStr) * 1000
       else nTunnel.FTOProceFresh := 1 * 1000;
 
-      nStr := nTunnel.FTunnel.FOptions.Values['PreKd'];
-      if IsNumber(nStr, True) then
-           nTunnel.FValPercent := StrToFloat(nStr)
-      else nTunnel.FValPercent := 0;
-
-      nStr := nTunnel.FTunnel.FOptions.Values['PreKdFix'];
+      nStr := nTunnel.FTunnel.FOptions.Values['DashValue'];
       if IsNumber(nStr, True) then
            nTunnel.FValAdjust := StrToFloat(nStr)
       else nTunnel.FValAdjust := 0;
+
+      nStr := nTunnel.FTunnel.FOptions.Values['KeepValue'];
+      if IsNumber(nStr, True) then
+           nTunnel.FValKPFix := StrToFloat(nStr)
+      else nTunnel.FValKPFix := 0;
+
+      nStr := nTunnel.FTunnel.FOptions.Values['KeepPercent'];
+      if IsNumber(nStr, True) then
+           nTunnel.FValKPPercent := StrToFloat(nStr)
+      else nTunnel.FValKPPercent := 0;
+
+      nStr := nTunnel.FTunnel.FOptions.Values['TwiceDiff'];
+      if IsNumber(nStr, True) then
+           nTunnel.FValTwiceDiff := StrToFloat(nStr)
+      else nTunnel.FValTwiceDiff := 0.2; //大约2个成人
     end;
 
     InitTunnelData(nTunnel, False);
@@ -550,7 +564,7 @@ begin
       if nTunnel.FTunnel <> nPort.FEventTunnel then Continue;
       nTunnel.FValUpdate := GetTickCount;
 
-      if (nPort.FMinValue > 0) and (nValue <= nPort.FMinValue) then
+      if (nPort.FMinValue > 0) and (nValue < nPort.FMinValue) then
            nTunnel.FValTunnel := 0
       else nTunnel.FValTunnel := nValue;
 
@@ -609,20 +623,19 @@ begin
       FActive := FOwner.FTunnels[nIdx];
       if (FActive.FBill = '') or (FActive.FValue <= 0) then Continue; //无业务
 
-      nItv := GetTickCountDiff(FActive.FInitFresh);
-      if nItv >= FActive.FTOProceFresh then
+      if FActive.FValFresh <> FActive.FValTunnel then
       begin
-        if FActive.FValFresh <> FActive.FValTunnel then
+        nItv := GetTickCountDiff(FActive.FInitFresh);
+        if nItv >= FActive.FTOProceFresh then
         begin
           if (FActive.FValFresh = 0) and (FActive.FValTunnel > 0) then
                FOwner.DoChangeEvent(FActive, bsStart)
           else FOwner.DoChangeEvent(FActive, bsProcess);
 
           FActive.FValFresh := FActive.FValTunnel;
+          //刷新仪表数值
+          FActive.FInitFresh := GetTickCount;
         end;
-
-        FActive.FInitFresh := GetTickCount;
-        //刷新仪表数值
       end;
 
       nItv := GetTickCountDiff(FActive.FInitWeight);
@@ -711,8 +724,25 @@ begin
   //循环索引
 
   if FActive.FStableDone then
-    FActive.FStableDone := FActive.FValHas = FActive.FValTunnel;
-  //平稳数据变更
+  begin
+    FActive.FStableDone := (FActive.FValHas = FActive.FValTunnel) or (
+      Abs(FActive.FValHas - FActive.FValTunnel) < FActive.FValTwiceDiff);
+    //小范围浮动视为平稳
+
+    if FActive.FValHas = FActive.FValTunnel then
+    begin
+      FActive.FStableLast := GetTickCount();
+      //未浮动,更新计时
+    end else
+
+    if FActive.FStableDone and (GetTickCountDiff(
+       FActive.FStableLast) >= 3 * 1000) then
+    begin
+      FActive.FStableDone := False;
+      FActive.FStableLast := GetTickCount();
+      //长时间小范围浮动,更新计时
+    end;
+  end;
 
   if not FActive.FStableDone then
   begin
@@ -722,7 +752,6 @@ begin
      2.若DoChangeEvent由于某些原因,比如光栅判定失败,则需要再次触发业务,可手动
        设置FStableDone=False.
     ***************************************************************************}
-
     if IsValidSamaple(True) then //有效数据平稳
     begin
       FActive.FStableDone := True;
@@ -742,12 +771,23 @@ begin
     end;
 
     if (FActive.FValTunnel = 0) and
-       (FActive.FValMax > 0) and IsValidSamaple(False) then //装完下磅
+       (FActive.FValMax > 0) and IsValidSamaple(False) then //车辆下磅
     begin
-      if not FActive.FWeightOver then //未保存平稳数据
+      if not FActive.FWeightOver then //未装车完成且保存
       begin
-        FActive.FValHas := FActive.FValMax;
-        FOwner.DoChangeEvent(FActive, bsStable);
+        if FActive.FValMax - FActive.FValAdjust -
+           FActive.FValHas >= FActive.FValTwiceDiff then
+        begin
+          FActive.FValHas := FActive.FValMax;
+          FOwner.DoChangeEvent(FActive, bsStable);
+        end;
+        {************************* FActive.FValTwiceDiff ***********************
+        未装车完成下磅:
+        1.磅重未达到车辆最大可装量(皮重 + 装车量 + 冲击修正 - 保留量)
+        2.磅重达到最大可装量,但未等待数据平稳并保存,直接下磅.
+        3.由于车辆已下磅,无法获取平稳后的磅重,需参考已知最大磅重.
+        4.若最后保存的平稳重量FValHas与最大磅重误差过大,则按最大量保存.
+        ***********************************************************************}
       end;
 
       FActive.FStableDone := True;
