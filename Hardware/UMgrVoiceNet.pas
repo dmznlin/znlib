@@ -83,6 +83,7 @@ type
     FHost     : string;                //卡地址
     FPort     : Integer;               //卡端口
     FEnable   : Boolean;               //是否启用
+    FDefUsed  : Boolean;               //默认可用
     FContent  : TList;                 //播发内容
     FResource : TList;                 //资源内容
 
@@ -317,17 +318,29 @@ end;
 //Parm: 语音卡标识
 //Desc: 检索标识为nID的语音卡
 function TNetVoiceManager.FindCardHost(const nID: string): PVoiceCardHost;
-var nIdx: Integer;
+var nIdx,nLen: Integer;
+    nDef: PVoiceCardHost;
 begin
-  Result := FCards[0];
-  //default is first
+  Result := nil;
+  nDef := nil;
+  nLen := FCards.Count - 1;
 
-  for nIdx:=FCards.Count - 1 downto 0 do
-  if CompareText(nID, PVoiceCardHost(FCards[nIdx]).FID) = 0 then
+  for nIdx:=0 to nLen do
   begin
-    Result := FCards[nIdx];
-    Break;
+    if CompareText(nID, PVoiceCardHost(FCards[nIdx]).FID) = 0 then
+    begin
+      Result := FCards[nIdx];
+      Break;
+    end;
+
+    if (not Assigned(nDef)) and PVoiceCardHost(FCards[nIdx]).FDefUsed then
+      nDef := FCards[nIdx];
+    //xxxxx
   end;
+
+  if not Assigned(Result) then
+    Result := nDef;
+  //first default card
 end;
 
 //Date: 2015-04-23
@@ -387,6 +400,12 @@ begin
 
   FSyncLock.Enter;
   try
+    if not Assigned(FindCardHost(nCard)) then
+    begin
+      WriteLog(Format('语音卡[ %s ]不存在.', [nCard]));
+      Exit;
+    end;
+
     for nIdx:=FBuffer.Count-1 downto 0 do
     begin
       nData := FBuffer[nIdx];
@@ -449,9 +468,14 @@ begin
         FHost   := NodeByName('ip').ValueAsString;
         FPort   := NodeByName('port').ValueAsInteger;
         FEnable := NodeByName('enable').ValueAsInteger = 1;
+
+        nTmp := NodeByName('default');
+        if Assigned(nTmp) then
+             FDefUsed := nTmp.ValueAsString <> 'n'
+        else FDefUsed := True;
       end;
 
-      nNode := nRoot.FindNode('contents');
+      nNode := nRoot.NodeByName('contents');
       if Assigned(nNode) then
       begin
         nCard.FContent := TList.Create;
@@ -470,7 +494,7 @@ begin
             FSleep    := NodeByName('sleep').ValueAsInteger;
             FText     := NodeByName('text').ValueAsString;
 
-            nTnd := FindNode('peerword');
+            nTnd := NodeByName('peerword');
             if Assigned(nTnd) then
                  FPeerLong := nTnd.ValueAsInteger
             else FPeerLong := 220;
@@ -483,7 +507,7 @@ begin
         end;
       end else nCard.FContent := nil;
 
-      nNode := nRoot.FindNode('resource');
+      nNode := nRoot.NodeByName('resource');
       if Assigned(nNode) then
       begin
         nCard.FResource := TList.Create;

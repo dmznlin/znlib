@@ -4,6 +4,7 @@
 *.id,name: 合成卡标识
 *.ip,port: 合成卡地址
 *.enable: 1,启用;其它,关闭
+*.default: 没有卡标识的内容可默认使用(y/n)
 
 节点: card.contents.content
 *.object: 对象宏定义
@@ -24,6 +25,7 @@
     <ip>127.0.0.1</ip>
     <port>8001</port>
     <enable>1</enable>
+    <default>y</default>
     <contents>
         <content id="default">
             <object>tk</object>
