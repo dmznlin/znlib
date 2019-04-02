@@ -21,10 +21,13 @@
 *******************************************************************************}
 unit UWaitItem;
 
+{$I LibFun.inc}
 interface
 
 uses
-  System.Classes, System.SysUtils, Winapi.Windows, UBaseObject, ULibFun;
+  System.Classes, System.SysUtils, System.SyncObjs, System.Diagnostics,
+  {$IFDEF MSWin}Winapi.Windows,{$ENDIF}{$IFDEF POSIX}Posix.Pthread,{$ENDIF}
+  UBaseObject, ULibFun;
 
 type
   TWaitObject = class(TObject)
@@ -34,13 +37,13 @@ type
       cIsWaiting = $27;
     {*常量定义*}
   private     
-    FEvent: THandle;
+    FEvent: TSimpleEvent;
     {*等待事件*}
     FInterval: Cardinal;
     {*等待间隔*}
     FStatus: Integer;
     {*等待状态*}
-    FWaitResult: Cardinal;
+    FWaitResult: TWaitResult;
     {*等待结果*}
   public
     constructor Create(nEventName: string = '');
@@ -48,20 +51,20 @@ type
     {*创建释放*}
     procedure InitStatus(const nWakeup: Boolean);
     {*初始状态*}
-    function EnterWait: Cardinal;
+    function EnterWait: TWaitResult;
     procedure Wakeup(const nForce: Boolean = False);
     {*等待.唤醒*}
     function IsWaiting: Boolean;
     function IsTimeout: Boolean;
     function IsWakeup: Boolean;
     {*等待状态*}
-    property WaitResult: Cardinal read FWaitResult;
+    property WaitResult: TWaitResult read FWaitResult;
     property Interval: Cardinal read FInterval write FInterval;
   end;
 
   TCrossProcWaitObject = class(TObject)
   private
-    FEvent: THandle;
+    FEvent: TSimpleEvent;
     {*同步事件*}
     FLockStatus: Boolean;
     {*锁定状态*}
@@ -87,10 +90,8 @@ type
     FHasRegist: Boolean;
     {*注册标记*}
   private
-    FFrequency: Int64;
-    {*CPU频率*}
-    FFlagFirst: Int64;
-    {*起始标记*}
+    FTimer: TStopwatch;
+    {*计时器*}
     FTimeResult: Int64;
     {*计时结果*}
   public
@@ -119,19 +120,25 @@ begin
   FStatus := cIsIdle;
   FInterval := INFINITE;
 
+  {$IFDEF MSWin}
   if Trim(nEventName) = '' then
     nEventName := 'evt_waitobj_' + TDateTimeHelper.DateTimeSerial;
-  FEvent := CreateEvent(nil, False, False, PChar(nEventName));
+  //xxxxx
+  {$ELSE}
+  nEventName := '';
+  {$ENDIF}
 
-  if FEvent = 0 then
+  FEvent := TSimpleEvent.Create(nil, False, False, nEventName);
+  {$IFDEF MSWin}
+  if FEvent.Handle = 0 then
     raise Exception.Create('Create TCrossProcWaitObject.FEvent Failure');
   //xxxxx
+  {$ENDIF}
 end;
 
 destructor TWaitObject.Destroy;
 begin
-  if FEvent > 0 then
-    CloseHandle(FEvent);
+  FreeAndNil(FEvent);
   inherited;
 end;
 
@@ -144,51 +151,67 @@ function TWaitObject.IsTimeout: Boolean;
 begin
   if IsWaiting then
        Result := False
-  else Result := FWaitResult = WAIT_TIMEOUT;
+  else Result := FWaitResult = wrTimeout;
 end;
 
 function TWaitObject.IsWakeup: Boolean;
 begin
   if IsWaiting then
        Result := False
-  else Result := FWaitResult = WAIT_OBJECT_0;
+  else Result := FWaitResult = wrSignaled;
 end;
 
 procedure TWaitObject.InitStatus(const nWakeup: Boolean);
 begin
   if nWakeup then
-       SetEvent(FEvent)
-  else ResetEvent(FEvent);
+       FEvent.SetEvent
+  else FEvent.ResetEvent;
 end;
 
-function TWaitObject.EnterWait: Cardinal;
+function TWaitObject.EnterWait: TWaitResult;
 begin
+  {$IFDEF MSWin}
   InterlockedExchange(FStatus, cIsWaiting);
-  Result := WaitForSingleObject(FEvent, FInterval);
+  Result := FEvent.WaitFor(FInterval);
 
   FWaitResult := Result;
   InterlockedExchange(FStatus, cIsIdle);
+  {$ELSE}
+  FStatus := cIsWaiting;
+  Result := FEvent.WaitFor(FInterval);
+
+  FWaitResult := Result;
+  FStatus := cIsIdle;
+  {$ENDIF}
 end;
 
 procedure TWaitObject.Wakeup(const nForce: Boolean);
 begin
   if (FStatus = cIsWaiting) or nForce then
-    SetEvent(FEvent);
+    FEvent.SetEvent;
   //xxxxx
 end;
 
 //------------------------------------------------------------------------------
 constructor TCrossProcWaitObject.Create(nEventName: string);
+{$IFDEF MSWin}
 var nStr: string;
+{$ENDIF}
 begin
   inherited Create;
   FLockStatus := False;
 
+  {$IFDEF MSWin}
   if Trim(nEventName) = '' then
     nEventName := 'evt_crosswait_' + TDateTimeHelper.DateTimeSerial;
-  FEvent := CreateEvent(nil, False, True, PChar(nEventName));
+  //xxxxx
+  {$ELSE}
+  nEventName := '';
+  {$ENDIF}
 
-  if FEvent = 0 then
+  FEvent := TSimpleEvent.Create(nil, False, True, nEventName);
+  {$IFDEF MSWin}
+  if FEvent.Handle = 0 then
   begin
     nStr := 'Create TCrossProcWaitObject.FSyncEvent Failure.';
     if GetLastError = ERROR_INVALID_HANDLE then
@@ -200,6 +223,7 @@ begin
 
     raise Exception.Create(nStr);
   end;
+  {$ENDIF}
 end;
 
 destructor TCrossProcWaitObject.Destroy;
@@ -207,8 +231,7 @@ begin
   SyncLockLeave(True);
   //unlock
   
-  if FEvent > 0 then
-    CloseHandle(FEvent);
+  FreeAndNil(FEvent);
   inherited;
 end;
 
@@ -218,8 +241,8 @@ end;
 function TCrossProcWaitObject.SyncLockEnter(const nWaitFor: Boolean): Boolean;
 begin
   if nWaitFor then
-       Result := WaitForSingleObject(FEvent, INFINITE) = WAIT_OBJECT_0
-  else Result := WaitForSingleObject(FEvent, 0) = WAIT_OBJECT_0;
+       Result := FEvent.WaitFor(INFINITE) = wrSignaled
+  else Result := FEvent.WaitFor(0) = wrSignaled;
   {*
     a.FEvent初始状态为True.
     b.首次WaitFor返回WAIT_OBJECT_0,锁定成功.
@@ -238,7 +261,7 @@ end;
 procedure TCrossProcWaitObject.SyncLockLeave(const nOnlyMe: Boolean);
 begin
   if (not nOnlyMe) or FLockStatus then
-    SetEvent(FEvent);
+    FEvent.SetEvent;
   //set event signal
 end;
 
@@ -246,21 +269,19 @@ end;
 constructor TWaitTimer.Create;
 begin
   FTimeResult := 0;
-  if not QueryPerformanceFrequency(FFrequency) then
-    raise Exception.Create('not support high-resolution performance counter');
-  //xxxxx
+  FTimer := TStopwatch.Create;
 end;
 
 procedure TWaitTimer.StartTime;
 begin
-  QueryPerformanceCounter(FFlagFirst);
+  FTimer.Reset;
+  FTimer.Start;
 end;
 
 function TWaitTimer.EndTime: Int64;
-var nNow: Int64;
 begin
-  QueryPerformanceCounter(nNow);
-  Result := Trunc((nNow - FFlagFirst) / FFrequency * 1000 * 1000);
+  FTimer.Stop;
+  Result := FTimer.ElapsedTicks;
   FTimeResult := Result;
 end;
 
@@ -326,7 +347,7 @@ begin
 
     nTimer.StartTime;
     nItem.FThread := nCurID;
-    nItem.FLastActive := GetTickCount;
+    nItem.FLastActive := TDateTimeHelper.GetTickCount;
     nItem.FSerialID := gMG.FSerialIDManager.GetSerialID;
   finally
     gMG.FObjectPool.Release(nTimer);

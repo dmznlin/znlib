@@ -7,7 +7,7 @@ unit UTaskMonitor;
 interface
 
 uses
-  System.Classes, System.SysUtils, Winapi.Windows, UBaseObject, UThreadPool;
+  System.Classes, System.SysUtils, UBaseObject, UThreadPool;
 
 const
   cTaskTimeoutShort = 500;       //¶Ì³¬Ê±
@@ -212,7 +212,7 @@ begin
       FTaskID := Result;
       FDesc := nDesc;
       FTimeOut := nTimeout;
-      FStart := GetTickCount();
+      FStart := TDateTimeHelper.GetTickCount();
     end;
 
     if FTasks.Count > FStatus.FNumMax then

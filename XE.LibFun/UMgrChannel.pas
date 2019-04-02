@@ -8,8 +8,9 @@ unit UMgrChannel;
 interface
 
 uses
-  Windows, Classes, SysUtils, SyncObjs, uROClient, uROWinInetHttpChannel,
-  uROBinMessage, uROSOAPMessage, {$IFDEF RO_v90}uROMessage,{$ENDIF}
+  Classes, SysUtils, SyncObjs, uROClient, uROBinMessage, uROSOAPMessage,
+  {$IFDEF MSWin}Windows, uROWinInetHttpChannel,{$ELSE}
+  uRONetHttpClientChannel,{$ENDIF}{$IFDEF RO_v90}uROMessage,{$ENDIF}
   UBaseObject;
 
 type
@@ -23,7 +24,11 @@ type
     FChannel: IUnknown;            //通道对象
 
     FMsg: TROMessage;              //消息对象
+    {$IFDEF MSWin}
     FHttp: TROWinInetHTTPChannel;  //通道对象
+    {$ELSE}
+    FHttp: TRONetHttpClientChannel;//通道对象
+    {$ENDIF}
   end;
 
   TChannelManager = class(TManagerBase)
@@ -83,7 +88,11 @@ end;
 
 destructor TChannelManager.Destroy;
 begin
+  {$IFDEF MSWin}
   InterlockedExchange(FFreeing, cYes);
+  {$ELSE}
+  FFreeing := cYes;
+  {$ENDIF}
   ClearChannel;
 
   FChannels.Free;
@@ -114,8 +123,11 @@ procedure TChannelManager.ClearChannel;
 var nIdx: Integer;
     nItem: PChannelItem;
 begin
+  {$IFDEF MSWin}
   InterlockedExchange(FClearing, cYes);
-  //set clear flag
+  {$ELSE}
+  FClearing := cYes;
+  {$ENDIF} //set clear flag
 
   SyncEnter;
   try
@@ -144,7 +156,11 @@ begin
       end;
     end;
   finally
+    {$IFDEF MSWin}
     InterlockedExchange(FClearing, cNo);
+    {$ELSE}
+    FClearing := cNo;
+    {$ENDIF}
     SyncLeave;
   end;
 end;
@@ -213,7 +229,11 @@ begin
       begin
         FType := nType;
         FChannel := nil;
+        {$IFDEF MSWin}
         FHttp := TROWinInetHTTPChannel.Create(nil);
+        {$ELSE}
+        FHttp := TRONetHttpClientChannel.Create(nil);
+        {$ENDIF}
 
         case nMsgType of
          mtBin: FMsg := TROBinMessage.Create;
@@ -235,7 +255,7 @@ begin
     if Assigned(Result) then
     begin
       Result.FUsed := True;
-      InterlockedIncrement(FNumLocked);
+      Inc(FNumLocked);
     end;
     SyncLeave;
   end;
@@ -249,7 +269,7 @@ begin
     SyncEnter;
     try
       nChannel.FUsed := False;
-      InterlockedDecrement(FNumLocked);
+      Dec(FNumLocked);
     finally
       SyncLeave;
     end;

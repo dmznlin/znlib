@@ -13,7 +13,7 @@ uses
   {$IFDEF EnableTaskMonitor}UTaskMonitor,{$ENDIF}
   {$IFDEF EnableThreadPool}UThreadPool,{$ENDIF}
   {$IFDEF EnableChannelManager}UMgrChannel,{$ENDIF}
-  UParameters, ULibFun;
+  {$IFDEF EnableParamManager}UParameters,{$ENDIF} ULibFun;
 
 type
   PManagerGroup = ^TManagerGroup;
@@ -40,7 +40,7 @@ type
     //编号管理器
     FObjectManager: TCommonObjectManager;
     //对象管理器
-    FParameterManager: TParameterManager;
+    {$IFDEF EnableParamManager}FParameterManager: TParameterManager;{$ENDIF}
     //参数管理器
     {$IFDEF EnableLogManager}FLogManager: TLogManager;{$ENDIF}
     //日志管理器

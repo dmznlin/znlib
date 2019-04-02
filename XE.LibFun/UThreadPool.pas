@@ -43,10 +43,12 @@
 *******************************************************************************}
 unit UThreadPool;
 
+{$I LibFun.Inc}
 interface
 
 uses
-  System.Classes, System.SysUtils, Winapi.Windows, UWaitItem, UBaseObject;
+  System.Classes, System.SysUtils, {$IFDEF MSWin}Winapi.Windows,{$ENDIF}
+  {$IFDEF POSIX}Posix.Pthread,{$ENDIF}UWaitItem, UBaseObject;
 
 const
   cThreadMin              = 1;                   //最小线程数
@@ -254,7 +256,7 @@ begin
   SetLength(FRunners, 0);
 
   FillChar(FStatus, SizeOf(FStatus), #0);
-  FStatus.FWorkIdleInit := GetTickCount();
+  FStatus.FWorkIdleInit := TDateTimeHelper.GetTickCount();
   FStatus.FRunErrorIndex := Low(FStatus.FRunErrors);
 
   FWorkers := TList.Create;
@@ -428,7 +430,7 @@ begin
       nWorker := FWorkers[nIdx];
       if nWorker.FWorker.FParentObj = nParent then
       begin
-        nWorker.FStartDelete := GetTickCount;
+        nWorker.FStartDelete := TDateTimeHelper.GetTickCount;
         //删除标记
 
         nLen := Length(nWorkers);
@@ -466,7 +468,7 @@ begin
 
         if nWorker.FStartDelete < 1 then
         begin
-          nWorker.FStartDelete := GetTickCount;
+          nWorker.FStartDelete := TDateTimeHelper.GetTickCount;
           //删除标记
 
           if nUpdateValid then
@@ -654,7 +656,7 @@ begin
       nWorker := FWorkers[nIdx];
       if nWorker.FWorker.FParentObj = nParent then
       begin
-        nWorker.FWakeupCall := GetTickCount();
+        nWorker.FWakeupCall := TDateTimeHelper.GetTickCount();
         //唤醒
       end;
     end;
@@ -677,7 +679,7 @@ begin
       nWorker := FWorkers[nIdx];
       if nWorker.FWorkerID = nWorkerID then
       begin
-        nWorker.FWakeupCall := GetTickCount(); //唤醒
+        nWorker.FWakeupCall := TDateTimeHelper.GetTickCount(); //唤醒
         Break;
       end;
     end;
@@ -697,7 +699,7 @@ begin
     with FStatus.FRunErrors[FStatus.FRunErrorIndex] do
     begin
       FName := nName;
-      FValue := GetTickCount();
+      FValue := TDateTimeHelper.GetTickCount();
     end;
 
     Inc(FStatus.FRunErrorIndex);
@@ -972,7 +974,7 @@ begin
   begin
     FRunDelayNow := 0;
     //重新计算延迟
-    FWorkIdleInit := GetTickCount();
+    FWorkIdleInit := TDateTimeHelper.GetTickCount();
     FWorkIdleCounter := 0;
     //重新计算空闲时长计数
   end;
@@ -1063,7 +1065,7 @@ begin
         //每分钟有30秒空闲
       end else
       begin
-        FWorkIdleInit := GetTickCount();
+        FWorkIdleInit := TDateTimeHelper.GetTickCount();
         FWorkIdleCounter := 0;
         //重新计时
       end;
@@ -1096,7 +1098,7 @@ begin
         GetTickCountDiff(FLastRunDelayInc) >= FRunDelayNow)) then
     begin
       FLastRunDelayVal := FRunDelayNow;
-      FLastRunDelayInc := GetTickCount();
+      FLastRunDelayInc := TDateTimeHelper.GetTickCount();
       nVal := Trunc(FRunDelayNow / 2000);
 
       if nVal < 1 then 
@@ -1205,13 +1207,13 @@ var nIdx: Integer;
       FWorkIdleLast := 0;
 
       FActiveWorker.FRunner := FTag;
-      FActiveWorker.FStartCall := GetTickCount;
+      FActiveWorker.FStartCall := TDateTimeHelper.GetTickCount;
       Inc(FOwner.FStatus.FNumRunning);
     end else
     begin
       if FWorkIdleStart = 0 then
       begin
-        FWorkIdleStart := GetTickCount();
+        FWorkIdleStart := TDateTimeHelper.GetTickCount();
         //开始空闲计时
       end else
 
@@ -1245,7 +1247,7 @@ var nIdx: Integer;
   begin
     FActiveWorker.FRunner := -1;
     FActiveWorker.FStartCall := 0;
-    FActiveWorker.FLastCall := GetTickCount;
+    FActiveWorker.FLastCall := TDateTimeHelper.GetTickCount;
 
     Dec(FOwner.FStatus.FNumRunning);
     Inc(FOwner.FStatus.FNumWorkerRun);

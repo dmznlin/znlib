@@ -9,9 +9,10 @@ interface
 
 uses
   {$IFDEF JsonSerializers}System.JSON.Serializers, System.JSON.Types,{$ENDIF}
-  {$IFDEF MSWINDOWS}Winapi.Windows,{$ENDIF MSWINDOWS}
+  {$IFDEF MSWin}Winapi.Windows,{$ENDIF}
   {$IFDEF HasVCL}Vcl.Forms, Vcl.Controls,{$ENDIF}
   {$IFDEF HasFMX}FMX.Forms, FMX.Controls,{$ENDIF}
+  {$IFDEF EnableThirdANSI}UByteString,{$ENDIF}
   System.Classes, System.UITypes, System.SysUtils, System.NetEncoding,
   System.Hash, System.Variants, System.IniFiles;
 
@@ -61,11 +62,8 @@ type
   TStringHelper = class
   public
     const
-      {$IFNDEF XE2_UP}
-        cFirstIndex = 1;
-      {$ELSE}
-        cFirstIndex = Low(String);
-      {$ENDIF}
+      cFI = Low(String); //FirstIndex
+      //字符首字母索引
     type
       TFillPos = (fpLeft, fpMid, fpRight);
       //填充位置:左,中间,右
@@ -126,8 +124,10 @@ type
     class function SplitFloat(const nStr: string; 
       const nDef: Double = 0): Double; static;
     //拆分出数值
+    {$IFNDEF EnableThirdANSI}
     class function GetPinYin(const nCH: string): string; static;
     //获取nChinese的拼音简写
+    {$ENDIF}
     class function MirrorStr(const nStr: string): string; static;
     //镜像反转nStr字符串
     class function IsNumber(const nStr: string;
@@ -232,8 +232,10 @@ type
     //change time long to chinese string
     class function DateTimeSerial: string; static;
     //serial id by date
+    class function GetTickCount: Cardinal; static;
+    //tick counter
     class function GetTickCountDiff(const nCount: Cardinal;
-      const nDefault: TTickDefault = tdNow): Int64;
+      const nDefault: TTickDefault = tdNow): Int64; static;
     //result = gettickcount - nCount
   end;
 
@@ -246,6 +248,7 @@ class function TApplicationHelper.GetCPUIDStr: string;
 var nIdx: Integer;
     nCPU: TCPUID;
 
+    {$IFDEF UseASM}
     function GetCPUID: TCPUID; assembler; register;
     asm
       PUSH    EBX         {Save affected register}
@@ -263,13 +266,16 @@ var nIdx: Integer;
       POP     EDI         {Restore registers}
       POP     EBX
     end;
+    {$ENDIF}
 begin
   try
     for nIdx:=Low(nCPU) to High(nCPU) do
       nCPU[nIdx] := -1;
     //xxxxx
 
+    {$IFDEF UseASM}
     nCPU := GetCPUID;
+    {$ENDIF}
     Result := Format('%.8x', [nCPU[1]]);
   except
     Result := 'unknown';
@@ -951,8 +957,13 @@ var nAnsi: AnsiString;
 begin
   if nAnsiLen then
   begin
+    {$IFDEF EnableThirdANSI}
+    nAnsi := AnsiString.Create(nStr, TEncoding.ANSI);
+    nLen := nAnsi.Length;
+    {$ELSE}
     nAnsi := AnsiString(nStr);
     nLen := Length(nAnsi);
+    {$ENDIF}
   end else
   begin
     nLen := Length(nStr);
@@ -964,7 +975,11 @@ begin
     if nClip and (nLen > nWidth) then
     begin
       if nAnsiLen then
+           {$IFDEF EnableThirdANSI}
+           Result := string(AnsiCopy(nAnsi, 1, nWidth))
+           {$ELSE}
            Result := string(Copy(nAnsi, 1, nWidth))
+           {$ENDIF}
       else Result := Copy(nStr, 1, nWidth);
     end else
     begin
@@ -1029,6 +1044,7 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+{$IFNDEF EnableThirdANSI}
 const
   cPYData: array[216..247] of AnsiString = (
   {216}'CJWGNSPGCGNESYPB' + 'TYYZDXYKYGTDJNMJ' + 'QMBSGZSCYJSYYZPG' +
@@ -1176,7 +1192,7 @@ begin
 
   Result := LowerCase(Result);
 end;
-
+{$ENDIF}
 //------------------------------------------------------------------------------
 //Date: 2017-12-19
 //Parm: 字段;值;类型
@@ -1632,6 +1648,13 @@ begin
   Result := FormatDateTime('yyyymmddhhnnsszzz', Now());
 end;
 
+//Date: 2019-04-01
+//Desc: 短间隔计数器
+class function TDateTimeHelper.GetTickCount: Cardinal;
+begin
+  Result := TThread.GetTickCount();
+end;
+
 //Date: 2019-01-11
 //Parm: 上一次调用GetTickCount的值;默认值
 //Desc: 计算GetTickCount - nCount的差值,需校正溢出归零问题
@@ -1645,11 +1668,11 @@ begin
 
     case nDefault of
      tdZero : Exit;
-     tdNow  : Result := GetTickCount();
+     tdNow  : Result := TDateTimeHelper.GetTickCount();
     end;
   end else
   begin
-    Result := GetTickCount();
+    Result := TDateTimeHelper.GetTickCount();
     //default
 
     if Result >= nCount then

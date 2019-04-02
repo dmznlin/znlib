@@ -1,17 +1,30 @@
 {$DEFINE XE.LibFun}
 //用于XE的库标识
 
-{$IFDEF CONDITIONALEXPRESSIONS}
-  {$IF CompilerVersion >= 24}
-    {$DEFINE XE2_UP}   
-  {$ENDIF}
-{$ENDIF}
-//特定平台定义,用于特定处理
-
 {$IF CompilerVersion >= 32}
   {$DEFINE JsonSerializers}
   //10.2 tokyo delphi支持序列化
 {$ENDIF}
+
+{$IFDEF MSWINDOWS}
+  {$DEFINE MSWin}
+  //平台标记
+  {$IFDEF WIN32}
+    {$DEFINE UseASM}
+    //使用汇编语法
+  {$ENDIF}
+{$ENDIF}
+//WIN平台定义
+
+{$IFDEF NEXTGEN}
+  {$DEFINE Mobile}
+  //平台标识
+  {$DEFINE EnableThirdANSI}
+  //使用三方ansi字符串
+  {$ZEROBASEDSTRINGS OFF}
+  //关闭字符串0索引,从1开始
+{$ENDIF}
+//移动平台定义
 
 {-------------------------------------------------------------------------------
  以下功能模块,需要在项目中定义编译条件,操作方法(以Delphi_10.2为例):
@@ -34,6 +47,11 @@
   //使用ver9.0的RemObjects
   {$DEFINE EnableChannelManager}
   //启用通道管理器
+{$ENDIF}
+
+{$IFDEF AutoParams}
+  {$DEFINE EnableParamManager}
+  //启用参数管理器
 {$ENDIF}
 
 {$IFDEF TaskMonitor}
