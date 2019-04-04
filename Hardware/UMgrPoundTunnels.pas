@@ -739,9 +739,11 @@ begin
       DisconnectClient(nPT.FPort.FClient);
       //关闭链路
 
-      if FUDPServerUser > 0 then Dec(FUDPServerUser);
-      if FUDPServerUser < 1 then FUDPServer.Active := False;
-      //关闭UDP
+      if Assigned(FUDPServer) then
+      begin
+        if FUDPServerUser > 0 then Dec(FUDPServerUser);
+        if FUDPServerUser < 1 then FUDPServer.Active := False;
+      end; //关闭UDP
     end;
   finally
     FSyncLock.Leave;
