@@ -8,8 +8,10 @@ unit UManagerGroup;
 interface
 
 uses
-  System.Rtti, System.SysUtils, UBaseObject, UObjectPool, UMemDataPool,
+  System.Rtti, System.SysUtils, System.Classes, UBaseObject, UObjectPool,
+  UMemDataPool,
   {$IFDEF EnableLogManager}UMgrLog,{$ENDIF}
+  {$IFDEF EnablePlugManager}UMgrPlugs,{$ENDIF}
   {$IFDEF EnableTaskMonitor}UTaskMonitor,{$ENDIF}
   {$IFDEF EnableThreadPool}UThreadPool,{$ENDIF}
   {$IFDEF EnableChannelManager}UMgrChannel,{$ENDIF}
@@ -40,14 +42,16 @@ type
     //编号管理器
     FObjectManager: TCommonObjectManager;
     //对象管理器
-    {$IFDEF EnableParamManager}FParameterManager: TParameterManager;{$ENDIF}
-    //参数管理器
     {$IFDEF EnableLogManager}FLogManager: TLogManager;{$ENDIF}
     //日志管理器
+    {$IFDEF EnablePlugManager}FPlugManager: TPlugManager;{$ENDIF}
+    //插件管理器
     {$IFDEF EnableTaskMonitor}FTaskMonitor: TTaskMonitor;{$ENDIF}
     //任务管理器
     {$IFDEF EnableThreadPool}FThreadPool: TThreadPoolManager;{$ENDIF}
     //线程管理器
+    {$IFDEF EnableParamManager}FParamsManager: TParameterManager;{$ENDIF}
+    //参数管理器
     {$IFDEF EnableChannelManager}FChannelManager: TChannelManager;{$ENDIF}
     //RemObjects通道管理器
   public
@@ -58,6 +62,8 @@ type
     procedure CheckSupport(const nCallClass: string;
       const nManagers: TStringHelper.TStringArray); overload;    
     //验证所需管理器是否正常
+    procedure GetManagersStatus(const nList: TStrings);
+    //获取有效管理器的当前状态
   end;
 
 var
@@ -193,6 +199,39 @@ begin
   finally
     nCtx.Free;
   end;    
+end;
+
+//Date: 2019-04-24
+//Parm: 列表
+//Desc: 获取当前有效的管理器状态信息
+procedure TManagerGroup.GetManagersStatus(const nList: TStrings);
+var nObj: TObject;
+    nCtx: TRttiContext;
+    nType: TRttiType;
+    nRF: TRttiField;
+    nMethod: TRttiMethod;
+    nInstance: TRttiInstanceType;
+begin
+  nCtx := TRttiContext.Create;
+  try
+    nType := nCtx.GetType(TypeInfo(TManagerGroup));
+    for nRF in nType.GetFields do
+    begin
+      if nRF.FieldType.TypeKind <> tkClass then Continue;
+      nInstance := nRF.FieldType.AsInstance;
+      nMethod := nInstance.GetMethod('GetStatus');
+
+      if Assigned(nMethod) then
+      begin
+        nObj := nRF.GetValue(@gMG).AsObject;
+        if Assigned(nObj) then
+          nMethod.Invoke(nObj, [TValue.From(nList), TValue.From(True)]);
+        //卸载前执行
+      end;
+    end;
+  finally
+    nCtx.Free;
+  end;
 end;
 
 initialization

@@ -224,6 +224,9 @@ type
     procedure ASyncInitItem(const nSQLItem: PDBASyncItem;
       const nNewSerial: Boolean = False);
     //异步初始化
+    class function EncodeSQL(const nSQL: string;
+      const nEncode: Boolean = False): string;
+    //处理特殊字符
     procedure ASyncAdd(const nItem: PDBASyncItem);
     procedure ASyncAddSimple(const nSQL: string; const nPair: string = '');
     procedure ASyncAddItem(const nItem: PDBASyncItem; const nSQL: string;
@@ -1456,7 +1459,8 @@ end;
 //Date: 2017-12-10
 //Parm: SQL;编码or解码
 //Desc: 处理nSQL中的特殊字符
-function EncodeSQL(const nSQL: string; const nEncode: Boolean = False): string;
+class function TDBConnManager.EncodeSQL(const nSQL: string;
+ const nEncode: Boolean): string;
 begin
   if nEncode then
   begin
@@ -1690,8 +1694,8 @@ begin
         FSerialNo  := FieldByName('A_SerialNo').AsString;
         FPairKey   := FieldByName('A_PairKey').AsString;
         
-        FSQL       := EncodeSQL(FieldByName('A_SQL').AsString);
-        FIfQuery   := EncodeSQL(FieldByName('A_IfQuery').AsString);
+        FSQL       := FOwner.EncodeSQL(FieldByName('A_SQL').AsString);
+        FIfQuery   := FOwner.EncodeSQL(FieldByName('A_IfQuery').AsString);
         FIfField   := FieldByName('A_IfField').AsString;
 
         nIdx       := FieldByName('A_IfType').AsInteger;
@@ -1709,7 +1713,7 @@ begin
         end;
 
         FIfValue   := FieldByName('A_IfValue').AsString;
-        FIfSQL     := EncodeSQL(FieldByName('A_IfSQL').AsString);
+        FIfSQL     := FOwner.EncodeSQL(FieldByName('A_IfSQL').AsString);
       end;
 
       Next;

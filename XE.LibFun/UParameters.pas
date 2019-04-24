@@ -54,6 +54,7 @@ type
     FRoot     : string;                       //节点名(存为XML时体现)
     FDetail   : string;                       //子节点(存为XML时体现)
     FEnable   : Boolean;                      //是否有效
+    FHasUsed  : Boolean;                      //是否使用
     FFields   : TParamFieldItems;             //参数明细项
   end;
   TParamItems = array of TParamItem;
@@ -113,10 +114,10 @@ begin
   begin
     if not Assigned(gMG.FManagers[nIdx].FManager) then
       gMG.FManagers[nIdx].FManager := TParameterManager.Create;
-    gMG.FParameterManager := gMG.FManagers[nIdx].FManager as TParameterManager;
+    gMG.FParamsManager := gMG.FManagers[nIdx].FManager as TParameterManager;
   end else
   begin
-    gMG.FParameterManager := nil;
+    gMG.FParamsManager := nil;
     FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
 end;
@@ -291,9 +292,73 @@ begin
 
 end;
 
+//Date: 2019-04-12
+//Parm: 文件路径
+//Desc: 将当前参数写入nFile文件
 procedure TParameterManager.SaveParametersToFile(const nFile: string);
+var nStr: string;
+    i,j,nIdx: Integer;
+    nXML: TNativeXml;
+    nNode,nTmp: TXmlNode;
 begin
+  nXML := TNativeXml.Create(nil);
+  with nXML do
+  try
+    Clear;
+    XmlFormat := xfReadable;
 
+    Charset := 'utf-8';
+    VersionString := '1.0';
+    Root.Name := 'Params';
+
+    for nIdx := Low(Parameters) to High(Parameters) do
+      Parameters[nIdx].FHasUsed := False;
+    //init status
+
+    for nIdx := Low(Parameters) to High(Parameters) do
+    with Parameters[nIdx] do
+    begin
+      if FHasUsed then Continue;      
+      nNode := Root.NodeNew(FRoot);
+      //type node
+
+      for i := nIdx to High(Parameters) do
+      begin
+        if Parameters[i].FRoot <> FRoot then Continue;
+        Parameters[i].FHasUsed := True;
+        nTmp := nNode.NodeNew(FDetail); //type detail
+
+        for j := Low(FFields) to High(FFields) do
+        begin
+          case FFields[j].FValue of
+           pdString : nStr := FFields[j].FValueS;
+           pdInt    : nStr := FFields[j].FValueI.ToString;
+           pdFloat  : nStr := FFields[j].FValueF.ToString;
+          end;
+
+          if FFields[j].FName = 'ID' then
+            nStr := Parameters[i].FID;
+          if FFields[j].FName = 'Name' then
+            nStr := Parameters[i].FName;
+          //xxxxx
+
+          case FFields[j].FType of
+           ptSub :
+            with nTmp.NodeNew('Field') do
+            begin
+              AttributeValueByName['Name'] := FFields[j].FName;
+              AttributeValueByName['Value'] := nStr;
+            end;
+           ptAttribute : nTmp.AttributeValueByName[FFields[j].FName] := nStr;
+          end;
+        end;
+      end;
+    end;
+
+    SaveToFile(nFile);
+  finally
+    nXML.Free;
+  end;
 end;
 
 //Date: 2019-02-28

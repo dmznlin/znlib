@@ -63,6 +63,13 @@
   //启用任务监控服务
 {$ENDIF}
 
+{$IFDEF PlugManager}
+  {$DEFINE LogManager}
+  //启用日志管理器
+  {$DEFINE EnablePlugManager}
+  //启用插件管理器
+{$ENDIF}
+
 {$IFDEF LogManager}
   {$DEFINE ThreadPool}
   //启用线程池
