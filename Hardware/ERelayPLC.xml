@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="gb2312"?>
+<!--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+节点: config
+*.thread: 线程个数(1-5)
+*.monitor: 负责扫描不活动板卡的线程个数,不超过线程总数
+
+节点: host
+*.ip,port: 控制器地址
+*.enable: 1为启用
+*.signal_in: 输入信号状态
+*.signal_out: 输出信号状态
+
+节点: host->tunnels->tunnel
+*.in: 输入通道编号(1-24)
+*.out: 输出通道编号(1-16)
+*.enable: 0为关闭
+*.auto_off: 输出自动关闭
+*.screen_no: 显示屏485地址
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-->
+<erelays>
+  <config>
+    <thread>3</thread>
+    <monitor>1</monitor>
+  </config>
+  <host id="E1" name="1号柜">
+    <enable>1</enable>
+    <ip>127.0.0.1</ip>
+    <port>8000</port>
+    <signal_in num="24" on="1" off="0" />
+    <signal_out num="16" on="1" off="0" />
+    <tunnels>
+      <tunnel id="T1" name="1号库">
+        <in>1,2,3</in>
+        <out>1,2,3</out>
+        <enable>1</enable>
+        <auto_off>5000</auto_off>
+        <screen_no>1</screen_no>
+      </tunnel>
+      <tunnel id="T2" name="2号库">
+        <in>4,5,6</in>
+        <out>4,5,6</out>
+        <enable>1</enable>
+        <auto_off>5000</auto_off>
+        <screen_no>1</screen_no>
+      </tunnel>
+    </tunnels>
+  </host>
+</erelays>
