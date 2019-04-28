@@ -20,7 +20,7 @@ interface
 
 uses
   Windows, Classes, SysUtils, NativeXml, IdTCPConnection, IdTCPClient, IdGlobal,
-  SyncObjs, UWaitItem, ULibFun, USysLoger;
+  IdStack, SyncObjs, UWaitItem, ULibFun, USysLoger;
 
 const
   cERelay_AddrNum          = 64;        //通道个数
@@ -82,7 +82,9 @@ type
 
   PERelayTunnelCommand = ^TERelayTunnelCommand;
   TERelayTunnelCommand = record
-    FUsed          : Boolean;           //使用标记  
+    FUsed          : Boolean;           //使用标记
+    FLastUse       : Cardinal;          //最后使用  
+    FHostID        : string;            //主机标识
     FTunnel        : string;            //通道标识
     FCommand       : Byte;              //操作命令
     FData          : TIdBytes;          //命令数据
@@ -97,31 +99,25 @@ type
   private
     FOwner: TERelayManager;
     //拥有者
-    FBuffer: TList;
-    //待发送数据
     FWaiter: TWaitObject;
     //等待对象
-    FActiveHost: PERelayHost;
+    FActiveHost: Integer;
     //当前读头
     FThreadType: TERelayThreadType;
     //线程模式
   protected
-   { procedure Execute; override;
+   procedure Execute; override;
     procedure DoExecute;
     //执行线程
     procedure ScanActiveHost(const nActive: Boolean);
     //扫描可用
-    procedure SendHostCommand(const nHost: PERelayHost);
-    function SendData(const nHost: PERelayHost; var nData: TIdBytes;
-      const nRecvLen: Integer): string;
-    //发送数据
   public
     constructor Create(AOwner: TERelayManager; AType: TERelayThreadType);
     destructor Destroy; override;
     //创建释放
     procedure Wakeup;
     procedure StopMe;
-    //启停通道}
+    //启停通道
   end;
 
   TERelayManager = class(TObject)
@@ -129,9 +125,6 @@ type
     FHosts: TERelayHosts;
     FTunnels: TERelayTunnels;
     //通道列表
-    FHostIndex: Integer;
-    FHostActive: Integer;
-    //读头索引
     FMonitorCount: Integer;
     FThreadCount: Integer;
     FReaders: array of TERelayThread;
@@ -145,12 +138,12 @@ type
     //清理数据
     procedure CloseHostConn(const nHost: Integer);
     //关闭主机
-    function FindTunnel(const nTunnel: string): Integer;
-    //检索通道
-    function MakeNewCommand(const nCmd: Byte; const nTunnel: string;
+    procedure WakeupReaders;
+    //唤醒线程
+    function MakeNewCommand(const nCmd: Byte; const nHost,nTunnel: string;
       const nLock: Boolean = True): Integer;
     //构建命令
-    function SendCommand(const nHost,nCommand: Integer;
+    function SendCommand(const nHost: Integer; const nCmd: PERelayTunnelCommand;
       var nRecv: TIdBytes): Boolean;
     //发送指令
   public
@@ -162,6 +155,8 @@ type
     //启停服务
     procedure LoadConfig(const nFile: string);
     //读取配置
+    function FindTunnel(const nTunnel: string): Integer;
+    //检索通道
     function OpenTunnel(const nTunnel: string): Boolean;
     function CloseTunnel(const nTunnel: string): Boolean;
     function TunnelOC(const nTunnel: string; nOC: Boolean): string;
@@ -171,6 +166,9 @@ type
     //查询状态
     procedure ShowText(const nTunnel,nText: string; nScreen: Integer = -1);
     //显示内容
+    property Hosts: TERelayHosts read FHosts;
+    property Tunnels: TERelayTunnels read FTunnels;
+    //属性相关
   end;
 
 var
@@ -184,17 +182,170 @@ begin
   gSysLoger.AddLog(TERelayManager, 'PLC检测控制器', nEvent);
 end;
 
+constructor TERelayThread.Create(AOwner: TERelayManager;
+  AType: TERelayThreadType);
+begin
+  inherited Create(False);
+  FreeOnTerminate := False;
+
+  FOwner := AOwner;
+  FThreadType := AType;
+
+  FWaiter := TWaitObject.Create();
+  FWaiter.Interval := 3 * 1000;
+end;
+
+destructor TERelayThread.Destroy;
+begin
+  FreeAndNil(FWaiter);
+  inherited;
+end;
+
+procedure TERelayThread.StopMe;
+begin
+  Terminate;
+  FWaiter.Wakeup;
+
+  WaitFor;
+  Free;
+end;
+
+procedure TERelayThread.Wakeup;
+begin
+  FWaiter.Wakeup;
+end;
+
+procedure TERelayThread.Execute;
+begin
+  while not Terminated do
+  try
+    FWaiter.EnterWait;
+    if Terminated then Exit;
+
+    FActiveHost := -1;
+    try
+      Doexecute;
+    finally
+      if FActiveHost > -1 then
+      try
+        FOwner.FSyncLock.Enter;
+        FOwner.FHosts[FActiveHost].FLocked := False;
+      finally
+        FOwner.FSyncLock.Leave;
+      end;
+    end;
+  except
+    on E:Exception do
+    begin
+      WriteLog(E.Message);
+    end;
+  end;
+end;
+
+//Date: 2019-04-28
+//Parm: 活动&不活动读头
+//Desc: 扫描nActive读头,若可用存入FActiveReader.
+procedure TERelayThread.ScanActiveHost(const nActive: Boolean);
+var i,nIdx: Integer;
+begin
+  with FOwner do
+  begin
+    for nIdx:=Low(FCommands) to High(FCommands) do
+    begin
+      if not FCommands[nIdx].FUsed then Continue;
+      //invalid command
+
+      for i:=Low(FHosts) to High(FHosts) do
+      if (FHosts[i].FEnable) and (not FHosts[i].FLocked) and 
+         (FHosts[i].FID = FCommands[nIdx].FHostID) then
+      begin
+        if (nActive and (FHosts[i].FLastActive > 0)) or
+           ((not nActive) and (FHosts[i].FLastActive = 0)) then
+        begin
+          FActiveHost := i;
+          FHosts[i].FLocked := True;
+          Break;
+        end;
+      end;
+
+      if FActiveHost > -1 then Break;
+      //find valid host
+    end;
+  end;
+end;
+
+procedure TERelayThread.DoExecute;
+var nRecv: TIdBytes;
+    nCmd: TERelayTunnelCommand;
+
+    //Desc: 检索当前主机的指令
+    function GetHostCommand: Boolean;
+    var nIdx: Integer;
+    begin
+      with FOwner do
+      try
+        Result := False;
+        //default
+        
+        for nIdx:=Low(FCommands) to High(FCommands) do
+         with FCommands[nIdx] do
+          if FUsed and (FHostID = FHosts[FActiveHost].FID) then
+          begin
+            FUsed := False;
+            nCmd := FCommands[nIdx];
+
+            Result := True;
+            Break;
+          end;
+      finally
+        FSyncLock.Leave;
+      end;
+    end;
+begin
+  with FOwner do
+  try
+    FSyncLock.Enter;
+    //lock
+
+    if FThreadType = ttAll then
+    begin
+      ScanActiveHost(False);
+      //优先扫描不活动读头
+
+      if FActiveHost < 0 then
+        ScanActiveHost(True);
+      //辅助扫描活动项
+    end else
+
+    if FThreadType = ttActive then
+    begin
+      ScanActiveHost(True);
+      //优先扫描活动读头
+    end;
+  finally
+    FSyncLock.Leave;
+  end;
+
+  if Terminated or (FActiveHost < 0) then Exit;
+  //invalid host
+
+  while True do
+  begin
+    if GetHostCommand then
+         FOwner.SendCommand(FActiveHost, @nCmd, nRecv)
+    else Break;
+  end;
+end;
+
+//------------------------------------------------------------------------------
 constructor TERelayManager.Create;
 begin
-  FHostIndex := 0;
-  FHostActive := 0;
+  FThreadCount := 2;
+  FMonitorCount := 1;
   SetLength(FHosts, 0);
   SetLength(FTunnels, 0);
 
-  FThreadCount := 2;
-  FMonitorCount := 1;
   SetLength(FReaders, 0);
-
   SetLength(FCommands, 0);
   FSyncLock := TCriticalSection.Create;
 end;
@@ -238,16 +389,13 @@ var nIdx,nInt: Integer;
 begin
   nInt := 0;
   for nIdx:=Low(FHosts) to High(FHosts) do
-   if FHosts[nIdx].FEnable then
-    Inc(nInt);
+   if FHosts[nIdx].FEnable then Inc(nInt);
   //count enable host
-                            
+  
   if nInt < 1 then Exit;
-  FHostIndex := 0;
-  FHostActive := 0;
-
   StopService;
   SetLength(FReaders, FThreadCount);
+
   for nIdx:=Low(FReaders) to High(FReaders) do
     FReaders[nIdx] := nil;
   //xxxxx
@@ -261,7 +409,7 @@ begin
          nType := ttAll
     else nType := ttActive;
 
-    //FReaders[nIdx] := TERelayThread.Create(Self, nType);
+    FReaders[nIdx] := TERelayThread.Create(Self, nType);
     //xxxxx
   end;
 end;
@@ -278,18 +426,31 @@ begin
   for nIdx:=Low(FReaders) to High(FReaders) do
   begin
     if Assigned(FReaders[nIdx]) then
-     // FReaders[nIdx].StopMe;
+      FReaders[nIdx].StopMe;
     FReaders[nIdx] := nil;
   end;
 
   FSyncLock.Enter;
   try
+    SetLength(FCommands, 0);
+    //clear cmd
+
     for nIdx:=Low(FHosts) to High(FHosts) do
       CloseHostConn(nIdx);
     //关闭链路
   finally
     FSyncLock.Leave;
   end;
+end;
+
+//Desc: 唤醒全部线程
+procedure TERelayManager.WakeupReaders;
+var nIdx: Integer;
+begin
+  for nIdx:=Low(FReaders) to High(FReaders) do
+   if Assigned(FReaders[nIdx]) then
+    FReaders[nIdx].Wakeup;
+  //xxxxx
 end;
 
 //Date: 2019-04-25
@@ -309,10 +470,10 @@ begin
 end;
 
 //Date: 2019-04-25
-//Parm: 命令;通道;锁定
+//Parm: 命令;主机;通道;锁定
 //Desc: 构建命令项,合并相同命令
-function TERelayManager.MakeNewCommand(const nCmd: Byte; const nTunnel: string;
-  const nLock: Boolean): Integer;
+function TERelayManager.MakeNewCommand(const nCmd: Byte; const nHost,
+  nTunnel: string; const nLock: Boolean): Integer;
 var nIdx: Integer;
     nInit: TERelayTunnelCommand;
 begin
@@ -320,11 +481,15 @@ begin
   if nLock then FSyncLock.Enter;
   try
     for nIdx:=Low(FCommands) to High(FCommands) do
+    with FCommands[nIdx] do
     begin
-      if FCommands[nIdx].FUsed then
+      if FUsed and (GetTickCountDiff(FLastUse) > 10 * 1000) then
+        FUsed := False;
+      //command keep time
+
+      if FUsed then
       begin
-        if (CompareText(nTunnel, FCommands[nIdx].FTunnel) = 0) and
-           (nCmd = FCommands[nIdx].FCommand) then 
+        if (nCmd = FCommand) and (CompareText(nTunnel, FTunnel) = 0) then
         begin
           Result := nIdx;
           Break;
@@ -350,7 +515,10 @@ begin
     with FCommands[Result] do
     begin
       FUsed    := True;
+      FLastUse := GetTickCount;
+      
       FCommand := nCmd;
+      FHostID  := nHost;
       FTunnel  := nTunnel;
     end;
   finally
@@ -394,19 +562,19 @@ end;
 //Date: 2019-04-26
 //Parm: 主机;命令;结果
 //Desc: 向nHost发送nCommand命令
-function TERelayManager.SendCommand(const nHost,nCommand: Integer;
-  var nRecv: TIdBytes): Boolean;
+function TERelayManager.SendCommand(const nHost: Integer;
+  const nCmd: PERelayTunnelCommand; var nRecv: TIdBytes): Boolean;
 var nIdx,nInt,nLen,nNum: Integer;
     nSendBuf: Boolean;
     nBuf: TIdBytes;
 begin
-  with FHosts[nHost],FCommands[nCommand] do
+  Result := False;
+  with FHosts[nHost] do
   try
-    Result := False;
     nBuf := ToBytes(cERelay_FrameBegin, Indy8BitEncoding);    //起始帧
-    AppendByte(nBuf, FCommand);                               //功能码
-    AppendByte(nBuf, Length(FData));                          //数据长度
-    AppendBytes(nBuf, FData);                                 //数据
+    AppendByte(nBuf, nCmd.FCommand);                          //功能码
+    AppendByte(nBuf, Length(nCmd.FData));                     //数据长度
+    AppendBytes(nBuf, nCmd.FData);                            //数据
     AppendByte(nBuf, VerifyData(nBuf));                       //校验位
 
     nSendBuf := True;
@@ -419,6 +587,9 @@ begin
       if not FClient.Connected then
       begin
         FClient.Connect;
+        FLastActive := GetTickCount;
+        //可连接,则活动
+
         FClient.IOHandler.ReadTimeout := 5 * 1000;
         //reset timeout
       end;
@@ -441,11 +612,13 @@ begin
         else FClient.IOHandler.InputBuffer.ExtractToBytes(FReadBuf);
       end;
 
+      nSendBuf := False;
+      //读写正常则不用重发
+      
       {$IFDEF Debug}
       LogHex(FReadBuf, '原始: ');
       {$ENDIF}
 
-      nSendBuf := False; //读写正常则不用重发
       nLen := Length(FReadBuf);
       if nLen < 1 then Continue;
 
@@ -457,7 +630,7 @@ begin
         LogHex(FReadBuf, '保留: ');
         {$ENDIF}
 
-        nLen := 100;
+        nLen := Length(FReadBuf);
         WriteLog('缓冲超长,已截断.');
       end;
 
@@ -488,7 +661,7 @@ begin
                SetLength(FReadBuf, 0)
           else FReadBuf := ToBytes(FReadBuf, nLen - nInt, nInt);
 
-          Result := nRecv[3] = FCommand;
+          Result := nRecv[3] = nCmd.FCommand;
           //应答匹配
           Break;
         end else Dec(nIdx);
@@ -514,6 +687,10 @@ begin
   except
     on nErr: Exception do
     begin
+      if nErr is EIdSocketError then
+        FLastActive := 0;
+      //连接错误,置为不活动
+      
       WriteLog(Format('向主机[ %s:%s,%d ]发送数据失败,描述: %s', [FID,
         FClient.Host, FClient.Port, nErr.Message]));
       //xxxxx
@@ -557,7 +734,7 @@ function TERelayManager.TunnelOC(const nTunnel: string; nOC: Boolean): string;
 var nIdx,nInt,nT,nCmd: Integer;
 begin
   Result := '';
-  //if (Length(FReaders) < 1) or (not Assigned(FReaders[0])) then Exit;
+  if (Length(FReaders) < 1) or (not Assigned(FReaders[0])) then Exit;
   nT := FindTunnel(nTunnel);
 
   if nT < 0 then
@@ -581,7 +758,10 @@ begin
 
     FSyncLock.Enter;
     try
-      nCmd := MakeNewCommand(cERelay_RelaysOC, nTunnel, False);
+      nCmd := MakeNewCommand(cERelay_RelaysOC, FHosts[FHost].FID,
+        nTunnel, False);
+      //xxxxx
+      
       with FCommands[nCmd] do
       begin
         SetLength(FData, FHosts[FHost].FOutNum);
@@ -606,6 +786,9 @@ begin
     finally
       FSyncLock.Leave;
     end;
+
+    WakeupReaders;
+    //唤醒并执行
   end;
 end;
 
@@ -627,11 +810,11 @@ end;
 //Desc: 查询nHost的输入输出状态
 function TERelayManager.QueryStatus(const nHost: string; var nIn,
   nOut: TERelayAddress): Boolean;
-var nIdx,nInt,nCmd: Integer;
-    nInI,nOutI: Integer;
+var nIdx,nInt,nInI,nOutI: Integer;
     nInit: Cardinal;
     nLockMe: Boolean;
     nRecv: TIdBytes;
+    nCmd: TERelayTunnelCommand;
 begin
   Result := False;
   nInt := -1;
@@ -657,7 +840,6 @@ begin
   end;
 
   nLockMe := False;
-  nCmd := -1;
   nInit := GetTickCount();
   
   with FHosts[nInt] do
@@ -677,8 +859,8 @@ begin
         //其它调用锁定,则等待
       end else
       begin
-        FLocked := True; //本次调用锁定
         nLockMe := True;
+        FLocked := True; //本次调用锁定
         Break;
       end;
     finally
@@ -687,12 +869,15 @@ begin
 
     if GetTickCountDiff(FStatusLast) > 1200 then //状态短时间内可复用
     begin
-      nCmd := MakeNewCommand(cERelay_QueryStatus, nHost, True);
-      if not SendCommand(nInt, nCmd, nRecv) then Exit;
+      nCmd.FCommand := cERelay_QueryStatus;
+      SetLength(nCmd.FData, 0);
+      if not SendCommand(nInt, @nCmd, nRecv) then Exit;
+
       FStatusLast := GetTickCount;
-      
       nInI := 0;
       nOutI := 0;
+      //to parse status data
+
       for nIdx:=5 to High(nRecv)-1 do
       begin
         if nInI < FInNum then //前几个字节是输入状态
@@ -714,14 +899,9 @@ begin
     nOut := FStatusOut;
   finally
     if nLockMe then
-    try
+    begin
       FSyncLock.Enter;
       FLocked := False;
-      
-      if nCmd <> -1 then
-        FCommands[nCmd].FUsed := False;
-      //xxxxx
-    finally
       FSyncLock.Leave;
     end;
   end;
@@ -754,9 +934,45 @@ begin
      if FIn[nIdx] <> cERelay_Null then Inc(nInt);
     if nInt < 1 then Exit; //无输入地址,标识不使用输入监测
 
-    Result := QueryStatus(FHosts[FHost].FID, nIn, FOut);
+    Result := QueryStatus(FHosts[FHost].FID, nIn, nOut);
     if not Result then Exit;
 
+    for nIdx:=Low(FIn) to High(FIn) do
+    begin
+      if FIn[nIdx] = cERelay_Null then Continue;
+      //invalid addr
+
+      if nIn[FIn[nIdx] - 1] = FHosts[FHost].FInSignalOff then
+      begin
+        Result := False;
+        Exit;
+      end; //某路输入无信号,认为车辆未停妥
+    end;
+  end;
+end;
+
+//Date: 2019-04-26
+//Parm: 文本
+//Desc: 获取nTxt的内码
+function ConvertStr(const nTxt: WideString; var nBuf: TIdBytes): Integer;
+var nStr: string;
+    nIdx,nLen: Integer;
+begin
+  Result := 0;
+  SetLength(nBuf, 0);
+  nLen := Length(nTxt);
+  
+  for nIdx:=1 to nLen do
+  begin
+    nStr := nTxt[nIdx];
+    AppendByte(nBuf, Ord(nStr[1]));
+    Inc(Result);
+
+    if Length(nStr) = 2 then
+    begin
+      AppendByte(nBuf, Ord(nStr[2]));
+      Inc(Result);
+    end;
   end;
 end;
 
@@ -765,8 +981,38 @@ end;
 //Desc: 在nTunnel显示nText内容
 procedure TERelayManager.ShowText(const nTunnel, nText: string;
   nScreen: Integer);
+var nT,nCmd: Integer;
 begin
+  if (Length(FReaders) < 1) or (not Assigned(FReaders[0])) then Exit;
+  nT := FindTunnel(nTunnel);
 
+  if nT < 0 then
+  begin
+    WriteLog(Format('通道[ %s ]编号无效.', [nTunnel]));
+    Exit;
+  end;
+
+  with FTunnels[nT] do
+  begin
+    if not (FEnable and FHosts[FHost].FEnable ) then Exit;
+    //不启用,不发送
+
+    FSyncLock.Enter;
+    try
+      nCmd := MakeNewCommand(cERelay_DataForward, FHosts[FHost].FID,
+        nTunnel, False);
+      if nScreen < 0 then nScreen := FScreen;
+      
+      ConvertStr(Char($40) + Char(nScreen) + nText + #13,
+        FCommands[nCmd].FData);
+      //xxxxx
+    finally
+      FSyncLock.Leave;
+    end;
+
+    WakeupReaders;
+    //唤醒并执行
+  end;
 end;
 
 //Date: 2019-04-24
