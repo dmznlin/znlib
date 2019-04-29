@@ -72,6 +72,7 @@ type
     FID            : string;            //通道标识
     FName          : string;            //通道名称
     FHost          : Integer;           //主机索引
+    
     FIn            : TERelayAddress;    //输入地址
     FOut           : TERelayAddress;    //输出地址
     FAutoOFF       : Integer;           //自动关闭
@@ -83,10 +84,12 @@ type
   PERelayTunnelCommand = ^TERelayTunnelCommand;
   TERelayTunnelCommand = record
     FUsed          : Boolean;           //使用标记
-    FLastUse       : Cardinal;          //最后使用  
+    FLastUse       : Cardinal;          //最后使用
+      
     FHostID        : string;            //主机标识
-    FTunnel        : string;            //通道标识
+    FTunnel        : Integer;           //通道索引
     FCommand       : Byte;              //操作命令
+    FParam         : Byte;              //扩展参数
     FData          : TIdBytes;          //命令数据
   end;
   TERelayTunnelCommands = array of TERelayTunnelCommand;
@@ -140,8 +143,8 @@ type
     //关闭主机
     procedure WakeupReaders;
     //唤醒线程
-    function MakeNewCommand(const nCmd: Byte; const nHost,nTunnel: string;
-      const nLock: Boolean = True): Integer;
+    function MakeNewCommand(const nCmd,nParam: Byte; const nHost: string;
+      const nTunnel: Integer; const nLock: Boolean = True): Integer;
     //构建命令
     function SendCommand(const nHost: Integer; const nCmd: PERelayTunnelCommand;
       var nRecv: TIdBytes): Boolean;
@@ -275,24 +278,26 @@ begin
 end;
 
 procedure TERelayThread.DoExecute;
-var nRecv: TIdBytes;
+var nIdx: Integer;
+    nBool: Boolean;
+    nRecv: TIdBytes;
     nCmd: TERelayTunnelCommand;
 
     //Desc: 检索当前主机的指令
     function GetHostCommand: Boolean;
-    var nIdx: Integer;
+    var i: Integer;
     begin
       with FOwner do
       try
         Result := False;
         //default
         
-        for nIdx:=Low(FCommands) to High(FCommands) do
-         with FCommands[nIdx] do
+        for i:=Low(FCommands) to High(FCommands) do
+         with FCommands[i] do
           if FUsed and (FHostID = FHosts[FActiveHost].FID) then
           begin
             FUsed := False;
-            nCmd := FCommands[nIdx];
+            nCmd := FCommands[i];
 
             Result := True;
             Break;
@@ -306,6 +311,16 @@ begin
   try
     FSyncLock.Enter;
     //lock
+
+    for nIdx:=Low(FTunnels) to High(FTunnels) do
+    with FTunnels[nIdx] do
+    begin
+      if (FLastOn > 0) and (GetTickCountDiff(FLastOn) >= FAutoOFF) then
+      begin
+        FLastOn := 0;
+        TunnelOC(FID, False); //通道自动关闭
+      end;
+    end;
 
     if FThreadType = ttAll then
     begin
@@ -331,9 +346,19 @@ begin
 
   while True do
   begin
-    if GetHostCommand then
-         FOwner.SendCommand(FActiveHost, @nCmd, nRecv)
-    else Break;
+    if not GetHostCommand then Break;
+    //command is empty
+    nBool := FOwner.SendCommand(FActiveHost, @nCmd, nRecv);
+
+    with FOwner.FTunnels[nCmd.FTunnel] do
+    begin
+      if nBool and (FAutoOFF > 0) and (nCmd.FCommand = cERelay_RelaysOC) and
+         (nCmd.FParam = cERelay_SignOut_Open) then
+      begin
+        FLastOn := GetTickCount;
+        //通道输出端最后打开时间
+      end;
+    end;
   end;
 end;
 
@@ -470,10 +495,10 @@ begin
 end;
 
 //Date: 2019-04-25
-//Parm: 命令;主机;通道;锁定
+//Parm: 命令;参数;主机;通道;锁定
 //Desc: 构建命令项,合并相同命令
-function TERelayManager.MakeNewCommand(const nCmd: Byte; const nHost,
-  nTunnel: string; const nLock: Boolean): Integer;
+function TERelayManager.MakeNewCommand(const nCmd,nParam: Byte;
+  const nHost: string; const nTunnel: Integer; const nLock: Boolean): Integer;
 var nIdx: Integer;
     nInit: TERelayTunnelCommand;
 begin
@@ -489,7 +514,7 @@ begin
 
       if FUsed then
       begin
-        if (nCmd = FCommand) and (CompareText(nTunnel, FTunnel) = 0) then
+        if (nTunnel = FTunnel) and (nCmd = FCommand) and (nParam = FParam) then
         begin
           Result := nIdx;
           Break;
@@ -518,6 +543,7 @@ begin
       FLastUse := GetTickCount;
       
       FCommand := nCmd;
+      FParam   := nParam;
       FHostID  := nHost;
       FTunnel  := nTunnel;
     end;
@@ -532,7 +558,7 @@ var nStr: string;
 begin
   nStr := '';
   for nIdx:=Low(nData) to High(nData) do
-    nStr := nStr + IntToHex(nData[nIdx], 1) + ' ';
+    nStr := nStr + IntToHex(nData[nIdx], 2) + ' ';
   WriteLog(nPrefix + nStr);
 end;
 
@@ -576,6 +602,10 @@ begin
     AppendByte(nBuf, Length(nCmd.FData));                     //数据长度
     AppendBytes(nBuf, nCmd.FData);                            //数据
     AppendByte(nBuf, VerifyData(nBuf));                       //校验位
+
+    {$IFDEF Debug}
+    LogHex(nBuf, '发送: ');
+    {$ENDIF}
 
     nSendBuf := True;
     nNum := 1;
@@ -705,7 +735,7 @@ end;
 function TERelayManager.OpenTunnel(const nTunnel: string): Boolean;
 var nStr: string;
 begin
-  nStr := TunnelOC(nTunnel, False);
+  nStr := TunnelOC(nTunnel, True);
   Result := nStr = '';
 
   if not Result then
@@ -719,7 +749,7 @@ end;
 function TERelayManager.CloseTunnel(const nTunnel: string): Boolean;
 var nStr: string;
 begin
-  nStr := TunnelOC(nTunnel, True);
+  nStr := TunnelOC(nTunnel, False);
   Result := nStr = '';
 
   if not Result then
@@ -758,8 +788,12 @@ begin
 
     FSyncLock.Enter;
     try
-      nCmd := MakeNewCommand(cERelay_RelaysOC, FHosts[FHost].FID,
-        nTunnel, False);
+      if nOC then
+           nInt := FHosts[FHost].FOutSignalOn
+      else nInt := FHosts[FHost].FOutSignalOff;
+
+      nCmd := MakeNewCommand(cERelay_RelaysOC, nInt, FHosts[FHost].FID,
+        nT, False);
       //xxxxx
       
       with FCommands[nCmd] do
@@ -779,8 +813,8 @@ begin
           if (nInt < 0) or (nInt >= FHosts[FHost].FOutNum) then Continue;
 
           if nOC then
-               FData[nInt] := cERelay_SignOut_Open
-          else FData[nInt] := cERelay_SignOut_Close;
+               FData[nInt] := FHosts[FHost].FOutSignalOn
+          else FData[nInt] := FHosts[FHost].FOutSignalOff;
         end;
       end;
     finally
@@ -878,6 +912,14 @@ begin
       nOutI := 0;
       //to parse status data
 
+      for nIdx:=Low(FStatusIn) to High(FStatusIn) do
+        FStatusIn[nIdx] := cERelay_Null;
+      //default fill
+
+      for nIdx:=Low(FStatusOut) to High(FStatusOut) do
+        FStatusOut[nIdx] := cERelay_Null;
+      //default fill
+
       for nIdx:=5 to High(nRecv)-1 do
       begin
         if nInI < FInNum then //前几个字节是输入状态
@@ -942,7 +984,11 @@ begin
       if FIn[nIdx] = cERelay_Null then Continue;
       //invalid addr
 
-      if nIn[FIn[nIdx] - 1] = FHosts[FHost].FInSignalOff then
+      nInt := FIn[nIdx] - 1;
+      //address base from 1
+      if (nInt < 0) or (nInt >= FHosts[FHost].FInNum) then Continue;
+
+      if nIn[nInt] = FHosts[FHost].FInSignalOff then
       begin
         Result := False;
         Exit;
@@ -999,8 +1045,8 @@ begin
 
     FSyncLock.Enter;
     try
-      nCmd := MakeNewCommand(cERelay_DataForward, FHosts[FHost].FID,
-        nTunnel, False);
+      nCmd := MakeNewCommand(cERelay_DataForward, 0, FHosts[FHost].FID,
+        nT, False);
       if nScreen < 0 then nScreen := FScreen;
       
       ConvertStr(Char($40) + Char(nScreen) + nText + #13,
@@ -1133,15 +1179,7 @@ begin
           FOutSignalOn := cERelay_SignOut_Open;
           FOutSignalOff := cERelay_SignOut_Close;
         end;
-
-        for i:=Low(FStatusIn) to High(FStatusIn) do
-          FStatusIn[i] := cERelay_Null;
-        //default fill
-
-        for i:=Low(FStatusOut) to High(FStatusOut) do
-          FStatusOut[i] := cERelay_Null;
-        //default fill
-
+        
         if FEnable then
         begin
           FClient := TIdTCPClient.Create;
