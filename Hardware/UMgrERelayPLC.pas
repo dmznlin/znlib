@@ -291,6 +291,7 @@ var nIdx: Integer;
       try
         Result := False;
         //default
+        FSyncLock.Enter;
         
         for i:=Low(FCommands) to High(FCommands) do
          with FCommands[i] do
