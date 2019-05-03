@@ -30,6 +30,7 @@ const
   cERelay_QueryStatus      = $01;       //状态查询(in)
   cERelay_RelaysOC         = $02;       //通道开合(open close)
   cERelay_DataForward      = $03;       //485数据转发
+  cERelay_SweetHeart       = $04;       //链路心跳
 
   cERelay_SignIn_On        = $01;       //输入有信号
   cERelay_SignIn_Off       = $00;       //输入无信号
@@ -59,6 +60,7 @@ type
     FStatusIn      : TERelayAddress;    //输入状态
     FStatusOut     : TERelayAddress;    //输出状态
     FStatusLast    : Cardinal;          //状态更新
+    FSweetHeart    : Cardinal;          //最后心跳
 
     FLocked        : Boolean;           //是否锁定
     FClient        : TIdTCPClient;      //通信链路
@@ -90,6 +92,7 @@ type
     FTunnel        : Integer;           //通道索引
     FCommand       : Byte;              //操作命令
     FParam         : Byte;              //扩展参数
+    FResponse      : Boolean;           //需要应答
     FData          : TIdBytes;          //命令数据
   end;
   TERelayTunnelCommands = array of TERelayTunnelCommand;
@@ -143,8 +146,9 @@ type
     //关闭主机
     procedure WakeupReaders;
     //唤醒线程
-    function MakeNewCommand(const nCmd,nParam: Byte; const nHost: string;
-      const nTunnel: Integer; const nLock: Boolean = True): Integer;
+    function MakeNewCommand(const nCmd,nParam: Byte;
+      const nHost: string; const nTunnel: Integer;
+      const nLock: Boolean = False; const nResponse: Boolean = True): Integer;
     //构建命令
     function SendCommand(const nHost: Integer; const nCmd: PERelayTunnelCommand;
       var nRecv: TIdBytes): Boolean;
@@ -195,7 +199,7 @@ begin
   FThreadType := AType;
 
   FWaiter := TWaitObject.Create();
-  FWaiter.Interval := 3 * 1000;
+  FWaiter.Interval := 2 * 1000;
 end;
 
 destructor TERelayThread.Destroy;
@@ -320,6 +324,14 @@ begin
       begin
         FLastOn := 0;
         TunnelOC(FID, False); //通道自动关闭
+      end; 
+
+      if GetTickCountDiff(FHosts[FHost].FSweetHeart) >= 2 * 1000 then
+      begin
+        FHosts[FHost].FSweetHeart := GetTickCount;
+        MakeNewCommand(cERelay_SweetHeart, 0, FHosts[FHost].FID,
+          nIdx, False, False);
+        //补发心跳
       end;
     end;
 
@@ -496,10 +508,11 @@ begin
 end;
 
 //Date: 2019-04-25
-//Parm: 命令;参数;主机;通道;锁定
+//Parm: 命令;参数;主机;通道;锁定;应答
 //Desc: 构建命令项,合并相同命令
 function TERelayManager.MakeNewCommand(const nCmd,nParam: Byte;
-  const nHost: string; const nTunnel: Integer; const nLock: Boolean): Integer;
+  const nHost: string; const nTunnel: Integer;
+  const nLock,nResponse: Boolean): Integer;
 var nIdx: Integer;
     nInit: TERelayTunnelCommand;
 begin
@@ -542,11 +555,12 @@ begin
     begin
       FUsed    := True;
       FLastUse := GetTickCount;
-      
-      FCommand := nCmd;
-      FParam   := nParam;
+
       FHostID  := nHost;
       FTunnel  := nTunnel;
+      FCommand := nCmd;
+      FParam   := nParam;
+      FResponse := nResponse;
     end;
   finally
     if nLock then FSyncLock.Leave;
@@ -628,8 +642,10 @@ begin
       if nSendBuf then
       begin
         FClient.IOHandler.Write(nBuf);
-        //send data       
-        FClient.IOHandler.ReadBytes(FReadBuf, Length(cERelay_FrameBegin));
+        //send data
+
+        if nCmd.FResponse then
+          FClient.IOHandler.ReadBytes(FReadBuf, Length(cERelay_FrameBegin));
         //read frame begin
       end;
 
@@ -651,7 +667,16 @@ begin
       {$ENDIF}
 
       nLen := Length(FReadBuf);
-      if nLen < 1 then Continue;
+      if nLen < 1 then
+      begin
+        if not nCmd.FResponse then
+        begin
+          Result := True;
+          Break;
+        end; //无需应答且无数据
+
+        Continue;
+      end;
 
       //------------------------------------------------------------------------
       if nLen > 100 then
@@ -702,6 +727,9 @@ begin
       LogHex(nRecv, '协议: ');
       LogHex(FReadBuf, '缓冲: ');
       {$ENDIF}
+
+      if not nCmd.FResponse then
+        Result := True;
       if Result then Break;
     except
       on nErr: Exception do
@@ -793,10 +821,7 @@ begin
            nInt := FHosts[FHost].FOutSignalOn
       else nInt := FHosts[FHost].FOutSignalOff;
 
-      nCmd := MakeNewCommand(cERelay_RelaysOC, nInt, FHosts[FHost].FID,
-        nT, False);
-      //xxxxx
-      
+      nCmd := MakeNewCommand(cERelay_RelaysOC, nInt, FHosts[FHost].FID, nT);
       with FCommands[nCmd] do
       begin
         SetLength(FData, FHosts[FHost].FOutNum);
@@ -1046,8 +1071,7 @@ begin
 
     FSyncLock.Enter;
     try
-      nCmd := MakeNewCommand(cERelay_DataForward, 0, FHosts[FHost].FID,
-        nT, False);
+      nCmd := MakeNewCommand(cERelay_DataForward, 0, FHosts[FHost].FID, nT);
       if nScreen < 0 then nScreen := FScreen;
       
       ConvertStr(Char($40) + Char(nScreen) + nText + #13,
@@ -1140,6 +1164,7 @@ begin
         FEnable := NodeByNameR('enable').ValueAsInteger = 1;
 
         FStatusLast := 0;
+        FSweetHeart := 0;
         FLocked := False;
         FLastActive := GetTickCount;
 
