@@ -1,0 +1,23 @@
+*.SuperObject: jason解析包
+https://github.com/hgourvest/superobject.git
+
+*.Chromium: chrome浏览器内核
+https://github.com/salvadordf/CEF4Delphi.git
+
+*.CrossSocket: 网络组件库
+https://github.com/winddriver/Delphi-Cross-Socket.git
+
+*.FastMM: 高速内存管理器
+https://github.com/pleriche/FastMM4.git
+
+*.JCL: 基础函数库
+https://github.com/project-jedi/jcl.git
+
+*.RedisClient: redis客户端
+https://github.com/danieleteti/delphiredisclient.git
+
+*.cnPack: cnpack组件库 
+https://github.com/cnpack/cnvcl
+
+*.uniConv: 字符编码库
+https://github.com/d-mozulyov/UniConv.git
