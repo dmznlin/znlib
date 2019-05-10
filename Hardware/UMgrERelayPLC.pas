@@ -362,6 +362,16 @@ begin
     if not GetHostCommand then Break;
     //command is empty
     nBool := FOwner.SendCommand(FActiveHost, @nCmd, nRecv);
+    
+    if nBool then
+    with FOwner do
+    try
+      FSyncLock.Enter;
+      FHosts[FActiveHost].FSweetHeart := GetTickCount();
+      //任意指令成功后,视为心跳
+    finally
+      FSyncLock.Leave;
+    end;   
 
     with FOwner.FTunnels[nCmd.FTunnel] do
     begin

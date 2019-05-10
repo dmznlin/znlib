@@ -992,10 +992,18 @@ begin
     
     with FActiveClient do
     begin
-      if IOHandler.InputBuffer.Size < 1 then Exit;
-      IOHandler.ReadBytes(nBuf, IOHandler.InputBuffer.Size, False);
-      //套接字数据
-                         
+      nVal := 0;
+      while True do
+      begin
+        IOHandler.CheckForDataOnSource(10);
+        //fill the output buffer with a timeout
+
+        if IOHandler.InputBufferIsEmpty then Break;
+        nVal := 10;
+        IOHandler.InputBuffer.ExtractToBytes(nBuf);
+      end;
+
+      if nVal < 1 then Exit;
       FActivePort.FCOMBuff := BytesToString(nBuf);
       FActivePort.FCOMData := FActivePort.FCOMData + FActivePort.FCOMBuff;
       //数据合并
