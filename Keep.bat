@@ -1,9 +1,9 @@
 @echo off
 echo ####################################
 echo #                                  #
-echo #    清除所有目录下的无效文件      #
-echo #         只处理归档属性           #
+echo #    清除需保护文件的归档属性      #
+echo #           避免被删除             #
 echo #                                  #
 echo ####################################
 
-del /S /A:A *.~*;*.dcu;*.stat;*.ddp;*.bak;*.exe;*.local;*.identcache
+attrib /S -A Third\WinSoft_Com\*.dcu

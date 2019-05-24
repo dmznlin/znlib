@@ -14,7 +14,7 @@ uses
   {$IFDEF HasFMX}FMX.Forms, FMX.Controls,{$ENDIF}
   {$IFDEF EnableThirdANSI}UByteString,{$ENDIF}
   System.Classes, System.UITypes, System.SysUtils, System.NetEncoding,
-  System.Hash, System.Variants, System.IniFiles;
+  System.Rtti, System.Hash, System.Variants, System.IniFiles;
 
 type
   TApplicationHelper = class
@@ -133,6 +133,9 @@ type
     class function IsNumber(const nStr: string;
       const nFloat: Boolean = True): Boolean; static;
     //是否数值
+    class function Enum2Str<T>(const nEnum: T): string; static;
+    class function Str2Enum<T>(const nEnum: string): T; static;
+    //获取枚举类型字符串描述
   end;
 
   TSQLBuilder = class
@@ -1029,6 +1032,64 @@ begin
   end;
 end;
 
+//Date: 2019-05-23
+//Parm: 枚举值
+//Desc: 返回nEnum的字符串描述
+class function TStringHelper.Enum2Str<T>(const nEnum: T): string;
+var nType: TRttiType;
+    nTEnum: TRttiEnumerationType;
+begin
+  with TRttiContext.Create do
+  try
+    nType := GetType(TypeInfo(T));
+    if not (nType is TRttiEnumerationType) then
+      raise Exception.Create('TStringHelper.Enum2Str: Invalid EnumType.');
+    //xxxxx
+
+    nTEnum := nType as TRttiEnumerationType;
+    Result := nTEnum.GetName(nEnum);
+  finally
+    Free;
+  end;
+end;
+
+//Date: 2019-05-23
+//Parm: 枚举值描述
+//Desc: 返回nEnum描述对应的值
+class function TStringHelper.Str2Enum<T>(const nEnum: string): T;
+var nStr,nDef: string;
+    nType: TRttiType;
+    nTEnum: TRttiEnumerationType;
+begin
+  with TRttiContext.Create do
+  try
+    nType := GetType(TypeInfo(T));
+    if not (nType is TRttiEnumerationType) then
+      raise Exception.Create('TStringHelper.Str2Enum: Invalid EnumType.');
+    //xxxxx
+
+    nDef := '';
+    nTEnum := nType as TRttiEnumerationType;
+    
+    for nStr in nTEnum.GetNames do
+    begin
+      if nDef = '' then
+        nDef := nStr;
+      //default value
+    
+      if CompareText(nStr, nEnum) = 0 then
+      begin
+        Result := nTEnum.GetValue<T>(nEnum);
+        Exit;
+      end;
+    end;
+
+    Result := nTEnum.GetValue<T>(nDef);
+  finally
+    Free;
+  end;
+end;
+
 //Date: 2017-03-17
 //Parm: 字符串
 //Desc: 将nStr镜像反转
@@ -1238,7 +1299,7 @@ class function TSQLBuilder.SF_IF(const nData: array of string;
   const nIdx: Integer): string;
 begin
   if (nIdx > High(nData)) or (nIdx < Low(nData)) then
-    raise Exception.Create('function "SF_IF" out of range.');
+    raise Exception.Create('TSQLBuilder.SF_IF: function "SF_IF" out of range.');
   Result := nData[nIdx];
 end;
 
@@ -1249,7 +1310,7 @@ class function TSQLBuilder.SF_IF(const nData: array of string;
   const nFirst: Boolean): string;
 begin
     if Length(nData) < 2 then
-    raise Exception.Create('function "SF_IF" out of range.');
+    raise Exception.Create('TSQLBuilder.SF_IF: function "SF_IF" out of range.');
   //xxxxx
 
   if nFirst then

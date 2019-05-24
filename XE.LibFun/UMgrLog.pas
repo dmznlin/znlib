@@ -44,6 +44,7 @@ type
     const nItems: TList);
   TWriteLogEvent = procedure (const nManager: TObject;
     const nItems: TList) of object;
+  TWriteLogEventSimple = procedure (const nEvent: string) of Object;
   //日志事件,回调函数
 
   TLogManager = class(TManagerBase)
@@ -72,10 +73,13 @@ type
     FProcedure: TWriteLogProcedure;
     FSyncEvent: TWriteLogEvent;
     FSyncProc: TWriteLogProcedure;
+    FSyncSimple: TWriteLogEventSimple;
     {*事件变量*}
   protected
     procedure ClearList(const nList: TList; const nFree: Boolean = False);
     {*清理资源*}
+    function SimpleLog(const nItem: PLogItem): string;
+    {*简单日志*}
     procedure DoThreadWrite(const nConfig: PThreadWorkerConfig;
       const nThread: TThread);
     procedure DoWriteFile(const nLogItems: TList);
@@ -116,6 +120,7 @@ type
     property SyncMainUI: Boolean read FSyncMainUI write FSyncMainUI;
     property SyncEvent: TWriteLogEvent read FEvent write FEvent;
     property SyncProcedure: TWriteLogProcedure read FProcedure write FProcedure;
+    property SyncSimple: TWriteLogEventSimple read FSyncSimple write FSyncSimple;
     {*属性事件*}
   end;
 
@@ -333,6 +338,22 @@ begin
   end;
 end;
 
+//Date: 2019-05-24
+//Parm: 日志项
+//Desc: 返回nItem的简洁描述
+function TLogManager.SimpleLog(const nItem: PLogItem): string;
+begin
+  Result := Copy(nItem.FWriter.FOjbect.ClassName, 1, 15);
+  Result := TDateTimeHelper.DateTime2Str(nItem.FTime) + ' ' +
+            TLogManager.Type2Str(nItem.FType, False) + FLogField +
+            Result + FLogField;
+  //时间,类名
+
+  if nItem.FWriter.FDesc <> '' then
+    Result := Result + nItem.FWriter.FDesc + FLogField;      //描述
+  Result := Result + nItem.FEvent;                           //事件
+end;
+
 //Date: 2019-01-25
 //Desc: 在线程中执行写入
 procedure TLogManager.DoThreadWrite(const nConfig: PThreadWorkerConfig;
@@ -382,8 +403,11 @@ begin
        FProcedure(Self, FWriterBuffer);
     //xxxxx
 
-    if FSyncMainUI and (Assigned(FSyncEvent) or Assigned(FSyncProc)) then
+    if FSyncMainUI and (Assigned(FSyncEvent) or
+       Assigned(FSyncProc) or Assigned(FSyncSimple)) then
+    begin
       TThread.Synchronize(nThread, procedure ()
+      var i,nInt: Integer;
       begin
         if Assigned(FSyncEvent) then
           FSyncEvent(Self, FWriterBuffer);
@@ -392,8 +416,16 @@ begin
         if Assigned(FSyncProc) then
           FSyncProc(Self, FWriterBuffer);
         //xxxxx
+
+        if Assigned(FSyncSimple) then
+        begin
+          nInt := FWriterBuffer.Count - 1;
+          for i := 0 to nInt do
+            FSyncSimple(SimpleLog(FWriterBuffer[i]));
+          //xxxxx
+        end;
       end);
-    //run in main-ui thread
+    end; //run in main-ui thread
 
     SyncEnter;
     FStatus.FNumAll := FStatus.FNumAll + FWriterBuffer.Count;
@@ -434,19 +466,9 @@ begin
     for i:=0 to nCount do
     begin
       nItem := nLogItems[i];
-      if not (ltWriteFile in nItem.FLogTag) then Continue;
-      //不写文件
-
-      nStr := Copy(nItem.FWriter.FOjbect.ClassName, 1, 15);
-      nStr := TDateTimeHelper.DateTime2Str(nItem.FTime) + ' ' +
-              TLogManager.Type2Str(nItem.FType, False) + FLogField +
-              nStr + FLogField;
-      //时间,类名
-
-      if nItem.FWriter.FDesc <> '' then
-        nStr := nStr + nItem.FWriter.FDesc + FLogField;      //描述
-      nStr := nStr + nItem.FEvent;                           //事件
-      WriteLn(nFile, nStr);
+      if (ltWriteFile in nItem.FLogTag) then
+        WriteLn(nFile, SimpleLog(nItem));
+      //xxxxxx
     end;
   finally
     CloseFile(nFile);
