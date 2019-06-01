@@ -83,6 +83,9 @@ type
     procedure RunAfterRegistAllManager; virtual;
     procedure RunBeforUnregistAllManager; virtual;
     //延迟运行
+    procedure RunAfterApplicationStart; virtual;
+    procedure RunBeforApplicationHalt; virtual;
+    //关联运行
     procedure GetStatus(const nList: TStrings;
       const nFriendly: Boolean = True); virtual;
     function GetHealth(const nList: TStrings = nil): TObjectHealth; virtual;
@@ -292,6 +295,18 @@ begin
   //sub-type do
 end;
 
+//Desc: 主进程启动后运行
+procedure TManagerBase.RunAfterApplicationStart;
+begin
+  //sub-type do
+end;
+
+//Desc: 主进程准备关闭
+procedure TManagerBase.RunBeforApplicationHalt;
+begin
+  //sub-type do
+end;
+
 //Desc: 对象状态
 procedure TManagerBase.GetStatus(const nList: TStrings; 
   const nFriendly: Boolean);
@@ -413,7 +428,7 @@ begin
   begin
     FTimeStamp := DateTime2Str(Now());
     {$IF defined(MSWINDOWS)}
-    FTimeStamp := FTimeStamp + ' Win-OS: ' + TimeLong2CH(GetTickCount);
+    FTimeStamp := FTimeStamp + ' Win-OS: ' + IntToStr(GetTickCount);
     {$ENDIF}
   end;
 end;
@@ -505,7 +520,7 @@ begin
     begin
       nStr := DateTime2Str(Now());
       {$IF defined(MSWINDOWS)}
-      nStr := nStr + ' Win-OS: ' + TimeLong2CH(GetTickCount);
+      nStr := nStr + ' Win-OS: ' + IntToStr(GetTickCount);
       {$ENDIF}
     end;
   

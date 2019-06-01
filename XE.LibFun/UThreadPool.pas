@@ -186,9 +186,9 @@ type
     {*工作对象*}
     FMonitor: TThreadMonitor;
     {*守护线程*}
+    FRunners: TList;
     FRunnerMin: Word;
     FRunnerMax: Word;
-    FRunners: array of TThreadRunner;
     {*运行对象*}
   protected
     procedure StopRunners;
@@ -253,7 +253,7 @@ begin
   FRunnerMax := cThreadMax;
 
   FWorkerIndex := 0;
-  SetLength(FRunners, 0);
+  FRunners := TList.Create;
 
   FillChar(FStatus, SizeOf(FStatus), #0);
   FStatus.FWorkIdleInit := TDateTimeHelper.GetTickCount();
@@ -270,20 +270,21 @@ begin
   StopRunners;
 
   ClearWorkers(True);
+  FRunners.Free;
   inherited;
 end;
 
 procedure TThreadPoolManager.StopRunners;
 var nIdx: Integer;
 begin
-  for nIdx := Low(FRunners) to High(FRunners) do
+  for nIdx := FRunners.Count - 1 downto 0 do
   if Assigned(FRunners[nIdx]) then
   begin
-    FRunners[nIdx].StopMe;
+    TThreadRunner(FRunners[nIdx]).StopMe;
     FRunners[nIdx] := nil;
   end;
 
-  SetLength(FRunners, 0);
+  FRunners.Clear;
 end;
 
 procedure TThreadPoolManager.DeleteWorker(const nIdx: Integer);
@@ -748,22 +749,23 @@ begin
       nIleTime^ := 0;
     Result := 0;
 
-    for nIdx := Low(FRunners) to High(FRunners) do
-    if Assigned(FRunners[nIdx]) then
-    begin
-      if FRunners[nIdx].FWorkInterval > Result then
+    for nIdx := FRunners.Count - 1 downto 0 do
+     if Assigned(FRunners[nIdx]) then
+      with TThreadRunner(FRunners[nIdx]) do
       begin
-        Result := FRunners[nIdx].FWorkInterval;
-      end;
+        if FWorkInterval > Result then
+        begin
+          Result := FWorkInterval;
+        end;
 
-      if Assigned(nIleTime) and (FRunners[nIdx].FWorkIdleStart > 0) then
-      begin
-        nVal := TDateTimeHelper.GetTickCountDiff(FRunners[nIdx].FWorkIdleStart);
-        if nVal > nIleTime^ then
-          nIleTime^ := nVal;
-        //xxxxx
+        if Assigned(nIleTime) and (FWorkIdleStart > 0) then
+        begin
+          nVal := TDateTimeHelper.GetTickCountDiff(FWorkIdleStart);
+          if nVal > nIleTime^ then
+            nIleTime^ := nVal;
+          //xxxxx
+        end;
       end;
-    end;
   finally
     if nLock then SyncLeave;
   end;
@@ -816,6 +818,7 @@ begin
     nList.Add(FixData('MaxWorkInterval:', FStatus.FMaxWorkInterval));
     nList.Add(FixData('NowWorkIdleLong:', nVal));
     nList.Add(FixData('MaxWorkIdleLong:', FStatus.FMaxWorkIdleLong));
+    nList.Add(FixData('WorkIdleCounter:', FStatus.FWorkIdleCounter));
 
     nList.Add(FixData('NowRunDelay:', FStatus.FRunDelayNow));
     nList.Add(FixData('MaxRunDelay:', FStatus.FRunDelayMax));
@@ -828,6 +831,14 @@ begin
     with FStatus.FRunMostSlow do
      nList.Add(FixData('WorkerRunMostSlow:', FValue.ToString + '(' + FName + ')'));
     //xxxxx
+
+    for nInt := 0 to FWorkers.Count - 1 do
+    with PThreadWorker(FWorkers[nInt]).FWorker,TStringHelper do
+    begin
+       nList.Add(FixData(Format('Worker Item %d:', [nInt + 1]),
+        Format('[%s]%s', [StrIF(['R', 'S'], FCallTimes > 0), FWorkerName])));
+      //xxxxx
+    end;
 
     for nInt := Low(FStatus.FRunErrors) to High(FStatus.FRunErrors) do
     with FStatus.FRunErrors[nInt] do
@@ -851,7 +862,7 @@ begin
   SyncEnter;
   try
     Result := hlNormal;
-    nInt := Length(FRunners);
+    nInt := FRunners.Count;
 
     if (nInt >= cThreadMax * 0.8) and (Result < hlLow) then
     begin
@@ -943,16 +954,17 @@ var nIdx,nInt: Integer;
     function GetNewRunner: Integer;
     var i: Integer;
     begin
-      for i := Low(FOwner.FRunners) to High(FOwner.FRunners) do
+      for i := FOwner.FRunners.Count - 1 downto 0 do
       if not Assigned(FOwner.FRunners[i]) then
       begin
         Result := i;
+        FOwner.FRunners[i] := TThreadRunner.Create(FOwner, Result);
         Exit;
       end;
 
-      i := Length(FOwner.FRunners);
-      SetLength(FOwner.FRunners, i + 1);
-      Result := i;
+      Result := FOwner.FRunners.Count;
+      FOwner.FRunners.Add(TThreadRunner.Create(FOwner, Result));
+      //new runner
     end;
 
     //Desc: 停止运行对象
@@ -960,7 +972,7 @@ var nIdx,nInt: Integer;
     begin
       FOwner.SyncLeave;
       try
-        FOwner.FRunners[nIdx].StopMe;
+        TThreadRunner(FOwner.FRunners[nIdx]).StopMe;
         //wait and stop
       finally
         FOwner.SyncEnter;
@@ -989,8 +1001,6 @@ begin
     while nInt > 0 do
     begin
       nIdx := GetNewRunner();
-      FOwner.FRunners[nIdx] := TThreadRunner.Create(FOwner, nIdx);
-
       Dec(nInt);
       Inc(FOwner.FStatus.FNumRunners);
 
@@ -1002,8 +1012,7 @@ begin
   begin
     if nIndex >= 0 then //指定删除索引
     begin
-      if (nIndex >= Low(FOwner.FRunners)) and
-         (nIndex <= High(FOwner.FRunners)) and
+      if (nIndex >= 0) and (nIndex < FOwner.FRunners.Count) and
          (FOwner.FStatus.FNumRunners > FOwner.FRunnerMin) then
       begin      
         nIdx := nIndex;
@@ -1021,7 +1030,7 @@ begin
     if nInt < 1 then Exit;
     //invalid adjust
 
-    for nIdx := Low(FOwner.FRunners) to High(FOwner.FRunners) do
+    for nIdx := FOwner.FRunners.Count - 1 downto 0 do
     if Assigned(FOwner.FRunners[nIdx]) then
     begin
       StopRunner;

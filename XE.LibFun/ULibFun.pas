@@ -133,6 +133,17 @@ type
     class function IsNumber(const nStr: string;
       const nFloat: Boolean = True): Boolean; static;
     //是否数值
+    class function HexStr(const nStr: string): string; static;
+    class function HexBytes(const nBytes: TBytes): string; static;
+    //转换为十六进制
+    class function Str2Bytes(const nStr: string): TBytes; static;
+    class function Bytes2Str(const nBytes: TBytes): string; static;
+    //按单字节转换字符串
+    class function StrIF(const nData: array of string;
+      const nIdx: Integer): string; overload; static;
+    class function StrIF(const nData: array of string;
+      const nFirst: Boolean): string; overload; static;
+    //按条件选择字符串
     class function Enum2Str<T>(const nEnum: T): string; static;
     class function Str2Enum<T>(const nEnum: string): T; static;
     //获取枚举类型字符串描述
@@ -1032,6 +1043,104 @@ begin
   end;
 end;
 
+//Date: 2019-05-27
+//Parm: 字符串
+//Desc: 将nStr转换为十六进制字符串
+class function TStringHelper.HexStr(const nStr: string): string;
+var nIdx,nLen: Integer;
+begin
+  Result := '';
+  nLen := High(nStr);
+
+  for nIdx := cFI to nLen do
+  begin
+    Result := Result + IntToHex(Ord(nStr[nIdx]), 2);
+    if nIdx < nLen then
+      Result := Result + ' ';
+    //xxxxx
+  end;
+end;
+
+//Date: 2019-06-01
+//Parm: 字节数组
+//Desc: 将nBytes转为十六进制字符串
+class function TStringHelper.HexBytes(const nBytes: TBytes): string;
+var nIdx,nLen: Integer;
+begin
+  Result := '';
+  nLen := High(nBytes);
+
+  for nIdx := Low(nBytes) to nLen do
+  begin
+    Result := Result + IntToHex(nBytes[nIdx], 2);
+    if nIdx < nLen then
+      Result := Result + ' ';
+    //xxxxx
+  end;
+end;
+
+//Date: 2019-06-01
+//Parm: 字符串
+//Desc: 按单字节将nStr转为字节数组
+class function TStringHelper.Str2Bytes(const nStr: string): TBytes;
+var nIdx,nInt: Integer;
+begin
+  nInt := Length(nStr);
+  SetLength(Result, nInt);
+
+  if nInt > 0 then
+  begin
+    nInt := cFI + (0 - Low(Result));
+    for nIdx := Low(Result) to High(Result) do
+      Result[nIdx] := Ord(nStr[nIdx + nInt]);
+    //xxxxx
+  end;
+end;
+
+//Date: 2019-06-01
+//Parm: 字节数组
+//Desc: 按单字节将nBytes转为字符串
+class function TStringHelper.Bytes2Str(const nBytes: TBytes): string;
+var nIdx,nInt: Integer;
+begin
+  nInt := Length(nBytes);
+  SetLength(Result, nInt);
+
+  if nInt > 0 then
+  begin
+    nInt := cFI + (0 - Low(nBytes));
+    for nIdx := Low(nBytes) to High(nBytes) do
+      Result[nIdx + nInt] := Char(nBytes[nIdx]);
+    //xxxxx
+  end;
+end;
+
+//Date: 2019-05-25
+//Parm: 字段内容;选项
+//Desc: 依据nBool使用nData的内容
+class function TStringHelper.StrIF(const nData: array of string;
+  const nIdx: Integer): string;
+begin
+  if (nIdx > High(nData)) or (nIdx < Low(nData)) then
+    raise Exception.Create('TStringHelper.StrIF: Data out of range.');
+  Result := nData[nIdx];
+end;
+
+//Date: 2019-05-25
+//Parm: 字段内容;选项
+//Desc: 依据nBool使用nData的内容
+class function TStringHelper.StrIF(const nData: array of string;
+  const nFirst: Boolean): string;
+begin
+  if Length(nData) < 2 then
+    raise Exception.Create('TStringHelper.StrIF: Data out of range.');
+  //xxxxx
+
+  if nFirst then
+       Result := nData[0]
+  else Result := nData[1];
+end;
+
 //Date: 2019-05-23
 //Parm: 枚举值
 //Desc: 返回nEnum的字符串描述
@@ -1299,7 +1408,7 @@ class function TSQLBuilder.SF_IF(const nData: array of string;
   const nIdx: Integer): string;
 begin
   if (nIdx > High(nData)) or (nIdx < Low(nData)) then
-    raise Exception.Create('TSQLBuilder.SF_IF: function "SF_IF" out of range.');
+    raise Exception.Create('TSQLBuilder.SF_IF: Data out of range.');
   Result := nData[nIdx];
 end;
 
@@ -1310,7 +1419,7 @@ class function TSQLBuilder.SF_IF(const nData: array of string;
   const nFirst: Boolean): string;
 begin
     if Length(nData) < 2 then
-    raise Exception.Create('TSQLBuilder.SF_IF: function "SF_IF" out of range.');
+    raise Exception.Create('TSQLBuilder.SF_IF: Data out of range.');
   //xxxxx
 
   if nFirst then

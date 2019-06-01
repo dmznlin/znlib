@@ -66,6 +66,7 @@ type
     FWriteLock: TCrossProcWaitObject;
     FWriter: TThreadWorkerConfig;
     {*写日志线程*}
+    FMainUIRun: Boolean;
     FSyncMainUI: Boolean;
     {*同步至界面*}
     FOnNewLog: TLogEvent;
@@ -95,6 +96,8 @@ type
     procedure RunAfterRegistAllManager; override;
     procedure RunBeforUnregistAllManager; override;
     {*延迟执行*}
+    procedure RunBeforApplicationHalt; override;
+    {*关联执行*}
     procedure InitItem(var nItem: TLogItem);
     {*初始化*}
     procedure AddLog(const nItem: PLogItem); overload;
@@ -139,6 +142,7 @@ begin
   FWritePath := '';
   FWriteLock := nil;
 
+  FMainUIRun := True;
   FSyncMainUI := False;
   FillChar(FStatus, SizeOf(TLogManagerStatus), #0);
 end;
@@ -222,6 +226,12 @@ begin
   if Assigned(gMG.FMemDataManager) then
     gMG.FMemDataManager.DeleteType(FItemID);
   //释放
+end;
+
+procedure TLogManager.RunBeforApplicationHalt;
+begin
+  FMainUIRun := False;
+  //主程序退出
 end;
 
 procedure TLogManager.ClearList(const nList: TList; const nFree: Boolean);
@@ -403,7 +413,7 @@ begin
        FProcedure(Self, FWriterBuffer);
     //xxxxx
 
-    if FSyncMainUI and (Assigned(FSyncEvent) or
+    if FMainUIRun and FSyncMainUI and (Assigned(FSyncEvent) or
        Assigned(FSyncProc) or Assigned(FSyncSimple)) then
     begin
       TThread.Synchronize(nThread, procedure ()

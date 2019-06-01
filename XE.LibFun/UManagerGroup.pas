@@ -18,6 +18,10 @@ uses
   {$IFDEF EnableParamManager}UParameters,{$ENDIF} ULibFun;
 
 type
+  TManagersCallMethod = reference to procedure (const nObj: TObject;
+    const nInstance: TRttiInstanceType; const nMethod: TRttiMethod);
+  //xxxxx
+
   PManagerGroup = ^TManagerGroup;
   TManagerGroup = record
   public
@@ -55,13 +59,19 @@ type
     {$IFDEF EnableChannelManager}FChannelManager: TChannelManager;{$ENDIF}
     //RemObjects通道管理器
   public
+    procedure CallManagersMethod(const nMethodName: string;
+      const nObjMethod: Boolean; const nCallback: TManagersCallMethod);
+    //枚举所有管理器执行特定方法
     procedure RegistAll(const nReg: Boolean);
     //注册所有
     procedure CheckSupport(const nCallClass,nManagerName: string;
       const nManager: TObject); overload;
     procedure CheckSupport(const nCallClass: string;
-      const nManagers: TStringHelper.TStringArray); overload;    
+      const nManagers: TStringHelper.TStringArray); overload;
     //验证所需管理器是否正常
+    procedure RunAfterApplicationStart();
+    procedure RunBeforApplicationHalt();
+    //关联主进程运行,处理特定资源
     procedure GetManagersStatus(const nList: TStrings);
     //获取有效管理器的当前状态
   end;
@@ -72,10 +82,11 @@ var
   
 implementation
 
-//Date: 2017-03-27
-//Parm: 是否注册
-//Desc: 扫描Group中所有Manager,调用Manager的注册方法.
-procedure TManagerGroup.RegistAll(const nReg: Boolean);
+//Date: 2019-05-27
+//Parm: 方法名称;对象方法;回调方法
+//Desc: 枚举所有管理,执行nMethodName方法
+procedure TManagerGroup.CallManagersMethod(const nMethodName: string;
+  const nObjMethod: Boolean; const nCallBack: TManagersCallMethod);
 var nObj: TObject;
     nCtx: TRttiContext;
     nType: TRttiType;
@@ -86,55 +97,63 @@ begin
   nCtx := TRttiContext.Create;
   try
     nType := nCtx.GetType(TypeInfo(TManagerGroup));
-    if not nReg then
-    begin
-      for nRF in nType.GetFields do
-      begin
-        if nRF.FieldType.TypeKind <> tkClass then Continue;
-        nInstance := nRF.FieldType.AsInstance;
-        nMethod := nInstance.GetMethod('RunBeforUnregistAllManager');
-
-        if Assigned(nMethod) then
-        begin
-          nObj := nRF.GetValue(@gMG).AsObject;
-          if Assigned(nObj) then
-            nMethod.Invoke(nObj, []);
-          //卸载前执行
-        end;
-      end;
-    end;
-
     for nRF in nType.GetFields do
     begin
       if nRF.FieldType.TypeKind <> tkClass then Continue;
       nInstance := nRF.FieldType.AsInstance;
-      nMethod := nInstance.GetMethod('RegistMe');
+      nMethod := nInstance.GetMethod(nMethodName);
 
       if Assigned(nMethod) then
-        nMethod.Invoke(nInstance.MetaclassType, [TValue.From(nReg)]);
-      //call function
-    end;
-
-    if nReg then
-    begin
-      for nRF in nType.GetFields do
       begin
-        if nRF.FieldType.TypeKind <> tkClass then Continue;
-        nInstance := nRF.FieldType.AsInstance;
-        nMethod := nInstance.GetMethod('RunAfterRegistAllManager');
-
-        if Assigned(nMethod) then
+        if nObjMethod then
         begin
           nObj := nRF.GetValue(@gMG).AsObject;
           if Assigned(nObj) then
-            nMethod.Invoke(nObj, []);
-          //注册后执行
+            nCallBack(nObj, nInstance, nMethod);
+          //object call
+        end else
+        begin
+          nCallBack(nil, nInstance, nMethod);
+          //type call
         end;
       end;
     end;
   finally
     nCtx.Free;
   end;
+end;
+
+//Date: 2017-03-27
+//Parm: 是否注册
+//Desc: 扫描Group中所有Manager,调用Manager的注册方法.
+procedure TManagerGroup.RegistAll(const nReg: Boolean);
+begin
+  if not nReg then
+  begin
+    CallManagersMethod('RunBeforUnregistAllManager', True,
+    procedure (const nObj: TObject; const nInstance: TRttiInstanceType;
+      const nMethod: TRttiMethod)
+    begin
+      nMethod.Invoke(nObj, []);
+    end);
+  end; //卸载前执行
+
+  CallManagersMethod('RegistMe', False,
+  procedure (const nObj: TObject; const nInstance: TRttiInstanceType;
+    const nMethod: TRttiMethod)
+  begin
+    nMethod.Invoke(nInstance.MetaclassType, [TValue.From(nReg)]);
+  end); //执行注册
+
+  if nReg then
+  begin
+    CallManagersMethod('RunAfterRegistAllManager', True,
+    procedure (const nObj: TObject; const nInstance: TRttiInstanceType;
+      const nMethod: TRttiMethod)
+    begin
+      nMethod.Invoke(nObj, []);
+    end);
+  end; //注册后执行
 end;
 
 //Date: 2017-04-18
@@ -205,33 +224,37 @@ end;
 //Parm: 列表
 //Desc: 获取当前有效的管理器状态信息
 procedure TManagerGroup.GetManagersStatus(const nList: TStrings);
-var nObj: TObject;
-    nCtx: TRttiContext;
-    nType: TRttiType;
-    nRF: TRttiField;
-    nMethod: TRttiMethod;
-    nInstance: TRttiInstanceType;
 begin
-  nCtx := TRttiContext.Create;
-  try
-    nType := nCtx.GetType(TypeInfo(TManagerGroup));
-    for nRF in nType.GetFields do
-    begin
-      if nRF.FieldType.TypeKind <> tkClass then Continue;
-      nInstance := nRF.FieldType.AsInstance;
-      nMethod := nInstance.GetMethod('GetStatus');
+  CallManagersMethod('GetStatus', True,
+  procedure (const nObj: TObject; const nInstance: TRttiInstanceType;
+    const nMethod: TRttiMethod)
+  begin
+    nMethod.Invoke(nObj, [TValue.From(nList), TValue.From(True)]);
+  end);
+end;
 
-      if Assigned(nMethod) then
-      begin
-        nObj := nRF.GetValue(@gMG).AsObject;
-        if Assigned(nObj) then
-          nMethod.Invoke(nObj, [TValue.From(nList), TValue.From(True)]);
-        //卸载前执行
-      end;
-    end;
-  finally
-    nCtx.Free;
-  end;
+//Date: 2019-05-27
+//Desc: 主程序启动完成
+procedure TManagerGroup.RunAfterApplicationStart;
+begin
+  CallManagersMethod('RunAfterApplicationStart', True,
+  procedure (const nObj: TObject; const nInstance: TRttiInstanceType;
+    const nMethod: TRttiMethod)
+  begin
+    nMethod.Invoke(nObj, []);
+  end);
+end;
+
+//Date: 2019-05-27
+//Desc: 主程序主备关闭
+procedure TManagerGroup.RunBeforApplicationHalt;
+begin
+  CallManagersMethod('RunBeforApplicationHalt', True,
+  procedure (const nObj: TObject; const nInstance: TRttiInstanceType;
+    const nMethod: TRttiMethod)
+  begin
+    nMethod.Invoke(nObj, []);
+  end);
 end;
 
 initialization
