@@ -75,13 +75,21 @@ public:
 };
 
 
-enum DECLSPEC_DENUM TBaudRate : unsigned char { brDefault, br50, br75, br110, br150, br300, br600, br1200, br1800, br2000, br2400, br3600, br4800, br7200, br9600, br10400, br14400, br15625, br19200, br28800, br38400, br56000, br57600, br115200, br128000, br256000, brCustom };
+enum DECLSPEC_DENUM TBaudRate : unsigned char { brDefault, br50, br75, br110, br134_5, br150, br300, br600, br1200, br1800, br2000, br2400, br3600, br4800, br7200, br9600, br10400, br14400, br15625, br19200, br28800, br38400, br56000, br57600, br115200, br128000, br256000, brCustom };
+
+typedef System::Set<TBaudRate, TBaudRate::brDefault, TBaudRate::brCustom> TBaudRates;
 
 enum DECLSPEC_DENUM TParity : unsigned char { paDefault, paNone, paOdd, paEven, paMark, paSpace };
 
+typedef System::Set<TParity, TParity::paDefault, TParity::paSpace> TSettableParity;
+
 enum DECLSPEC_DENUM TStopBits : unsigned char { sbDefault, sb1, sb1_5, sb2 };
 
-enum DECLSPEC_DENUM TDataBits : unsigned char { dbDefault, db4, db5, db6, db7, db8, db9 };
+typedef System::Set<TStopBits, TStopBits::sbDefault, TStopBits::sb2> TSettableStopBits;
+
+enum DECLSPEC_DENUM TDataBits : unsigned char { dbDefault, db4, db5, db6, db7, db8, db9, db16, db16x };
+
+typedef System::Set<TDataBits, TDataBits::dbDefault, TDataBits::db16x> TSettableDataBits;
 
 enum DECLSPEC_DENUM TOption : unsigned char { opCheckParity, opOutputCTSFlow, opOutputDSRFlow, opDSRSensitivity, opTXContinueOnXOff, opUseErrorChar, opDiscardNullBytes, opAbortOnError };
 
@@ -102,6 +110,14 @@ enum DECLSPEC_DENUM TRTSControl : unsigned char { rcDefault, rcDisable, rcEnable
 enum DECLSPEC_DENUM TXOnXOffControl : unsigned char { xcDefault, xcDisable, xcInput, xcOutput, xcInputOutput };
 
 enum DECLSPEC_DENUM TPriorityClass : unsigned char { pcDefault, pcIdle, pcNormal, pcHigh, pcRealTime };
+
+enum DECLSPEC_DENUM TSettableParameter : unsigned char { spParity, spParityCheck, spBaudRate, spDataBits, spStopBits, spHandShaking, spRLSD };
+
+typedef System::Set<TSettableParameter, TSettableParameter::spParity, TSettableParameter::spRLSD> TSettableParameters;
+
+enum DECLSPEC_DENUM TCapability : unsigned char { caDtrDsr, caRtsCts, caRLSD, caParityCheck, caXOnXOff, caSettableXChar, caTotalTimeouts, caIntervalTimeouts, caSpecialChars, ca16BitMode };
+
+typedef System::Set<TCapability, TCapability::caDtrDsr, TCapability::ca16BitMode> TCapabilities;
 
 typedef void __fastcall (__closure *TOpenCloseEvent)(TCustomComPort* ComPort);
 
@@ -196,9 +212,17 @@ private:
 	int FOutput;
 	void __fastcall SetInput(int Value);
 	void __fastcall SetOutput(int Value);
+	int __fastcall GetMaxInput(void);
+	int __fastcall GetMaxOutput(void);
+	int __fastcall GetCurrentInput(void);
+	int __fastcall GetCurrentOutput(void);
 	
 public:
 	__fastcall TBufferSizes(TCustomComPort* ComPort);
+	__property int CurrentInput = {read=GetCurrentInput, nodefault};
+	__property int CurrentOutput = {read=GetCurrentOutput, nodefault};
+	__property int MaxInput = {read=GetMaxInput, nodefault};
+	__property int MaxOutput = {read=GetMaxOutput, nodefault};
 	
 __published:
 	__property int Input = {read=FInput, write=SetInput, default=4096};
@@ -312,9 +336,17 @@ private:
 	TDeviceRemovedEvent FOnDeviceRemoved;
 	System::UnicodeString __fastcall GetAbout(void);
 	bool __fastcall GetActive(void);
+	TCapabilities __fastcall GetCapabilities(void);
+	_COMMPROP __fastcall GetCommProp(void);
 	int __fastcall GetCustomBaudRate(void);
 	TLineErrors __fastcall GetLineErrors(unsigned Errors);
+	TBaudRate __fastcall GetMaxBaudRate(void);
 	TModemStatus __fastcall GetModemStatus(void);
+	TBaudRates __fastcall GetSettableBaudRates(void);
+	TSettableDataBits __fastcall GetSettableDataBits(void);
+	TSettableParameters __fastcall GetSettableParameters(void);
+	TSettableParity __fastcall GetSettableParity(void);
+	TSettableStopBits __fastcall GetSettableStopBits(void);
 	void __fastcall SetAbout(const System::UnicodeString Value);
 	void __fastcall SetActive(const bool Value);
 	void __fastcall SetBaudRate(TBaudRate Value);
@@ -488,7 +520,14 @@ public:
 	void __fastcall SetXOn(void);
 	void __fastcall SetXOff(void);
 	void __fastcall TransmitChar(char Value);
+	__property TCapabilities Capabilities = {read=GetCapabilities, nodefault};
 	__property NativeUInt Handle = {read=FHandle, nodefault};
+	__property TBaudRate MaxBaudRate = {read=GetMaxBaudRate, nodefault};
+	__property TBaudRates SettableBaudRates = {read=GetSettableBaudRates, nodefault};
+	__property TSettableDataBits SettableDataBits = {read=GetSettableDataBits, nodefault};
+	__property TSettableParameters SettableParameters = {read=GetSettableParameters, nodefault};
+	__property TSettableParity SettableParity = {read=GetSettableParity, nodefault};
+	__property TSettableStopBits SettableStopBits = {read=GetSettableStopBits, nodefault};
 };
 
 
