@@ -121,7 +121,7 @@ type
       const nList: TStrings): Boolean; static;
     class function SplitInt(const nStr: string; 
       const nDef: Integer = 0): Integer; static;
-    class function SplitFloat(const nStr: string; 
+    class function SplitFloat(const nStr: string;
       const nDef: Double = 0): Double; static;
     //拆分出数值
     {$IFNDEF EnableThirdANSI}
@@ -133,6 +133,11 @@ type
     class function IsNumber(const nStr: string;
       const nFloat: Boolean = True): Boolean; static;
     //是否数值
+    class function CountChar(const nChar: Char; const nStr: string;
+      const nRepeatValid: Boolean): Cardinal; static;
+    //统计字符在字符串中的个数
+    class function ByHex(const nHex: string): string; static;
+    //使用特定数据构建字符串
     class function HexStr(const nStr: string): string; static;
     class function HexBytes(const nBytes: TBytes): string; static;
     //转换为十六进制
@@ -147,6 +152,13 @@ type
     class function Enum2Str<T>(const nEnum: T): string; static;
     class function Str2Enum<T>(const nEnum: string): T; static;
     //获取枚举类型字符串描述
+    class function Ansi_UTF8(const nStr: string): string; static;
+    class function Ansi_Unicode(const nStr: string): string; static;
+    class function UTF8_Unicode(const nStr: string): string; static;
+    class function UTF8_Ansi(const nStr: string): string; static;
+    class function Unicode_UTF8(const nStr: string): string; static;
+    class function Unicode_Ansi(const nStr: string): string; static;
+    //字符串编码转换
   end;
 
   TSQLBuilder = class
@@ -967,7 +979,7 @@ end;
 class function TStringHelper.FixWidth(const nStr: string; const nWidth: Word;
 const nStyle: TFillPos; const nFixChar: Char; const nClip,nAnsiLen: Boolean): string;
 var nAnsi: AnsiString;
-    nLen,nHalf: Integer;
+    nLen,nInt: Integer;
 begin
   if nAnsiLen then
   begin
@@ -989,12 +1001,21 @@ begin
     if nClip and (nLen > nWidth) then
     begin
       if nAnsiLen then
-           {$IFDEF EnableThirdANSI}
-           Result := string(AnsiCopy(nAnsi, 1, nWidth))
-           {$ELSE}
-           Result := string(Copy(nAnsi, 1, nWidth))
-           {$ENDIF}
-      else Result := Copy(nStr, 1, nWidth);
+      begin
+        {$IFDEF EnableThirdANSI}
+        Result := string(AnsiCopy(nAnsi, cFI, nWidth));
+        {$ELSE}
+        Result := string(Copy(nAnsi, cFI, nWidth));
+        {$ENDIF}
+
+        nInt := Length(Result);
+        if Result[nInt] <> nStr[nInt] then
+          Result[nInt] := nStr[nInt];
+        //restore dword charactor
+      end else
+      begin
+        Result := Copy(nStr, cFI, nWidth);
+      end;
     end else
     begin
       Result := nStr;
@@ -1014,9 +1035,9 @@ begin
     end;
    fpMid:
     begin 
-      nHalf := Trunc(nLen / 2);
-      Result := StringOfChar(nFixChar, nHalf) + nStr +
-                StringOfChar(nFixChar, nLen - nHalf);
+      nInt := Trunc(nLen / 2);
+      Result := StringOfChar(nFixChar, nInt) + nStr +
+                StringOfChar(nFixChar, nLen - nInt);
     end;
    fpRight: 
     begin
@@ -1040,6 +1061,81 @@ begin
     Result := True;
   except
     //ignor any error
+  end;
+end;
+
+//Date: 2019-06-03
+//Parm: 字符;字符串;重复有效
+//Desc: 统计nChar在nStr中出现的次数,重复出现只统计一次.
+class function TStringHelper.CountChar(const nChar: Char; const nStr: string;
+  const nRepeatValid: Boolean): Cardinal;
+var nIdx,nInt: Integer;
+    nPre: Char;
+begin
+  Result := 0;
+  nInt := High(nStr);
+  if nInt < cFI then Exit;
+
+  nPre := nStr[cFI];
+  if nPre = nChar then
+    Inc(Result);
+  //xxxxx
+
+  for nIdx := cFI + 1 to nInt do
+  begin
+    if nStr[nIdx] = nChar then
+    begin
+      if (nStr[nIdx] <> nPre) or nRepeatValid then
+        Inc(Result);
+      //xxxxx
+    end;
+
+    nPre := nStr[nIdx];
+    //current char
+  end;
+end;
+
+//Date: 2019-06-03
+//Parm: 以空格分隔的十六进制字符串
+//Desc: 使用nHex构建字符串
+class function TStringHelper.ByHex(const nHex: string): string;
+const cChars = [#32, #13, #10]; //spit char
+var nStr: string;
+    nIdx,nHi,nPos: Integer;
+begin
+  Result := '';
+  nHi := High(nHex);
+  if nHi < cFI then Exit;
+
+  nPos := cFI;
+  for nIdx:=cFI to nHi do
+  begin
+    if not CharInSet(nHex[nIdx], ['0'..'9','a'..'f', 'A'..'F'] + cChars) then
+    begin
+      nPos := nIdx + 1;
+      Continue;
+    end;
+
+    if CharInSet(nHex[nIdx], cChars) or (nIdx = nHi) then
+    begin
+      if not CharInSet(nHex[nPos], cChars) then
+      begin
+        if CharInSet(nHex[nIdx], cChars) then
+             nStr := Copy(nHex, nPos, nIdx - nPos)
+        else nStr := Copy(nHex, nPos, nIdx - nPos + 1);
+
+        if Length(nStr) = 2 then
+          Result := Result + Char(StrToInt('$' + nStr));
+        //xxxxx
+      end;
+
+      nPos := nIdx;
+    end else
+    begin
+      if CharInSet(nHex[nPos], cChars) then
+        nPos := nIdx;
+      //xxxxx
+    end;
   end;
 end;
 
@@ -1202,15 +1298,75 @@ end;
 //Date: 2017-03-17
 //Parm: 字符串
 //Desc: 将nStr镜像反转
-class function TStringHelper.MirrorStr(const nStr: string): string ;
+class function TStringHelper.MirrorStr(const nStr: string): string;
 var nIdx,nLen: Integer;
 begin
-  nLen := Length(nStr);
-  SetLength(Result, nLen);
+  nLen := High(nStr);
+  SetLength(Result, nLen - cFI + 1);
 
-  for nIdx:=1 to nLen do
+  for nIdx:=cFI to nLen do
     Result[nIdx] := nStr[nLen - nIdx + 1];
   //convert
+end;
+
+//Date: 2019-06-06
+//Parm: 字符串
+//Desc: 将nStr编码为UTF-8并使用Ansi单字节字符串
+class function TStringHelper.Ansi_UTF8(const nStr: string): string;
+begin
+  with TMarshal do
+    Result := ReadStringAsAnsi(AllocStringAsUtf8(nStr));
+  //xxxxx
+end;
+
+//Date: 2019-06-06
+//Parm: 字符串
+//Desc: 将nStr编码为Unicode并使用Ansi单字节字符串
+class function TStringHelper.Ansi_Unicode(const nStr: string): string;
+begin
+  with TMarshal do
+    Result := ReadStringAsAnsi(AllocStringAsUnicode(nStr));
+  //xxxxx
+end;
+
+//Date: 2019-06-06
+//Parm: 字符串
+//Desc: 将nStr编码为Unicode并使用UTF-8字符串
+class function TStringHelper.UTF8_Unicode(const nStr: string): string;
+begin
+  with TMarshal do
+    Result := ReadStringAsUtf8(AllocStringAsUnicode(nStr));
+  //xxxxx
+end;
+
+//Date: 2019-06-06
+//Parm: 字符串
+//Desc: 将nStr编码为Ansi并使用UTF-8字符串
+class function TStringHelper.UTF8_Ansi(const nStr: string): string;
+begin
+  with TMarshal do
+    Result := ReadStringAsUtf8(AllocStringAsAnsi(nStr));
+  //xxxxx
+end;
+
+//Date: 2019-06-06
+//Parm: 字符串
+//Desc: 将nStr编码为UTF8并使用Unicode字符串
+class function TStringHelper.Unicode_UTF8(const nStr: string): string;
+begin
+  with TMarshal do
+    Result := ReadStringAsUnicode(AllocStringAsUtf8(nStr));
+  //xxxxx
+end;
+
+//Date: 2019-06-06
+//Parm: 字符串
+//Desc: 将nStr编码为Ansi并使用Unicode字符串
+class function TStringHelper.Unicode_Ansi(const nStr: string): string;
+begin
+  with TMarshal do
+    Result := ReadStringAsUnicode(AllocStringAsAnsi(nStr));
+  //xxxxx
 end;
 
 //------------------------------------------------------------------------------

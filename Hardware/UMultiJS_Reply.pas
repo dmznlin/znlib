@@ -52,6 +52,7 @@ type
     FDaiNum: Word;
     //需装袋数
     FHasDone: Word;
+    FLastDone: Word;
     //已装袋数
     FIsRun: Boolean;
     //运行标记
@@ -652,6 +653,10 @@ begin
 
       nInt := StrToInt(FRecv.FData[nIdx].FDai);
       //tunnel's num
+
+      if (nTunnel.FHasDone = 0) and (nInt > 3) and
+         (nTunnel.FLastDone = nInt) then Continue;
+      //新计数返回上次结果,视为异常
       
       if nTunnel.FHasDone < nInt then
       begin
@@ -663,6 +668,7 @@ begin
           
           nTunnel.FHasDone := nInt;
           //now dai num
+          nTunnel.FLastDone := nInt;
         finally
           FOwner.FSyncLock.Leave;
         end;
