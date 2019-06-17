@@ -177,7 +177,7 @@ begin
   InitDataBuffer;
 end;
 
-//Date: 2017-10-18
+//Date: 2019-06-11
 //Desc: 初始化内容缓冲
 procedure THKCardManager.InitDataBuffer;
 var nIdx: Integer;
@@ -188,7 +188,7 @@ begin
   //xxxx
 end;
 
-//Date: 2017-10-18
+//Date: 2019-06-11
 //Parm: 卡标识;内容;颜色
 //Desc: 在nCard上显示颜色为nColor的nText内容
 procedure THKCardManager.DisplayText(const nCard, nText, nSound: string;
@@ -246,7 +246,7 @@ begin
   end;   
 end;
 
-//Date: 2017-10-18
+//Date: 2019-06-11
 //Parm: 列表
 //Desc: 获取可用卡标识列表
 procedure THKCardManager.GetCardList(const nList: TStrings);
@@ -444,7 +444,7 @@ begin
   //xxxxx
 end;
 
-//Date: 2017-10-18
+//Date: 2019-06-11
 //Parm: 屏卡索引;显示内容
 //Desc: 在nCard上显示nData内容
 procedure THKCardSender.SendCardData(const nCard: PHKCardParam;

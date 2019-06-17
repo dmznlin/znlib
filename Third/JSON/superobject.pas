@@ -500,6 +500,7 @@ type
     function Format(const str: SOString; BeginSep: SOChar = '%'; EndSep: SOChar = '%'): SOString;
 
     function GetO(const path: SOString): ISuperObject;
+    function GetO_R(const path: SOString): ISuperObject;
     procedure PutO(const path: SOString; const Value: ISuperObject);
     function GetB(const path: SOString): Boolean;
     procedure PutB(const path: SOString; Value: Boolean);
@@ -545,7 +546,8 @@ type
     procedure Pack(all: boolean = false);
 
     property N[const path: SOString]: ISuperObject read GetN write PutN;
-    property O[const path: SOString]: ISuperObject read GetO write PutO; default;
+    property O[const path: SOString]: ISuperObject read GetO write PutO;
+    property R[const path: SOString]: ISuperObject read GetO_R write PutO; default;
     property B[const path: SOString]: boolean read GetB write PutB;
     property I[const path: SOString]: SuperInt read GetI write PutI;
     property D[const path: SOString]: Double read GetD write PutD;
@@ -615,6 +617,7 @@ type
     function _Release: Integer; virtual; stdcall;
 
     function GetO(const path: SOString): ISuperObject;
+    function GetO_R(const path: SOString): ISuperObject;
     procedure PutO(const path: SOString; const Value: ISuperObject);
     function GetB(const path: SOString): Boolean;
     procedure PutB(const path: SOString; Value: Boolean);
@@ -690,7 +693,8 @@ type
     function Format(const str: SOString; BeginSep: SOChar = '%'; EndSep: SOChar = '%'): SOString;
 
     property N[const path: SOString]: ISuperObject read GetN write PutN;
-    property O[const path: SOString]: ISuperObject read GetO write PutO; default;
+    property O[const path: SOString]: ISuperObject read GetO write PutO;
+    property R[const path: SOString]: ISuperObject read GetO_R write PutO; default;
     property B[const path: SOString]: boolean read GetB write PutB;
     property I[const path: SOString]: SuperInt read GetI write PutI;
     property D[const path: SOString]: Double read GetD write PutD;
@@ -3550,6 +3554,14 @@ end;
 function TSuperObject.GetO(const path: SOString): ISuperObject;
 begin
   Result := ParseString(PSOChar(path), False, True, Self);
+end;
+
+function TSuperObject.GetO_R(const path: SOString): ISuperObject;
+begin
+  Result := ParseString(PSOChar(path), False, True, Self);
+  if not Assigned(Result) then
+    raise Exception.Create(SysUtils.Format('json node "%s" not exists.', [path]));
+  //xxxxx
 end;
 
 function TSuperObject.GetA(const path: SOString): TSuperArray;
