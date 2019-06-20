@@ -11,7 +11,7 @@ interface
 
 uses
   Windows, Classes, SysUtils, SyncObjs, NativeXml, UHKDoorLED_Head, UWaitItem,
-  USysLoger;
+  ULibFun, USysLoger;
 
 type
   PHKCardParam = ^THKCardParam;
@@ -40,6 +40,7 @@ type
     FText      : string;            //内容
     FColor     : Integer;           //颜色
     FDisplay   : THKDataDisplay;    //显示模式
+    FDefault   : Boolean;           //默认标识
     FEnabled   : Boolean;           //有效标识
   end;
 
@@ -267,7 +268,7 @@ begin
           FWidth := nNode.NodeByName('width').ValueAsInteger;
           FHeight := nNode.NodeByName('height').ValueAsInteger;
 
-          FTextSend := 0;
+          FTextSend := GetTickCount();
           FTextKeep := nNode.NodeByName('textkeep').ValueAsInteger;
           FTextSpeed := nNode.NodeByName('textspeed').ValueAsInteger;
           FDefaltTxt := nNode.NodeByName('default').ValueAsString;
@@ -341,6 +342,8 @@ begin
       if FTextData[nIdx].FEnabled then
       begin
         nData := FTextData[nIdx];
+        nData.FDefault := False;
+
         FTextData[nIdx].FEnabled := False;
         Break;
       end; //获取待发送内容
@@ -354,7 +357,7 @@ begin
       with FCards[nIdx] do
       begin
         if (FTextSend = 0) or
-           (GetTickCount - FTextSend < FTextKeep * 1000) then Continue;
+           (GetTickCountDiff(FTextSend) < FTextKeep * 1000) then Continue;
         FTextSend := 0;
 
         with nData do
@@ -362,8 +365,9 @@ begin
           FCard := FID;
           FText := FDefaltTxt;
           FColor := 2;
-          
           FDisplay := ddLnTXT;
+          
+          FDefault := True;
           FEnabled := True;
         end;
 
@@ -462,9 +466,6 @@ begin
         WriteLog(Format(nErr, ['AddNeiMaTxtArea1', nInt]));
         Exit;
       end;
-
-      nCard.FTextSend := GetTickCount;
-      //发送计时
     end else
 
     if nData.FDisplay = ddLnTXT then
@@ -495,6 +496,10 @@ begin
       WriteLog(Format(nErr, ['SendControl', nInt]));
       Exit;
     end;
+
+    if not nData.FDefault then
+      nCard.FTextSend := GetTickCount;
+    //发送计时
   finally
     if nHandle > 0 then
       EndSend(nHandle);

@@ -11,7 +11,7 @@ interface
 
 uses
   Classes, SysUtils, SyncObjs, Windows, IdTCPClient, IdGlobal, NativeXml,
-  UHKDoorLED_Head, UWaitItem, USysLoger;
+  UHKDoorLED_Head, UWaitItem, ULibFun, USysLoger;
 
 type
   PHKCardParam = ^THKCardParam;
@@ -42,6 +42,7 @@ type
     FSound     : string;            //声音
     FColor     : Integer;           //颜色
     FDisplay   : THKDataDisplay;    //显示模式
+    FDefault   : Boolean;           //默认标识
     FEnabled   : Boolean;           //有效标识
   end;
 
@@ -299,7 +300,7 @@ begin
           FWidth := nNode.NodeByName('width').ValueAsInteger;
           FHeight := nNode.NodeByName('height').ValueAsInteger;
 
-          FTextSend := 0;
+          FTextSend := GetTickCount();
           FTextKeep := nNode.NodeByName('textkeep').ValueAsInteger;
           FTextSpeed := nNode.NodeByName('textspeed').ValueAsInteger;
           FDefaltTxt := nNode.NodeByName('default').ValueAsString;
@@ -386,6 +387,8 @@ begin
       if FTextData[nIdx].FEnabled then
       begin
         nData := FTextData[nIdx];
+        nData.FDefault := False;
+        
         FTextData[nIdx].FEnabled := False;
         Break;
       end; //获取待发送内容
@@ -399,7 +402,7 @@ begin
       with FCards[nIdx] do
       begin
         if (FTextSend = 0) or
-           (GetTickCount - FTextSend < FTextKeep * 1000) then Continue;
+           (GetTickCountDiff(FTextSend) < FTextKeep * 1000) then Continue;
         FTextSend := 0;
 
         with nData do
@@ -408,6 +411,8 @@ begin
           FText := FDefaltTxt;
           FSound := '';
           FColor := VT_COLOR_GREEN;
+
+          FDefault := True;
           FEnabled := True;
         end;
 
@@ -545,7 +550,10 @@ begin
   try
     FClient.IOHandler.Write(nBuf);
     //send data
-    nCard.FTextSend := GetTickCount;
+
+    if not nData.FDefault then
+      nCard.FTextSend := GetTickCount;
+    //reset default content
 
     FClient.IOHandler.CheckForDataOnSource(10);
     //fill the output buffer with a timeout
