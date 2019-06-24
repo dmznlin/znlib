@@ -24,6 +24,10 @@ const
   BX_6K2_YY               = $65;
   BX_6K3_YY               = $66;
 
+  BX_SingLine_01          = $01;  //单行显示
+  BX_SingLine_02          = $02;  //多行显示
+  BX_NewLine_01           = $01;  //不自定换行
+  BX_NewLine_02           = $02;  //自动换行
   BX_DisplayMode_01       = $01;  //静止显示
   BX_DisplayMode_02       = $02;  //快速打出
   BX_DisplayMode_03       = $03;  //向左移动
@@ -356,7 +360,7 @@ begin
     FillChar(nData, cSizeData, #0);
     FillChar(FFrameBegin, SizeOf(FFrameBegin), $A5);
 
-    FHead.FDstAddr      := $8000;
+    FHead.FDstAddr      := $0001;
     FHead.FSrcAddr      := $8000;
     FHead.FCheckMode    := $00;
     FHead.FDisplayMode  := $00;
@@ -400,8 +404,8 @@ begin
   with nMode do
   begin
     FillChar(nMode, cSizeDisplayMode, #0);
-    FSingleLine    := $02;                        //多行显示
-    FNewLine       := $01;                        //不自动换行
+    FSingleLine    := BX_SingLine_02;             //多行显示
+    FNewLine       := BX_NewLine_01;              //不自动换行
     FDisplayMode   := BX_DisplayMode_02;          //快速打出
     FSpeed         := $01;                        //显示速度,最快
     FStayTime      := $04;                        //2s
@@ -820,9 +824,9 @@ var nStr: string;
       InitRequest(nReq); //init
 
       nArea.FDynamicAreaLoc := nCardArea.FAreaLoc;
-      nArea.FAreaX := nCardArea.FRect.Left div 8;
+      nArea.FAreaX := SetNumberBit(nCardArea.FRect.Left, 16, 1, Bit_16);
       nArea.FAreaY := nCardArea.FRect.Top;
-      nArea.FAreaWidth := nCardArea.FRect.Right div 8;
+      nArea.FAreaWidth := SetNumberBit(nCardArea.FRect.Right, 16, 1, Bit_16);
       nArea.FAreaHeight := nCardArea.FRect.Bottom;
 
       if nCardArea.FTextSend then //text

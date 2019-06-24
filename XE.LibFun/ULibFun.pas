@@ -211,6 +211,11 @@ type
     class function SetBit(const nNum: Integer; const nBit,nValue: Byte;
       const nBitCount: TBitCount): Integer; static;
     //设置指定位的值为0或1
+    class function Int2Bin(const nValue: LongInt;
+      const nBitCount: TBitCount): string;
+    //十进制转二进制显示
+    class function Bin2Int(const nValue: string): LongInt;
+    //二进制转十进制数值
   end;
 
   TEncodeHelper = class
@@ -1313,60 +1318,90 @@ end;
 //Parm: 字符串
 //Desc: 将nStr编码为UTF-8并使用Ansi单字节字符串
 class function TStringHelper.Ansi_UTF8(const nStr: string): string;
+var nPtr: TPtrWrapper;
 begin
-  with TMarshal do
-    Result := ReadStringAsAnsi(AllocStringAsUtf8(nStr));
-  //xxxxx
+  nPtr := TPtrWrapper.Create(nil);
+  try
+    nPtr := TMarshal.AllocStringAsUtf8(nStr);
+    Result := TMarshal.ReadStringAsAnsi(nPtr);
+  finally
+    TMarshal.FreeMem(nPtr);
+  end;
 end;
 
 //Date: 2019-06-06
 //Parm: 字符串
 //Desc: 将nStr编码为Unicode并使用Ansi单字节字符串
 class function TStringHelper.Ansi_Unicode(const nStr: string): string;
+var nPtr: TPtrWrapper;
 begin
-  with TMarshal do
-    Result := ReadStringAsAnsi(AllocStringAsUnicode(nStr));
-  //xxxxx
+  nPtr := TPtrWrapper.Create(nil);
+  try
+    nPtr := TMarshal.AllocStringAsUnicode(nStr);
+    Result := TMarshal.ReadStringAsAnsi(nPtr);
+  finally
+    TMarshal.FreeMem(nPtr);
+  end;
 end;
 
 //Date: 2019-06-06
 //Parm: 字符串
 //Desc: 将nStr编码为Unicode并使用UTF-8字符串
 class function TStringHelper.UTF8_Unicode(const nStr: string): string;
+var nPtr: TPtrWrapper;
 begin
-  with TMarshal do
-    Result := ReadStringAsUtf8(AllocStringAsUnicode(nStr));
-  //xxxxx
+  nPtr := TPtrWrapper.Create(nil);
+  try
+    nPtr := TMarshal.AllocStringAsUnicode(nStr);
+    Result := TMarshal.ReadStringAsUtf8(nPtr);
+  finally
+    TMarshal.FreeMem(nPtr);
+  end;
 end;
 
 //Date: 2019-06-06
 //Parm: 字符串
 //Desc: 将nStr编码为Ansi并使用UTF-8字符串
 class function TStringHelper.UTF8_Ansi(const nStr: string): string;
+var nPtr: TPtrWrapper;
 begin
-  with TMarshal do
-    Result := ReadStringAsUtf8(AllocStringAsAnsi(nStr));
-  //xxxxx
+  nPtr := TPtrWrapper.Create(nil);
+  try
+    nPtr := TMarshal.AllocStringAsAnsi(nStr);
+    Result := TMarshal.ReadStringAsUtf8(nPtr);
+  finally
+    TMarshal.FreeMem(nPtr);
+  end;
 end;
 
 //Date: 2019-06-06
 //Parm: 字符串
 //Desc: 将nStr编码为UTF8并使用Unicode字符串
 class function TStringHelper.Unicode_UTF8(const nStr: string): string;
+var nPtr: TPtrWrapper;
 begin
-  with TMarshal do
-    Result := ReadStringAsUnicode(AllocStringAsUtf8(nStr));
-  //xxxxx
+  nPtr := TPtrWrapper.Create(nil);
+  try
+    nPtr := TMarshal.AllocStringAsUtf8(nStr);
+    Result := TMarshal.ReadStringAsUnicode(nPtr);
+  finally
+    TMarshal.FreeMem(nPtr);
+  end;
 end;
 
 //Date: 2019-06-06
 //Parm: 字符串
 //Desc: 将nStr编码为Ansi并使用Unicode字符串
 class function TStringHelper.Unicode_Ansi(const nStr: string): string;
+var nPtr: TPtrWrapper;
 begin
-  with TMarshal do
-    Result := ReadStringAsUnicode(AllocStringAsAnsi(nStr));
-  //xxxxx
+  nPtr := TPtrWrapper.Create(nil);
+  try
+    nPtr := TMarshal.AllocStringAsAnsi(nStr);
+    Result := TMarshal.ReadStringAsUnicode(nPtr);
+  finally
+    TMarshal.FreeMem(nPtr);
+  end;
 end;
 
 //------------------------------------------------------------------------------
@@ -1737,6 +1772,41 @@ begin
     if nValue = 0 then
          Result := nNum and not(1 shl (nBit - 1))
     else Result := nNum or (1 shl (nBit - 1));
+  end;
+end;
+
+//Date: 2019-06-24
+//Parm: 待解析值;位数
+//Desc: 解析nValue的二进制显示
+class function TBitHelper.Int2Bin(const nValue: LongInt;
+  const nBitCount: TBitCount): string;
+var nIdx,nLen: Integer;
+begin
+  nLen := Byte(nBitCount);
+  SetLength(Result, nLen);
+
+  for nIdx:=nLen - 1 downto 0 do
+  begin
+    if nValue and (1 shl nIdx) = 0 then
+         Result[nLen - nIdx + TStringHelper.cFI - 1] := '0'
+    else Result[nLen - nIdx + TStringHelper.cFI - 1] := '1';
+  end;
+end;
+
+//Date: 2019-06-24
+//Parm: 二进制字符串;位数
+//Desc: 将nValue拼接为十进制数值
+class function TBitHelper.Bin2Int(const nValue: string): LongInt;
+var nIdx,nLen: Integer;
+begin
+  Result := 0;
+  nLen := High(nValue);
+
+  for nIdx:=nLen downto TStringHelper.cFI do
+  begin
+    if nValue[nIdx] = '1' then
+      Result := Result + (1 shl (nLen - nIdx));
+    //xxxxx
   end;
 end;
 

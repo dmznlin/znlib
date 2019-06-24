@@ -463,11 +463,12 @@ begin
   try
     if FClient.Host <> nCard.FHost then
     begin
-      FClient.Disconnect;
+      CloseConnection();      
       FClient.Host := nCard.FHost;
       FClient.Port := nCard.FPort;
     end;
 
+    FClient.CheckForGracefulDisconnect(False);
     if not FClient.Connected then
       FClient.Connect;
     //conn remote

@@ -105,6 +105,10 @@ function GetNumberBit(const nNum: Integer; const nBit: Byte;
 function SetNumberBit(const nNum: Integer; const nBit,nValue: Byte;
  const nBitCount: TBitCount): Integer;
 //设置指定位的值为0或1
+function Int2Binary(const nValue: LongInt; const nBitCount: TBitCount): string;
+//十进制转二进制显示
+function Binary2Int(const nValue: string): LongInt;
+//二进制转十进制数值
 
 //------------------------------------------------------------------------------
 function GetFileVersionStr(const nFile: string): string;
@@ -828,6 +832,40 @@ begin
     if nValue = 0 then
          Result := nNum and not(1 shl (nBit - 1))
     else Result := nNum or (1 shl (nBit - 1));
+  end;
+end;
+
+//Date: 2019-06-24
+//Parm: 待解析值;位数
+//Desc: 解析nValue的二进制显示
+function Int2Binary(const nValue: LongInt; const nBitCount: TBitCount): string;
+var nIdx,nLen: Integer;
+begin
+  nLen := Byte(nBitCount);
+  SetLength(Result, nLen);
+
+  for nIdx:=nLen - 1 downto 0 do
+  begin
+    if nValue and (1 shl nIdx) = 0 then
+         Result[nLen - nIdx] := '0'
+    else Result[nLen - nIdx] := '1';
+  end;
+end;
+
+//Date: 2019-06-24
+//Parm: 二进制字符串;位数
+//Desc: 将nValue拼接为十进制数值
+function Binary2Int(const nValue: string): LongInt;
+var nIdx,nLen: Integer;
+begin
+  Result := 0;
+  nLen := Length(nValue);
+
+  for nIdx:=nLen downto 1 do
+  begin
+    if nValue[nIdx] = '1' then
+      Result := Result + (1 shl (nLen - nIdx));
+    //xxxxx
   end;
 end;
 
