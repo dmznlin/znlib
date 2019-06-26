@@ -19,40 +19,49 @@ unit UMosMQTT;
 interface
 
 uses
-  System.Classes, System.SysUtils, System.SyncObjs, Winapi.Windows,
-  UMosquitto, UManagerGroup, UThreadPool, ULibFun;
+  System.Classes, System.SysUtils, System.SyncObjs, Winapi.Windows, UMosquitto,
+  UManagerGroup, UThreadPool, ULibFun, System.AnsiStrings;
 
 type
   PMQTTTopicItem = ^TMQTTTopicItem;
   TMQTTTopicItem = record
-    FEnabled        : Boolean;                       //有效标识
-    FTopic          : string;                        //主题名称
-    FChannel        : Word;                          //订阅编号
-    FQos            : Integer;                       //qos
-    FHasSub         : Boolean;                       //已订阅
-    FLastSub        : Cardinal;                      //发起订阅
+    FEnabled: Boolean;                       //有效标识
+    FTopic: AnsiString;                      //主题名称
+    FChannel: Integer;                       //订阅编号
+    FQos: Integer;                           //qos
+    FHasSub: Boolean;                        //已订阅
+    FLastSub: Cardinal;                      //发起订阅
   end;
   TMQTTTopicItems = array of TMQTTTopicItem;
 
   PMQTTPublishItem = ^TMQTTPublishItem;
   TMQTTPublishItem = record
-    FEnabled       : Boolean;                        //有效标识
-    FTopic         : string;                         //主题
-    FPayload       : string;                         //数据
-    FQos           : Integer;                        //qos
-    FRetain        : Boolean;                        //是否保留
-    FLastPub       : Cardinal;                       //发布时间
+    FEnabled: Boolean;                       //有效标识
+    FTopic: AnsiString;                      //主题
+    FPayload: string;                        //数据
+    FQos: Integer;                           //qos
+    FRetain: Boolean;                        //是否保留
+    FLastPub: Cardinal;                      //发布时间
   end;
   TMQTTPublishItems = array of TMQTTPublishItem;
 
   PMQTTClientData = ^TMQTTClientData;
   TMQTTClientData = record
-    FThreadRunning      : Boolean;                   //运行中
-    FDisconnecting      : Boolean;                   //正在断开
-    FSubscribeAllTopics : Boolean;                   //全部订阅
+    FClient: TObject;                        //客户端对象
+    FServerHost: string;
+    FServerPort: Integer;                    //Broker
+
+    FThreadRunning: Boolean;                 //运行中
+    FDisconnecting: Boolean;                 //正在断开
+    FSubscribeAllTopics: Boolean;            //全部订阅
+    FHasNewPublishItem: Boolean;             //有待发消息
   end;
 
-  TMQTTClient = class(TComponent)
+  TMQTTOnConnect = procedure (const nServer: string; const nPort: Integer;
+    const nConnected: Boolean);
+  TMQTTOnMessage = procedure (const nTopic,nPayload: string);
+
+  TMQTTClient = class(TObject)
   private
     FServerHost: string;
     FServerPort: Integer;
@@ -66,21 +75,29 @@ type
     {*客户端*}
     FTopics: TMQTTTopicItems;
     FPublishs: TMQTTPublishItems;
+    FNowPublish: TMQTTPublishItem;
     {*订阅发布*}
+    FDetailLog: Boolean;
+    {*明细日志*}
     FSyncLock: TCriticalSection;
     {*同步锁定*}
+    FOnConnect: TMQTTOnConnect;
+    FOnMessage: TMQTTOnMessage;
+    {*事件相关*}
   protected
     procedure DoThreadWork(const nConfig: PThreadWorkerConfig;
       const nThread: TThread);
     {*线程业务*}
-    function FindTopic(const nTopic: string): Integer;
+    function FindTopic(const nTopic: AnsiString): Integer;
     {*检索数据*}
     procedure SubscribeTopics();
     {*订阅主题*}
+    procedure PublishData(const nThread: TThread);
+    {*发布消息*}
     procedure ResetAllTopicStatus();
     {*重置状态*}
   public
-    constructor Create(AOwner: TComponent); override;
+    constructor Create;
     destructor Destroy; override;
     {*创建释放*}
     procedure ConnectBroker;
@@ -89,15 +106,18 @@ type
     procedure AddTopic(const nTopic: string; const nQos: Integer = MOSQ_QOS_0);
     procedure DelTopic(const nTopic: string);
     {*增减订阅*}
-    procedure Publish(const nTopic,nPayload: string;
+    procedure Publish(const nTopic, nPayload: string;
       const nRetain: Boolean = False; const nQos: Integer = MOSQ_QOS_0);
     {*发布消息*}
-  published
     property ServerHost: string read FServerHost write FServerHost;
     property ServerPort: Integer read FServerPort write FServerPort;
     property UserName: string read FUserName write FUserName;
     property Password: string read FPassword write FPassword;
     property KeepAlive: Integer read FKeepAlive write FKeepAlive;
+    property DetailLog: Boolean read FDetailLog write FDetailLog;
+    property OnConnect: TMQTTOnConnect read FOnConnect write FOnConnect;
+    property OnMessage: TMQTTOnMessage read FOnMessage write FOnMessage;
+    {*属性事件*}
   end;
 
 implementation
@@ -107,54 +127,158 @@ begin
   gMG.FLogManager.AddLog(TMQTTClient, 'MQTT-Client', nEvent);
 end;
 
+//Date: 2019-06-26
+//Desc: 连接Broker结束
 procedure on_connect(mosq: p_mosquitto; obj: Pointer; rc: Integer); cdecl;
+var nStr: string;
+    nClient: TMQTTClient;
+    nData: PMQTTClientData;
 begin
-  WriteLog(Format('on_connect: %d, %d', [GetCurrentThreadId, MainThreadID]));
+  case rc of
+    0: nStr := '成功';
+    1: nStr := '连接被拒绝(不支持的协议版本)';
+    2: nStr := '连接被决绝(identifier被拒绝)';
+    3: nStr := '连接被拒绝(远程服务不可用)'
+    else
+      nStr := '未知';
+  end;
 
+  nData := obj;
+  WriteLog(Format('连接远程服务[ %s,%d ]: %s', [nData.FServerHost,
+    nData.FServerPort, nStr]));
+  //conn log
+
+  if rc = 0 then
+  begin
+    nClient := nData.FClient as TMQTTClient;
+    //client obj
+
+    if Assigned(nClient.FOnConnect) then
+      nClient.FOnConnect(nData.FServerHost, nData.FServerPort, True);
+    //event
+  end;
 end;
 
+//Date: 2019-06-26
+//Desc: 远程Broker断开
 procedure on_disconnect(mosq: p_mosquitto; obj: Pointer; rc: Integer); cdecl;
+var nStr: string;
+    nClient: TMQTTClient;
+    nData: PMQTTClientData;
 begin
-  WriteLog('on_disconnect');
+  if rc = 0 then
+       nStr := '客户端主动断开'
+  else nStr := '网络异常断开';
 
+  nData := obj;
+  WriteLog(Format('远程服务[ %s,%d ]已断开: %s', [nData.FServerHost,
+    nData.FServerPort, nStr]));
+  //conn log
+
+  if rc = 0 then
+  begin
+    nClient := nData.FClient as TMQTTClient;
+    //client obj
+
+    if Assigned(nClient.FOnConnect) then
+      nClient.FOnConnect(nData.FServerHost, nData.FServerPort, False);
+    //event
+  end;
 end;
 
+//Date: 2019-06-26
+//Desc: 主题订阅完毕
+procedure on_subscribe(mosq: p_mosquitto; obj: Pointer; mid: Integer;
+ qos_count: Integer; const granted_qos: PInteger); cdecl;
+var nIdx: Integer;
+    nClient: TMQTTClient;
+    nData: PMQTTClientData;
+begin
+  nData := obj;
+  nClient := nData.FClient as TMQTTClient;
+  //client obj
+
+  with nClient do
+  begin
+    for nIdx := Low(FTopics) to High(FTopics) do
+    if FTopics[nIdx].FChannel = mid then
+    begin
+      FTopics[nIdx].FHasSub := True;
+      //sub flag
+
+      WriteLog(Format('远程服务[ %s,%d ]订阅: %s,成功', [nData.FServerHost,
+        nData.FServerPort, nClient.FTopics[nIdx].FTopic]));
+      //conn log
+    end;
+  end;
+end;
+
+//Date: 2019-06-26
+//Desc: 取消主题订阅
+procedure on_unsubscribe(mosq: p_mosquitto; obj: Pointer; mid: Integer); cdecl;
+var nIdx: Integer;
+    nClient: TMQTTClient;
+    nData: PMQTTClientData;
+begin
+  nData := obj;
+  nClient := nData.FClient as TMQTTClient;
+  //client obj
+
+  with nClient do
+  begin
+    for nIdx := Low(FTopics) to High(FTopics) do
+    if FTopics[nIdx].FChannel = mid then
+    begin
+      FTopics[nIdx].FHasSub := False;
+      //sub flag
+
+      WriteLog(Format('远程服务[ %s,%d ]取消订阅: %s,成功', [nData.FServerHost,
+        nData.FServerPort, nClient.FTopics[nIdx].FTopic]));
+      //conn log
+    end;
+  end;
+end;
+
+//Date: 2019-06-26
+//Desc: 运行明细日志
+procedure on_log(mosq: p_mosquitto; obj: Pointer; level: Integer;
+ const str: PAnsiChar); cdecl;
+begin
+  WriteLog(Format('%s,%d: %s', [PMQTTClientData(obj).FServerHost,
+    PMQTTClientData(obj).FServerPort, System.AnsiStrings.StrPas(str)]));
+  //conn log
+end;
+
+//Date: 2019-06-26
+//Desc: 发布主题
 procedure on_publish(mosq: p_mosquitto; obj: Pointer; mid: Integer); cdecl;
 begin
-  WriteLog('on_publish');
+  //nothing
 end;
 
+//Date: 2019-06-26
+//Desc: 收到消息
 procedure on_message(mosq: p_mosquitto; obj: Pointer;
-  const msg: p_mosquitto_message); cdecl;
+ const msg: p_mosquitto_message); cdecl;
+var nTopic,nPayload: string;
+    nClient: TMQTTClient;
 begin
-  WriteLog('on_message');
-end;
+  nClient := PMQTTClientData(obj).FClient as TMQTTClient;
+  //client obj
 
-procedure on_subscribe(mosq: p_mosquitto; obj: Pointer; mid: Integer;
-  qos_count : Integer; const granted_qos: PInteger); cdecl;
-begin
-  WriteLog('on_subscribe');
-end;
+  if Assigned(nClient.FOnMessage) then
+  begin
+    nTopic := UTF8ToUnicodeString(msg.topic);
+    nPayload := UTF8ToUnicodeString(PAnsiChar(msg.payload));
 
-procedure on_unsubscribe(mosq: p_mosquitto; obj: Pointer; mid: Integer); cdecl;
-begin
-  WriteLog('on_unsubscribe');
-end;
-
-procedure on_log(mosq: p_mosquitto; obj: Pointer; level: Integer;
-  const str: PAnsiChar); cdecl;
-begin
-  WriteLog('on_log');
-end;
-
-function pw_callback(buf: PAnsiChar; size: Integer; rwflag: Integer;
-  userdata: Pointer): Integer; cdecl;
-begin
-  WriteLog('pw_callback');
+    if Assigned(nClient.FOnMessage) then
+      nClient.FOnMessage(nTopic, nPayload);
+    //xxxxx
+  end;
 end;
 
 //------------------------------------------------------------------------------
-constructor TMQTTClient.Create(AOwner: TComponent);
+constructor TMQTTClient.Create;
 var nStr: string;
     nRes: Integer;
     major,minor,revision: Integer;
@@ -167,6 +291,7 @@ begin
   FServerHost := '127.0.0.1';
 
   FKeepAlive := 600;
+  FDetailLog := False;
   SetLength(FTopics, 0);
   SetLength(FPublishs, 0);
   FSyncLock := TCriticalSection.Create;
@@ -224,7 +349,7 @@ end;
 //Date: 2019-06-21
 //Parm: 主题
 //Desc: 检索nTopic,返回索引
-function TMQTTClient.FindTopic(const nTopic: string): Integer;
+function TMQTTClient.FindTopic(const nTopic: AnsiString): Integer;
 var nIdx: Integer;
 begin
   Result := -1;
@@ -256,7 +381,7 @@ begin
 
   FSyncLock.Enter;
   try
-    nIdx := FindTopic(nTopic);
+    nIdx := FindTopic(AnsiString(nTopic));
     if nIdx <> -1 then Exit; //exists
 
     nIdx := Length(FTopics);
@@ -265,8 +390,8 @@ begin
     with FTopics[nIdx] do
     begin
       FEnabled  := True;
-      FTopic    := nTopic;
-      FChannel  := 0;
+      FTopic    := AnsiString(nTopic);
+      FChannel  := nIdx;
       FQos      := nQos;
       FHasSub   := False;
       FLastSub  := 0;
@@ -287,7 +412,7 @@ var nIdx: Integer;
 begin
   FSyncLock.Enter;
   try
-    nIdx := FindTopic(nTopic);
+    nIdx := FindTopic(AnsiString(nTopic));
     if nIdx <> -1 then
     begin
       FTopics[nIdx].FEnabled := False;
@@ -347,13 +472,16 @@ begin
 
     with FPublishs[nIdx] do
     begin
-      FEnabled       := True;
-      FTopic         := nTopic;
-      FPayload       := nPayload;
-      FQos           := nQos;
-      FRetain        := nRetain;
-      FLastPub       := GetTickCount();
+      FEnabled := True;
+      FTopic   := AnsiString(nTopic);
+      FPayload := nPayload;
+      FQos     := nQos;
+      FRetain  := nRetain;
+      FLastPub := GetTickCount();
     end;
+
+    FClientData.FHasNewPublishItem := True;
+    //publish flag
   finally
     FSyncLock.Leave;
   end;
@@ -367,8 +495,8 @@ begin
   FSyncLock.Enter;
   try
     for nIdx := Low(FTopics) to High(FTopics) do
-     if FTopics[nIdx].FEnabled then
-      FTopics[nIdx].FHasSub := False;
+      if FTopics[nIdx].FEnabled then
+        FTopics[nIdx].FHasSub := False;
     //set flag
 
     FClientData.FSubscribeAllTopics := False;
@@ -396,7 +524,7 @@ begin
         if FHasSub then //取消订阅
         begin
           FHasSub := False;
-          nRes := mosquitto_unsubscribe(FClient, nil, PAnsiChar(AnsiString(FTopic)));
+          nRes := mosquitto_unsubscribe(FClient, @FChannel, PAnsiChar(FTopic));
 
           if nRes <> MOSQ_ERR_SUCCESS then
           begin
@@ -415,8 +543,7 @@ begin
         Continue;
       FLastSub := GetTickCount();
 
-      nRes := mosquitto_subscribe(FClient, nil, PAnsiChar(AnsiString(FTopic)), FQos);
-      FHasSub := True;
+      nRes := mosquitto_subscribe(FClient, @FChannel, PAnsiChar(FTopic), FQos);
       if nRes <> MOSQ_ERR_SUCCESS then
       begin
         WriteLog(Format('Subscribe Error: %d,%s', [nRes, mosquitto_strerror(nRes)]));
@@ -431,6 +558,51 @@ begin
   end;
 end;
 
+//Date: 2019-06-26
+//Desc: 发布数据
+procedure TMQTTClient.PublishData(const nThread: TThread);
+var nIdx: Integer;
+    nBuf: AnsiString;
+begin
+  while not nThread.CheckTerminated do
+  begin
+    FSyncLock.Enter;
+    try
+      if FClientData.FDisconnecting then
+        Exit;
+      //try to disconn
+      FNowPublish.FEnabled := False;
+
+      for nIdx := Low(FPublishs) to High(FPublishs) do
+      with FPublishs[nIdx] do
+      begin
+        if not FEnabled then Continue;
+        //invalid item
+
+        FNowPublish := FPublishs[nIdx];
+        FEnabled := False;
+        Break;
+      end;
+
+      if not FNowPublish.FEnabled then
+      begin
+        FClientData.FHasNewPublishItem := False;
+        Exit;
+      end;
+    finally
+      FSyncLock.Leave;
+    end;
+
+    with FNowPublish do
+    begin
+      nBuf := UTF8EncodeToShortString(FPayload);
+      mosquitto_publish(FClient, nil, PAnsiChar(FTopic), Length(nBuf),
+        PAnsiChar(nBuf), FQos, FRetain);
+      //send message
+    end;
+  end;
+end;
+
 //------------------------------------------------------------------------------
 //Date: 2019-06-21
 //Desc: 连接远程服务
@@ -438,16 +610,24 @@ procedure TMQTTClient.ConnectBroker;
 begin
   if not Assigned(FClient) then
   begin
-    FClient := mosquitto_new(PAnsiChar(AnsiString(FClientID)), true, @FClientData);
+    FClientData.FClient := Self;
+    FClientData.FServerHost := FServerHost;
+    FClientData.FServerPort := FServerPort;
+
+    FClient := mosquitto_new(PAnsiChar(AnsiString(FClientID)), True, @FClientData);
     //new client
 
     mosquitto_connect_callback_set(FClient, on_connect);
     mosquitto_disconnect_callback_set(FClient, on_disconnect);
     mosquitto_message_callback_set(FClient, on_message);
-
     mosquitto_subscribe_callback_set(FClient, on_subscribe);
     mosquitto_unsubscribe_callback_set(FClient, on_unsubscribe);
     mosquitto_publish_callback_set(FClient, on_publish);
+    //call back event
+
+    if FDetailLog then
+         mosquitto_log_callback_set(FClient, on_log)
+    else mosquitto_log_callback_set(FClient, nil);
 
     if FUserName <> '' then
       mosquitto_username_pw_set(FClient, PAnsiChar(AnsiString(FUserName)),
@@ -506,9 +686,8 @@ begin
 end;
 
 procedure TMQTTClient.DoThreadWork(const nConfig: PThreadWorkerConfig;
-  const nThread: TThread);
+ const nThread: TThread);
 var nRes: Integer;
-    nBuf: AnsiString;
 begin
   try
     FSyncLock.Enter;
@@ -537,10 +716,11 @@ begin
         ResetAllTopicStatus();
         //set unsubcribe flag
 
-        mosquitto_connect(FClient, PAnsiChar(AnsiString(FServerHost)),
-          FServerPort, FKeepAlive);
+        mosquitto_connect(FClient, PAnsiChar(AnsiString(FClientData.FServerHost)),
+          FClientData.FServerPort, FKeepAlive);
         //conn broker
-      end else
+      end
+      else
       begin
         WriteLog(Format('mosquitto_loop error: %d,%s', [nRes,
           mosquitto_strerror(nRes)]));
@@ -556,8 +736,9 @@ begin
       Exit;
     end;
 
-    nBuf := TStringHelper.Ansi_UTF8(IntToStr(GetTickCount()));
-    mosquitto_publish(FClient, nil, 'N1/AA', Length(nBuf), Pointer(nBuf), Ord(MOSQ_QOS_0), False);
+    if FClientData.FHasNewPublishItem then
+      PublishData(nThread);
+    //xxxxx
   finally
     FSyncLock.Enter;
     try

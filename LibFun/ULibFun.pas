@@ -141,17 +141,17 @@ function GetPinYinOfStr(const nChinese: WideString): string;
 function MirrorStr(const nStr: WideString): WideString;
 //¾µÏñ·´×ªnStr×Ö·û´®
 
-function ANSI_Unicode(const nSrc: AnsiString): WideString;
-function Unicode_ANSI(const nSrc: WideString): AnsiString;
+function AnsiToWide(const nSrc: AnsiString): WideString;
+function WideToAnsi(const nSrc: WideString): AnsiString;
 //ansi - unicode
-function UTF8_Unicode(const nSrc: AnsiString): WideString;
-function Unicode_UTF8(const nSrc: WideString): AnsiString;
+function UTF8ToWide(const nSrc: AnsiString): WideString;
+function WideToUTF8(const nSrc: WideString): AnsiString;
 //utf8 - unicode
-function ANSI_UTF8(const nSrc: AnsiString): AnsiString;
-function UTF8_ANSI(const nSrc: AnsiString): AnsiString;
+function AnsiToUTF8(const nSrc: AnsiString): AnsiString;
+function UTF8ToAnsi(const nSrc: AnsiString): AnsiString;
 //ansi - utf8
-function ConvertStr_S2W(const nSrc: AnsiString; nCodePage: Integer): WideString;
-function ConvertStr_W2S(const nSrc: WideString; nCodePage: Integer): AnsiString;
+function StrMulti2Wide(const nSrc: AnsiString; nCodePage: Integer): WideString;
+function StrWide2Multi(const nSrc: WideString; nCodePage: Integer): AnsiString;
 //single - widestring
 
 //------------------------------------------------------------------------------
@@ -1383,55 +1383,67 @@ end;
 //Date: 2017-11-03
 //Parm: µ¥×Ö·û´®;Ò³Âë
 //Desc: ½«nSrc±àÂëÎªnCodePage¿í×Ö·û´®
-function ConvertStr_S2W(const nSrc: AnsiString; nCodePage: Integer): WideString;
+function StrMulti2Wide(const nSrc: AnsiString; nCodePage: Integer): WideString;
 var nLen: Integer;
 begin
-  nLen := MultiByteToWideChar(nCodePage, 0, PAnsiChar(nSrc), -1, nil, 0);
+  if Length(nSrc) < 1 then
+  begin
+    Result := '';
+    Exit;
+  end;
+
+  nLen := MultiByteToWideChar(nCodePage, 0, PChar(nSrc), -1, nil, 0);
   SetLength(Result, nLen - 1);
-  MultiByteToWideChar(nCodePage, 0, PAnsiChar(nSrc),-1,PWideChar(Result),nLen-1);
+  MultiByteToWideChar(nCodePage, 0, PChar(nSrc), -1, PWideChar(Result), nLen-1);
 end;
 
 //Date: 2017-11-03
 //Parm: ¿í×Ö·û´®;Ò³Âë
 //Desc: ½«nSrc±àÂëÎªnCodePageµ¥×Ö·û´®
-function ConvertStr_W2S(const nSrc: WideString; nCodePage: Integer): AnsiString;
+function StrWide2Multi(const nSrc: WideString; nCodePage: Integer): AnsiString;
 var nLen: Integer;
 begin
+  if Length(nSrc) < 1 then
+  begin
+    Result := '';
+    Exit;
+  end;
+  
   nLen := WideCharToMultiByte(nCodePage, 0, PWideChar(nSrc),-1,nil,0,nil,nil);
   SetLength(Result, nLen - 1);
-  WideCharToMultiByte(nCodePage, 0, PWideChar(nSrc), -1, PAnsiChar(Result),
-                      nLen - 1, nil, nil);
+  WideCharToMultiByte(nCodePage, 0, PWideChar(nSrc), -1, PChar(Result),
+    nLen - 1, nil, nil);
   //change codepage
 end;
 
-function ANSI_Unicode(const nSrc: AnsiString): WideString;
+function AnsiToWide(const nSrc: AnsiString): WideString;
 begin
-  Result := ConvertStr_S2W(nSrc, CP_ACP);
+  Result := StrMulti2Wide(nSrc, CP_ACP);
 end;
 
-function Unicode_ANSI(const nSrc: WideString): AnsiString;
+function WideToAnsi(const nSrc: WideString): AnsiString;
 begin
-  Result := ConvertStr_W2S(nSrc, CP_ACP);
+  Result := StrWide2Multi(nSrc, CP_ACP);
 end;
 
-function UTF8_Unicode(const nSrc: AnsiString): WideString;
+function UTF8ToWide(const nSrc: AnsiString): WideString;
 begin
-  Result := ConvertStr_S2W(nSrc, CP_UTF8);
+  Result := StrMulti2Wide(nSrc, CP_UTF8);
 end;
 
-function Unicode_UTF8(const nSrc: WideString): AnsiString;
+function WideToUTF8(const nSrc: WideString): AnsiString;
 begin
-  Result := ConvertStr_W2S(nSrc, CP_UTF8);
+  Result := StrWide2Multi(nSrc, CP_UTF8);
 end;
 
-function ANSI_UTF8(const nSrc: AnsiString): AnsiString;
+function AnsiToUTF8(const nSrc: AnsiString): AnsiString;
 begin
-  Result := Unicode_UTF8(ANSI_Unicode(nSrc));
+  Result := WideToUTF8(AnsiToWide(nSrc));
 end;
 
-function UTF8_ANSI(const nSrc: AnsiString): AnsiString;
+function UTF8ToAnsi(const nSrc: AnsiString): AnsiString;
 begin
-  Result := Unicode_ANSI(UTF8_Unicode(nSrc));
+  Result := WideToAnsi(UTF8ToWide(nSrc));
 end;
 
 //------------------------------------------------------------------------------ 
