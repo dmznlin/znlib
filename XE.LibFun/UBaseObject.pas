@@ -535,7 +535,7 @@ end;
 
 initialization
   TObjectStatusHelper.shTitle := 85;
-  TObjectStatusHelper.shData  := 32;
+  TObjectStatusHelper.shData  := 42;
 finalization
   //nothing
 end.

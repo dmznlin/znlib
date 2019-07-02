@@ -19,8 +19,9 @@ unit UMosMQTT;
 interface
 
 uses
-  System.Classes, System.SysUtils, System.SyncObjs, Winapi.Windows, UMosquitto,
-  UManagerGroup, UThreadPool, ULibFun, System.AnsiStrings;
+  System.Classes, System.SysUtils, System.SyncObjs, Winapi.Windows, Vcl.PostMsg,
+  System.AnsiStrings, UMosquitto, UManagerGroup, UThreadPool, ULibFun,
+  ULibConst;
 
 type
   PMQTTTopicItem = ^TMQTTTopicItem;
@@ -50,6 +51,7 @@ type
     FClient: TObject;                        //客户端对象
     FServerHost: string;
     FServerPort: Integer;                    //Broker
+    FLastConnecting: Cardinal;               //连接时间
 
     FThreadRunning: Boolean;                 //运行中
     FDisconnecting: Boolean;                 //正在断开
@@ -57,9 +59,27 @@ type
     FHasNewPublishItem: Boolean;             //有待发消息
   end;
 
+  TMQTTEventType = (etConn, etMsg);
+  //事件类型
+
+  PMQTTEventItem = ^TMQTTEventItem;
+  TMQTTEventItem = record
+    FEnabled: Boolean;                       //有效标识
+    FLastUsed: Cardinal;                     //启用时间
+    FEventType: TMQTTEventType;              //类型标识
+
+    FConnected: Boolean;                     //连接状态
+    FTopic: string;                          //主题
+    FPayload: string;                        //数据内容
+  end;
+  TMQTTEventItems = array of TMQTTEventItem;
+
   TMQTTOnConnect = procedure (const nServer: string; const nPort: Integer;
     const nConnected: Boolean);
   TMQTTOnMessage = procedure (const nTopic,nPayload: string);
+  TMQTTOnConnectEvent = procedure (const nServer: string; const nPort: Integer;
+    const nConnected: Boolean) of object;
+  TMQTTOnMessageEvent = procedure (const nTopic,nPayload: string) of object;
 
   TMQTTClient = class(TObject)
   private
@@ -81,13 +101,21 @@ type
     {*明细日志*}
     FSyncLock: TCriticalSection;
     {*同步锁定*}
+    FNowEvent: TMQTTEventItem;
+    FEventData: TMQTTEventItems;
     FOnConnect: TMQTTOnConnect;
     FOnMessage: TMQTTOnMessage;
+    FOnConnectEvent: TMQTTOnConnectEvent;
+    FOnMessageEvent: TMQTTOnMessageEvent;
     {*事件相关*}
   protected
     procedure DoThreadWork(const nConfig: PThreadWorkerConfig;
       const nThread: TThread);
     {*线程业务*}
+    procedure SyncEvent(const nEventData: PMQTTEventItem);
+    procedure SyncMainThread(nSender: TObject; nMsg: Integer;
+      nWParam,nLParam: NativeInt);
+    {*同步事件*}
     function FindTopic(const nTopic: AnsiString): Integer;
     {*检索数据*}
     procedure SubscribeTopics();
@@ -113,10 +141,13 @@ type
     property ServerPort: Integer read FServerPort write FServerPort;
     property UserName: string read FUserName write FUserName;
     property Password: string read FPassword write FPassword;
+    property ClientID: string read FClientID write FClientID;
     property KeepAlive: Integer read FKeepAlive write FKeepAlive;
     property DetailLog: Boolean read FDetailLog write FDetailLog;
     property OnConnect: TMQTTOnConnect read FOnConnect write FOnConnect;
     property OnMessage: TMQTTOnMessage read FOnMessage write FOnMessage;
+    property OnConnectEvent: TMQTTOnConnectEvent read FOnConnectEvent write FOnConnectEvent;
+    property OnMessageEvent: TMQTTOnMessageEvent read FOnMessageEvent write FOnMessageEvent;
     {*属性事件*}
   end;
 
@@ -133,6 +164,7 @@ procedure on_connect(mosq: p_mosquitto; obj: Pointer; rc: Integer); cdecl;
 var nStr: string;
     nClient: TMQTTClient;
     nData: PMQTTClientData;
+    nEvent: TMQTTEventItem;
 begin
   case rc of
     0: nStr := '成功';
@@ -156,6 +188,13 @@ begin
     if Assigned(nClient.FOnConnect) then
       nClient.FOnConnect(nData.FServerHost, nData.FServerPort, True);
     //event
+
+    if Assigned(nClient.FOnConnectEvent) then
+    begin
+      nEvent.FEventType := etConn;
+      nEvent.FConnected := True;
+      nClient.SyncEvent(@nEvent);
+    end;
   end;
 end;
 
@@ -165,6 +204,7 @@ procedure on_disconnect(mosq: p_mosquitto; obj: Pointer; rc: Integer); cdecl;
 var nStr: string;
     nClient: TMQTTClient;
     nData: PMQTTClientData;
+    nEvent: TMQTTEventItem;
 begin
   if rc = 0 then
        nStr := '客户端主动断开'
@@ -183,6 +223,13 @@ begin
     if Assigned(nClient.FOnConnect) then
       nClient.FOnConnect(nData.FServerHost, nData.FServerPort, False);
     //event
+
+    if Assigned(nClient.FOnConnectEvent) then
+    begin
+      nEvent.FEventType := etConn;
+      nEvent.FConnected := False;
+      nClient.SyncEvent(@nEvent);
+    end;
   end;
 end;
 
@@ -262,11 +309,12 @@ procedure on_message(mosq: p_mosquitto; obj: Pointer;
  const msg: p_mosquitto_message); cdecl;
 var nTopic,nPayload: string;
     nClient: TMQTTClient;
+    nEvent: TMQTTEventItem;
 begin
   nClient := PMQTTClientData(obj).FClient as TMQTTClient;
   //client obj
 
-  if Assigned(nClient.FOnMessage) then
+  if Assigned(nClient.FOnMessage) or Assigned(nClient.FOnMessageEvent) then
   begin
     nTopic := UTF8ToUnicodeString(msg.topic);
     nPayload := UTF8ToUnicodeString(PAnsiChar(msg.payload));
@@ -274,6 +322,14 @@ begin
     if Assigned(nClient.FOnMessage) then
       nClient.FOnMessage(nTopic, nPayload);
     //xxxxx
+
+    if Assigned(nClient.FOnMessageEvent) then
+    begin
+      nEvent.FEventType := etMsg;
+      nEvent.FTopic := nTopic;
+      nEvent.FPayload := nPayload;
+      nClient.SyncEvent(@nEvent);
+    end;
   end;
 end;
 
@@ -294,6 +350,7 @@ begin
   FDetailLog := False;
   SetLength(FTopics, 0);
   SetLength(FPublishs, 0);
+  SetLength(FEventData, 0);
   FSyncLock := TCriticalSection.Create;
 
   FClient := nil;
@@ -340,9 +397,10 @@ destructor TMQTTClient.Destroy;
 begin
   Disconnect;
   //clear conn first
-
   mosquitto_lib_cleanup();
+
   FreeAndNil(FSyncLock);
+  SyncPostAbort(Self);
   inherited;
 end;
 
@@ -539,8 +597,8 @@ begin
       //sub done
       Inc(nInt);
 
-      if TDateTimeHelper.GetTickCountDiff(FLastSub, tdNow) < 5 * 1000 then
-        Continue;
+      with TDateTimeHelper do
+        if GetTickCountDiff(FLastSub, tdNow) < 10 * 1000 then Continue;
       FLastSub := GetTickCount();
 
       nRes := mosquitto_subscribe(FClient, @FChannel, PAnsiChar(FTopic), FQos);
@@ -709,6 +767,10 @@ begin
     begin
       if (nRes = MOSQ_ERR_NO_CONN) or (nRes = MOSQ_ERR_CONN_LOST) then
       begin
+        with TDateTimeHelper,FClientData do
+          if GetTickCountDiff(FLastConnecting, tdNow) < 10 * 1000 then Exit;
+        FClientData.FLastConnecting := GetTickCount();
+
         WriteLog(Format('connect remote broker: %d,%s', [nRes,
           mosquitto_strerror(nRes)]));
         //xxxxx
@@ -747,6 +809,106 @@ begin
       FSyncLock.Leave;
     end;
   end;
+end;
+
+//------------------------------------------------------------------------------
+//Date: 2019-07-02
+//Parm: 数据
+//Desc: 将nEventData同步到主线程
+procedure TMQTTClient.SyncEvent(const nEventData: PMQTTEventItem);
+var nIdx,nInt,nOldest: Integer;
+    nOld,nTD: Cardinal;
+begin
+  FSyncLock.Enter;
+  try
+    nInt := -1;
+    nOld := 0;
+    nOldest := -1;
+
+    for nIdx := Low(FEventData) to High(FEventData) do
+    with FEventData[nIdx] do
+    begin
+      if FEnabled then
+      begin
+        nTD := TDateTimeHelper.GetTickCountDiff(FLastUsed);
+        if nTD > nOld then
+        begin
+          nOld := nTD;
+          nOldest := nIdx;
+        end;
+      end else
+      begin
+        nInt := nIdx; //1.优先使用无效项
+        Break;
+      end;
+    end;
+
+    if nInt < 0 then
+    begin
+      nIdx := Length(FEventData);
+      if nIdx < cMessageBufferMax then //2.新建项
+      begin
+        nInt := nIdx;
+        SetLength(FEventData, nInt + 1);
+      end;
+    end;
+
+    if nInt < 0 then
+    begin
+      nInt := nOldest; //3.覆盖旧数据
+      if nInt <> -1 then
+        WriteLog('主线程效率过低,事件数据被覆盖');
+      //xxxxx
+    end;
+
+    if nInt < 0 then Exit; //数据项无效
+    with FEventData[nInt] do
+    begin
+      FEnabled    := True;
+      FLastUsed   := GetTickCount();
+      FEventType  := nEventData.FEventType;
+
+      FConnected  := nEventData.FConnected;
+      FTopic      := nEventData.FTopic;
+      FPayload    := nEventData.FPayload;
+    end;
+  finally
+    FSyncLock.Leave;
+  end;
+
+  SyncPostMessage(SyncMainThread, Self, 0, nInt, nInt);
+  //主进程同步
+end;
+
+//Date: 2019-07-02
+//Desc: 在主线程中同步事件
+procedure TMQTTClient.SyncMainThread(nSender: TObject; nMsg: Integer; nWParam,
+  nLParam: NativeInt);
+begin
+  FSyncLock.Enter;
+  try
+    FNowEvent.FEnabled := False;
+    if (nWParam = nLParam) and
+       (nWParam >= Low(FEventData)) and (nWParam <= High(FEventData)) then
+    begin
+      FNowEvent := FEventData[nWParam];
+      FEventData[nWParam].FEnabled := False;
+    end;
+  finally
+    FSyncLock.Leave;
+  end;
+
+  if not FNowEvent.FEnabled then Exit;
+  //invalid event
+
+  if Assigned(FOnConnectEvent) and (FNowEvent.FEventType = etConn) then
+    FOnConnectEvent(FClientData.FServerHost, FClientData.FServerPort,
+      FNowEvent.FConnected);
+  //xxxxx
+
+  if Assigned(FOnMessageEvent) and (FNowEvent.FEventType = etMsg) then
+    FOnMessageEvent(FNowEvent.FTopic, FNowEvent.FPayload);
+  //xxxxx
 end;
 
 end.

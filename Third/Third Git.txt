@@ -21,3 +21,9 @@ https://github.com/cnpack/cnvcl
 
 *.uniConv: 字符编码库
 https://github.com/d-mozulyov/UniConv.git
+
+*.Modbus library: ModbusTCP库 
+https://github.com/coassoftwaresystems/delphi-modbus.git
+
+*.DEB: An Event Bus framework事件总线框架
+https://github.com/spinettaro/delphi-event-bus.git
