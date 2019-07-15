@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="gb2312"?>
+<!--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+节点: srvconfig
+*.enable: N为禁用;其它启用
+*.server: Server标识
+*.points: 可接入点
+*.groups: 节点分组
+
+节点: points->item
+*.id: 数字(0-9)字母(a-z)自由编号,但不允许重复
+*.name: 与OPC服务器上节点保持一致
+*.default: 默认值
+
+节点: groups->group
+*.active: N为禁用;其它启用
+*.deadband: 死区
+*.updaterate: 刷新频率,单位秒
+*.points: 接入点列表
+*.options: 可选参数
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-->
+<srvconfig>
+  <enable>Y</enable>
+  <server id="srv" name="OPC_Server">Kepware.KEPServerEX.V6</server>
+  <points>
+    <item id="121" name="通道 1.设备 1.标记 1" default="1" />
+    <item id="122" name="通道 1.设备 1.标记 2" default="2" />
+    <item id="123" name="模拟器示例.函数.Random1" default="3" />
+    <item id="124" name="模拟器示例.函数.User1" default="4" />
+    <item id="125" name="模拟器示例.函数.User3" default="5" />
+  </points>
+  <groups>
+    <group id="G1" name="Test1">
+      <active>Y</active>
+      <deadband>0</deadband>
+      <updaterate>1000</updaterate>
+      <points>121,122,124</points>
+      <options>Key1=Value1</options>
+    </group>
+    <group id="G2" name="Test2">
+      <active>Y</active>
+      <deadband>0</deadband>
+      <updaterate>1200</updaterate>
+      <points>121,123,125</points>
+      <options>Key1=Value1</options>
+    </group>
+  </groups>
+</srvconfig>

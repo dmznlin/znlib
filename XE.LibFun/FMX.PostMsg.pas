@@ -204,12 +204,12 @@ var nIdx: Integer;
 begin
   while True do
   begin
+    if not FHasMessage then Exit;
+    //no message
+    FNowItem.FEnabled := False;
+
     TMonitor.Enter(Self);
     try
-      if not FHasMessage then Exit;
-      //no message
-      FNowItem.FEnabled := False;
-
       for nIdx := Low(FItems) to High(FItems) do
       with FItems[nIdx] do
       begin
