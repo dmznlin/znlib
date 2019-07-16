@@ -30,6 +30,17 @@ const
 
 type
   POPCGroup = ^TOPCGroup;
+  TOPCWantMode = (wmNone, wmSync, wmASync);
+  //值写入方式: 无,同步,异步
+
+  TOPCWantData = record
+    FGroup      : string;                    //分组名称
+    FItem       : string;                    //项目名称
+    FValue      : OleVariant;                //待写入值
+    FMode       : TOPCWantMode;              //写入方式
+  end;
+  TOPCWantDataItems = array of TOPCWantData;
+
   POPCItem = ^TOPCItem;
   TOPCItem = record
     FID         : string;                    //节点编号
@@ -40,6 +51,7 @@ type
 
     FValue      : string;                    //当前字符值
     FValueWant  : OleVariant;                //待设置值
+    FWantMode   : TOPCWantMode;              //写入方式
     FLastUpdate : Cardinal;                  //当前值更新时间
   end;
   TOPCItems = array of TOPCItem;
@@ -73,6 +85,7 @@ type
   TOPCManagerStatus = record
     FConnected  : Boolean;                   //已连接
     FLastConn   : Cardinal;                  //上次连接
+    FNewWant    : Boolean;                   //有待写入值
   end;
 
   TOPCManager = class;
@@ -80,14 +93,17 @@ type
   private
     FOwner: TOPCManager;
     //拥有者
+    FASyncList: TdOPCItemList;
+    //异步列表
     FWaiter: TWaitObject;
     //等待对象
   protected
-    procedure DoExecute;
     procedure Execute; override;
     //执行线程
     procedure DoConnectServer();
     //连接服务
+    procedure DoWriteOPCData();
+    //执行写入
   public
     constructor Create(AOwner: TOPCManager);
     destructor Destroy; override;
@@ -122,7 +138,8 @@ type
     //事件相关
   protected
     function FindPoint(const nID: string): Integer;
-    function FindGroup(const nID: string): Integer;
+    function FindGroup(const nGroup: string; const nPoint: string = '';
+      const nPIdx: PInteger = nil): Integer;
     //检索数据
     function ReadData(const nGroup,nPoint: string; var nSData: string;
       var nOData: OleVariant; const nReadStr: Boolean;
@@ -143,11 +160,17 @@ type
     procedure StartService;
     procedure StopService;
     //启停服务
-    function Read(const nPoint: string; var nData: string;
+    function ReadOPC(const nPoint: string; var nData: string;
       const nTimeout: Integer = -1; const nGroup: string = ''): Boolean; overload;
-    function Read(const nPoint: string; var nData: OleVariant;
+    function ReadOPC(const nPoint: string; const nTimeout: Integer = -1;
+      const nGroup: string = ''): string; overload;
+    function ReadOPC(const nPoint: string; var nData: OleVariant;
       const nTimeout: Integer = -1; const nGroup: string = ''): Boolean; overload;
-    //读写数据
+    //读取数据
+    procedure WriteOPC(const nPoint,nData: string; const nGroup: string = '';
+      const nMode: TOPCWantMode = wmSync); overload;
+    procedure WriteOPC(const nData: TOPCWantDataItems); overload;
+    //写入数据
     property OnDataChange: TOPCOnDataChange read FOnDataChange write FOnDataChange;
     property OnDataChangeProc: TOPCOnDataChangeProc read FOnDataChangeProc
      write FOnDataChangeProc;
@@ -239,18 +262,52 @@ begin
 end;
 
 //Date: 2019-07-15
-//Parm: 组标识
+//Parm: 组标识;接入点;接入点索引
 //Desc: 检索标识为nID的组,返回索引
-function TOPCManager.FindGroup(const nID: string): Integer;
-var nIdx: Integer;
+function TOPCManager.FindGroup(const nGroup,nPoint: string;
+ const nPIdx: PInteger): Integer;
+var i,nIdx: Integer;
 begin
   Result := -1;
+  if Assigned(nPIdx) then
+    nPIdx^ := -1;
+  //default
 
-  for nIdx:=Low(FGroups) to High(FGroups) do
-  if CompareText(nID, FGroups[nIdx].FID) = 0 then
+  if nGroup <> '' then
   begin
-    Result := nIdx;
-    Break;
+    for nIdx:=Low(FGroups) to High(FGroups) do
+    if CompareText(nGroup, FGroups[nIdx].FID) = 0 then
+    begin
+      Result := nIdx;
+      Break;
+    end;
+  end;
+
+  if nPoint <> '' then
+  begin
+    if Result < 0 then
+    begin
+      for nIdx:=Low(FGroups) to High(FGroups) do
+       for i:=Low(FGroups[nIdx].FItems) to High(FGroups[nIdx].FItems) do
+        if CompareText(nPoint, FGroups[nIdx].FItems[i].FID) = 0 then
+        begin
+          Result := nIdx;
+          if Assigned(nPIdx) then
+            nPIdx^ := i;
+          Break;
+        end;
+      //使用接入点检索
+    end else
+
+    if Assigned(nPIdx) then
+    begin
+      for i:=Low(FGroups[Result].FItems) to High(FGroups[Result].FItems) do
+      if CompareText(nPoint, FGroups[Result].FItems[i].FID) = 0 then
+      begin
+        nPIdx^ := i; //检索接入点索引
+        Break;
+      end;
+    end;
   end;
 end;
 
@@ -354,8 +411,9 @@ end;
 //Date: 2019-07-15
 //Parm: 组标识;接入点;字符数据;复合变量;读取字符数据;数据超时
 //Desc: 读取nGroup.nPoint的数据
-function TOPCManager.ReadData(const nGroup,nPoint: string; var nSData: string;
-  var nOData: OleVariant; const nReadStr: Boolean; const nTimeout: Integer): Boolean;
+function TOPCManager.ReadData(const nGroup,nPoint: string;
+  var nSData: string; var nOData: OleVariant;
+  const nReadStr: Boolean; const nTimeout: Integer): Boolean;
 var nIdx,nInt: Integer;
 begin
   FSyncLock.Enter;
@@ -387,15 +445,11 @@ begin
       Exit; //接入点最新数据
     end;
 
-    nInt := FindGroup(nGroup);
-    if nInt < 0 then Exit;
+    nIdx := FindGroup(nGroup, nPoint, @nInt);
+    if (nIdx < 0) or (nInt < 0) then Exit;
 
-    for nIdx:=Low(FGroups[nInt].FItems) to High(FGroups[nInt].FItems) do
-    with FGroups[nInt].FItems[nIdx] do
+    with FGroups[nIdx].FItems[nInt] do
     begin
-      if CompareText(nPoint, FID) <> 0 then Continue;
-      //not match
-
       if (nTimeout > 0) and (GetTickCountDiff(FLastUpdate) >= nTimeout) then
       begin
         if (not Assigned(FOPCItem)) or (FOPCItem.Quality <> OPC_QUALITY_GOOD) then
@@ -403,33 +457,90 @@ begin
         //更新超时,且连接质量不是良好
       end;
 
-       Result := nReadStr or Assigned(FOPCItem);
-       if Result then
-       begin
-         if nReadStr then
-              nSData := FValue
-         else nOData := FOPCItem.Value;
-       end;
-
-      Break; //指定组下的接入点数据
+      Result := nReadStr or Assigned(FOPCItem);
+      if Result then
+      begin
+        if nReadStr then
+             nSData := FValue
+        else nOData := FOPCItem.Value;
+      end;
     end;                           
   finally
     FSyncLock.Leave;
   end;   
 end;
 
-function TOPCManager.Read(const nPoint: string; var nData: string;
+function TOPCManager.ReadOPC(const nPoint: string; var nData: string;
   const nTimeout: Integer; const nGroup: string): Boolean;
 var nOle: OleVariant;
 begin
   Result := ReadData(nGroup, nPoint, nData, nOle, True, nTimeout);
 end;
 
-function TOPCManager.Read(const nPoint: string; var nData: OleVariant;
+function TOPCManager.ReadOPC(const nPoint: string; const nTimeout: Integer;
+  const nGroup: string): string;
+var nOle: OleVariant;
+begin
+  if not ReadData(nGroup, nPoint, Result, nOle, True, nTimeout) then
+    Result := '';
+  //xxxxx
+end;
+
+function TOPCManager.ReadOPC(const nPoint: string; var nData: OleVariant;
   const nTimeout: Integer; const nGroup: string): Boolean;
 var nStr: string;
 begin
   Result := ReadData(nGroup, nPoint, nStr, nData, False, nTimeout);
+end;
+
+//Date: 2019-07-16
+//Parm: 待写入项
+//Desc: 将nData写入OPC
+procedure TOPCManager.WriteOPC(const nData: TOPCWantDataItems);
+var i,nIdx,nInt: Integer;
+begin
+  FSyncLock.Enter;
+  try
+    for nIdx:=Low(nData) to High(nData) do
+    begin
+      nInt := FindGroup(nData[nIdx].FGroup, nData[nIdx].FItem, @i);
+      if (nInt < 0) or (i < 0) then Continue;
+
+      with FGroups[nInt].FItems[i] do
+      begin
+        FValueWant := nData[nIdx].FValue;
+        FWantMode  := nData[nIdx].FMode;
+      end;
+    end;
+
+    FStatus.FNewWant := True;
+    //write flag
+  finally
+    FSyncLock.Leave;
+  end;
+
+  if Assigned(FThread) then
+    FThread.Wakeup;
+  //write quick
+end;
+
+//Date: 2019-07-16
+//Parm: 接入点;数据;分组;模式
+//Desc: 将nData写入nGroup.nPoint
+procedure TOPCManager.WriteOPC(const nPoint, nData, nGroup: string;
+  const nMode: TOPCWantMode);
+var nItems: TOPCWantDataItems;
+begin
+  SetLength(nItems, 1);
+  with nItems[0] do
+  begin
+    FGroup := nGroup;
+    FItem  := nPoint;
+    FValue := nData;
+    FMode  := nMode;
+  end;
+
+  WriteOPC(nItems);
 end;
 
 //Date: 2019-07-12
@@ -470,6 +581,7 @@ begin
         FName       := nNode.AttributeByName['name'];
         FValue      := nNode.AttributeByName['default'];
 
+        FWantMode   := wmNone;
         FOPCItem    := nil;
         FLastUpdate := 0;
       end;
@@ -536,12 +648,14 @@ begin
   FreeOnTerminate := False;
 
   FOwner := AOwner;
+  FASyncList := TdOPCItemList.Create;
   FWaiter := TWaitObject.Create;
   FWaiter.Interval := 300;
 end;
 
 destructor TOPCThread.Destroy;
 begin
+  FASyncList.Free;
   FWaiter.Free;
   inherited;
 end;
@@ -567,11 +681,15 @@ begin
     FWaiter.EnterWait;
     if Terminated then Break;
 
-    with FOwner do
-    try
-      DoExecute();
-    finally
-      //ClearServiceDataList(False, soThread);
+    with FOwner.FStatus do
+    begin
+      if (not FConnected) and (GetTickCountDiff(FLastConn) > 3 * 1000) then
+        Synchronize(DoConnectServer);
+      //reconn
+
+      if FNewWant and FConnected then
+        Synchronize(DoWriteOPCData);
+      //xxxxx
     end;
   except
     on nErr: Exception do
@@ -580,14 +698,6 @@ begin
       //log any error
     end;
   end;
-end;
-
-procedure TOPCThread.DoExecute;
-begin
-  with FOwner.FStatus do
-   if (not FConnected) and (GetTickCountDiff(FLastConn) > 3 * 1000) then
-    Synchronize(DoConnectServer);
-  //reconn
 end;
 
 //Date: 2019-07-12
@@ -679,6 +789,55 @@ begin
         end;
       end;
     end;
+  finally
+    FSyncLock.Leave;
+  end;
+end;
+
+//Date: 2019-07-16
+//Desc: 执行数据写入
+procedure TOPCThread.DoWriteOPCData;
+var i,nIdx: Integer;
+begin
+  with FOwner do
+  try
+    FSyncLock.Enter;
+    //lock first
+    
+    for nIdx:=Low(FGroups) to High(FGroups) do
+    try
+      FASyncList.Clear;
+      //default
+
+      for i:=Low(FGroups[nIdx].FItems) to High(FGroups[nIdx].FItems) do
+      with FGroups[nIdx].FItems[i] do
+      begin
+        if FWantMode = wmSync then
+          FOPCItem.WriteSync(FValueWant);
+        //xxxxx
+
+        if FWantMode = wmASync then
+        begin
+          FOPCItem.WantValue := FValueWant;
+          FASyncList.Add(FOPCItem);
+        end;
+
+        FWantMode := wmNone;
+        //erase flag
+      end;
+
+      if FASyncList.Count > 0 then
+        FGroups[nIdx].FGroupItem.AsyncWrite(FASyncList);
+      //xxxxx
+    except
+      on nErr: Exception do
+      begin
+        WriteLog(Format('WriteOPCData Error: %s', [nErr.Message]));
+      end;
+    end;
+
+    FStatus.FNewWant := False;
+    //erase write flag
   finally
     FSyncLock.Leave;
   end;
