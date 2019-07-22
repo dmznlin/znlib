@@ -53,6 +53,7 @@ type
     FValueWant  : OleVariant;                //待设置值
     FWantMode   : TOPCWantMode;              //写入方式
     FLastUpdate : Cardinal;                  //当前值更新时间
+    FEventFlag  : Boolean;                   //更新后需触发事件
   end;
   TOPCItems = array of TOPCItem;
 
@@ -113,6 +114,9 @@ type
     //启停线程
   end;
 
+  TOPCEventMode = (emMain, emThread);
+  //事件运行: 主线程,子线程
+  
   TOPCOnDataChange = procedure (const nServer: POPCServer) of object;
   TOPCOnDataChangeProc = procedure (const nServer: POPCServer);
   TOPCOnItemChange = procedure (const nItem: POPCItem) of object;
@@ -131,6 +135,7 @@ type
     //工作状态
     FSyncLock: TCriticalSection;
     //同步锁定
+    FEventMode: TOPCEventMode;
     FOnDataChange: TOPCOnDataChange;
     FOnDataChangeProc: TOPCOnDataChangeProc;
     FOnItemChange: TOPCOnItemChange;
@@ -171,6 +176,7 @@ type
       const nMode: TOPCWantMode = wmSync); overload;
     procedure WriteOPC(const nData: TOPCWantDataItems); overload;
     //写入数据
+    property EventMode: TOPCEventMode read FEventMode write FEventMode;
     property OnDataChange: TOPCOnDataChange read FOnDataChange write FOnDataChange;
     property OnDataChangeProc: TOPCOnDataChangeProc read FOnDataChangeProc
      write FOnDataChangeProc;
@@ -194,6 +200,8 @@ end;
 constructor TOPCManager.Create;
 begin
   FThread := nil;
+  FEventMode := emMain;
+  
   FServer.FEnabled := False;
   FServer.FServerObj := nil;
   SetLength(FServer.FItems, 0);
@@ -367,7 +375,9 @@ begin
           FOPCItem    := nItem.FOPCItem;
           FValue      := nItem.FValue;
           FGroup      := nItem.FGroup;
+
           FLastUpdate := FServer.FLastUpdate;
+          FEventFlag  := True;
         end;
       finally
         FSyncLock.Leave;
@@ -390,6 +400,7 @@ begin
     end;
   end;
 
+  if FEventMode = emMain then
   try
     if Assigned(FOnDataChange) then
       FOnDataChange(@FServer);
@@ -398,6 +409,11 @@ begin
     if Assigned(FOnDataChangeProc) then
       FOnDataChangeProc(@FServer);
     //xxxxx
+
+    for nIdx:=Low(FServer.FItems) to High(FServer.FItems) do
+     if FServer.FItems[nIdx].FEventFlag then
+      FServer.FItems[nIdx].FEventFlag := False;
+    //reset event flag
   except
     on nErr: Exception do
     begin
@@ -584,6 +600,7 @@ begin
         FWantMode   := wmNone;
         FOPCItem    := nil;
         FLastUpdate := 0;
+        FEventFlag  := False; 
       end;
 
       Inc(nIdx);
@@ -675,6 +692,7 @@ begin
 end;
 
 procedure TOPCThread.Execute;
+var nIdx,nInt: Integer;
 begin
   while not Terminated do
   try
@@ -691,10 +709,47 @@ begin
         Synchronize(DoWriteOPCData);
       //xxxxx
     end;
+
+    with FOwner do
+    begin
+      if (FEventMode = emThread) and
+         (Assigned(FOnDataChange) or Assigned(FOnDataChangeProc)) then
+      try
+        FSyncLock.Enter;
+        //lock first
+        nInt := -1;
+
+        for nIdx:=Low(FServer.FItems) to High(FServer.FItems) do
+        if FServer.FItems[nIdx].FEventFlag then
+        begin
+          if Assigned(FOnDataChange) then
+            FOnDataChange(@FServer);
+          //xxxxx
+
+          if Assigned(FOnDataChangeProc) then
+            FOnDataChangeProc(@FServer);
+          //xxxxx
+
+          nInt := nIdx;
+          //event item
+          Break;
+        end;
+
+        if nInt >= 0 then
+        begin
+          for nIdx:=Low(FServer.FItems) to High(FServer.FItems) do
+           if FServer.FItems[nIdx].FEventFlag then
+            FServer.FItems[nIdx].FEventFlag := False;
+          //reset event flag
+        end;
+      finally
+        FSyncLock.Leave;
+      end;
+    end;
   except
     on nErr: Exception do
     begin
-      WriteLog(Format('OPC-Service Error: %s %s', [nErr.Message, nerr.ClassName]));
+      WriteLog(Format('OPC-Service Error: %s', [nErr.Message]));
       //log any error
     end;
   end;
@@ -832,7 +887,7 @@ begin
     except
       on nErr: Exception do
       begin
-        WriteLog(Format('WriteOPCData Error: %s', [nErr.Message]));
+        WriteLog('WriteOPCData Error: ' + nErr.Message);
       end;
     end;
 

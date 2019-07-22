@@ -182,6 +182,8 @@ type
       const nEventEx: TOnTunnelDataEventEx = nil): Boolean;
     procedure ClosePort(const nTunnel: string);
     //起停端口
+    procedure SetData(const nTunnel: string; const nValue: Double);
+    //手动数据
     function GetPort(const nID: string): PPTPortItem;
     function GetCamera(const nID: string): PPTCameraItem;
     function GetTunnel(const nID: string): PPTTunnelItem;
@@ -1075,7 +1077,7 @@ begin
       nPort := nTunnel.FPort;
       try
         if not (Assigned(FOnTunnelData) or (Assigned(nPort.FEventTunnel) and
-            Assigned(nPort.FEventTunnel.FOnData))) then Exit;
+                Assigned(nPort.FEventTunnel.FOnData))) then Exit;
         //无接收事件
 
         nPort.FCOMBuff := BytesToString(AData, Indy8BitEncoding);
@@ -1110,6 +1112,50 @@ begin
         begin
           WriteLog(E.Message);
         end;
+      end;
+    end;
+  finally
+    FSyncLock.Leave;
+  end;
+end;
+
+//Date: 2019-07-16
+//Parm: 通道;值
+//Desc: 设置nTunnel的值
+procedure TPoundTunnelManager.SetData(const nTunnel: string; const nValue: Double);
+var nPT: PPTTunnelItem;
+begin
+  FSyncLock.Enter;
+  try
+    nPT := GetTunnel(nTunnel);
+    if Assigned(nPT) then
+    try
+      if not (Assigned(FOnTunnelData) or (Assigned(nPT.FPort.FEventTunnel) and
+              Assigned(nPT.FPort.FEventTunnel.FOnData))) then Exit;
+      //no event
+
+      nPT.FPort.FCOMValue := nValue;
+      nPT.FPort.FCOMData := '';
+      //clear data
+
+      if Assigned(FOnTunnelData) then
+        FOnTunnelData(nValue, nPT.FPort);
+      //xxxxx
+
+      if Assigned(nPT.FPort.FEventTunnel) then
+      begin
+        if Assigned(nPT.FPort.FEventTunnel.FOnData) then
+           nPT.FPort.FEventTunnel.FOnData(nValue);
+        //xxxxx
+                
+        if Assigned(nPT.FPort.FEventTunnel.FOnDataEx) then
+           nPT.FPort.FEventTunnel.FOnDataEx(nValue, nPT.FPort);
+        //xxxxx
+      end;
+    except
+      on nErr: Exception do
+      begin
+        WriteLog('SetData Error: ' + nErr.Message);
       end;
     end;
   finally
