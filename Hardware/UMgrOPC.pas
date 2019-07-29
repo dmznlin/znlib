@@ -53,7 +53,11 @@ type
     FValueWant  : OleVariant;                //待设置值
     FWantMode   : TOPCWantMode;              //写入方式
     FLastUpdate : Cardinal;                  //当前值更新时间
-    FEventFlag  : Boolean;                   //更新后需触发事件
+
+    FFlagEvent  : Boolean;                   //更新后需触发事件
+    FFlagStr    : string;                    //字符标识
+    FFlagInt    : Integer;                   //整型标识
+    FFlagPtr    : Pointer;                   //指针标识
   end;
   TOPCItems = array of TOPCItem;
 
@@ -87,6 +91,7 @@ type
     FConnected  : Boolean;                   //已连接
     FLastConn   : Cardinal;                  //上次连接
     FNewWant    : Boolean;                   //有待写入值
+    FEventTimer : Cardinal;                  //事件触发计时
   end;
 
   TOPCManager = class;
@@ -114,8 +119,8 @@ type
     //启停线程
   end;
 
-  TOPCEventMode = (emMain, emThread);
-  //事件运行: 主线程,子线程
+  TOPCEventMode = (emMain, emThread, emThreadTime);
+  //事件运行: 主线程,子线程,子线程定时
   
   TOPCOnDataChange = procedure (const nServer: POPCServer) of object;
   TOPCOnDataChangeProc = procedure (const nServer: POPCServer);
@@ -136,6 +141,7 @@ type
     FSyncLock: TCriticalSection;
     //同步锁定
     FEventMode: TOPCEventMode;
+    FEventInterval: Cardinal;
     FOnDataChange: TOPCOnDataChange;
     FOnDataChangeProc: TOPCOnDataChangeProc;
     FOnItemChange: TOPCOnItemChange;
@@ -177,6 +183,7 @@ type
     procedure WriteOPC(const nData: TOPCWantDataItems); overload;
     //写入数据
     property EventMode: TOPCEventMode read FEventMode write FEventMode;
+    property EventInterval: Cardinal read FEventInterval write FEventInterval;
     property OnDataChange: TOPCOnDataChange read FOnDataChange write FOnDataChange;
     property OnDataChangeProc: TOPCOnDataChangeProc read FOnDataChangeProc
      write FOnDataChangeProc;
@@ -201,6 +208,7 @@ constructor TOPCManager.Create;
 begin
   FThread := nil;
   FEventMode := emMain;
+  FEventInterval := 1000;
   
   FServer.FEnabled := False;
   FServer.FServerObj := nil;
@@ -377,7 +385,7 @@ begin
           FGroup      := nItem.FGroup;
 
           FLastUpdate := FServer.FLastUpdate;
-          FEventFlag  := True;
+          FFlagEvent  := True;
         end;
       finally
         FSyncLock.Leave;
@@ -411,8 +419,8 @@ begin
     //xxxxx
 
     for nIdx:=Low(FServer.FItems) to High(FServer.FItems) do
-     if FServer.FItems[nIdx].FEventFlag then
-      FServer.FItems[nIdx].FEventFlag := False;
+     if FServer.FItems[nIdx].FFlagEvent then
+      FServer.FItems[nIdx].FFlagEvent := False;
     //reset event flag
   except
     on nErr: Exception do
@@ -600,7 +608,11 @@ begin
         FWantMode   := wmNone;
         FOPCItem    := nil;
         FLastUpdate := 0;
-        FEventFlag  := False; 
+
+        FFlagEvent  := False;
+        FFlagStr    := '';
+        FFlagInt    := -1;
+        FFlagPtr    := nil;
       end;
 
       Inc(nIdx);
@@ -712,6 +724,25 @@ begin
 
     with FOwner do
     begin
+      if (FEventMode = emThreadTime) and
+         (Assigned(FOnDataChange) or Assigned(FOnDataChangeProc)) and
+         (GetTickCountDiff(FStatus.FEventTimer, tdNow) >= FEventInterval) then
+      try
+        FStatus.FEventTimer := GetTickCount();
+        FSyncLock.Enter;
+        //lock first
+
+        if Assigned(FOnDataChange) then
+          FOnDataChange(@FServer);
+        //xxxxx
+
+        if Assigned(FOnDataChangeProc) then
+          FOnDataChangeProc(@FServer);
+        //xxxxx
+      finally
+        FSyncLock.Leave;
+      end;
+
       if (FEventMode = emThread) and
          (Assigned(FOnDataChange) or Assigned(FOnDataChangeProc)) then
       try
@@ -720,7 +751,7 @@ begin
         nInt := -1;
 
         for nIdx:=Low(FServer.FItems) to High(FServer.FItems) do
-        if FServer.FItems[nIdx].FEventFlag then
+        if FServer.FItems[nIdx].FFlagEvent then
         begin
           if Assigned(FOnDataChange) then
             FOnDataChange(@FServer);
@@ -738,8 +769,8 @@ begin
         if nInt >= 0 then
         begin
           for nIdx:=Low(FServer.FItems) to High(FServer.FItems) do
-           if FServer.FItems[nIdx].FEventFlag then
-            FServer.FItems[nIdx].FEventFlag := False;
+           if FServer.FItems[nIdx].FFlagEvent then
+            FServer.FItems[nIdx].FFlagEvent := False;
           //reset event flag
         end;
       finally

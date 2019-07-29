@@ -65,8 +65,8 @@ type
     FPicQuality: Integer;            //图像质量
   end;
 
-  TPTConnType = (ctTCP, ctUDP, ctCOM);
-  //链路类型: 网络,串口
+  TPTConnType = (ctTCP, ctUDP, ctCOM, ctUser);
+  //链路类型: 网络,串口,手动输入
          
   TPTPortItem = record
     FID: string;                     //标识
@@ -372,6 +372,7 @@ begin
 
         if CompareText('tcp', nStr) = 0 then nPort.FConn := ctTCP else
         if CompareText('udp', nStr) = 0 then nPort.FConn := ctUDP else
+        if CompareText('user', nStr) = 0 then nPort.FConn := ctUser else
            nPort.FConn := ctCOM;
         //xxxxxx
 

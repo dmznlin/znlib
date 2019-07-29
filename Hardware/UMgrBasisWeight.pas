@@ -124,7 +124,8 @@ type
      const nPValue: Double = 0; const nParams: string = '');
     procedure StopWeight(const nTunnel: string);
     //起停称重
-    procedure SetTruckPValue(const nTunnel: string; const nPValue: Double);
+    procedure SetTruckPValue(const nTunnel: string; const nPValue: Double;
+     const nZeroValid: Boolean = False);
     //设置皮重
     procedure SetParam(const nTunnel,nName,nValue: string;
      const nFix: Boolean = False);
@@ -311,9 +312,9 @@ begin
   FSyncLock.Enter;
   try
     nPT := FTunnels[nIdx];
-    Result := (nPT.FBill <> '') and
-              (nPT.FValue > 0) and (nPT.FValue > nPT.FValHas - nPT.FValTruckP);
-    //未装完
+    Result := (nPT.FBill <> '') and (nPT.FValue > 0) and
+              (nPT.FValue > nPT.FValHas-nPT.FValTruckP) and (nPT.FValTunnel>0);
+    //未装完,地磅未清零
 
     if Assigned(nData) then
       nData^ := nPT^;
@@ -379,21 +380,21 @@ begin
 end;
 
 //Date: 2019-03-19
-//Parm: 通道号;皮重
+//Parm: 通道号;皮重;零值有效
 //Desc: 设置nTunnel通道的皮重值
 procedure TBasisWeightManager.SetTruckPValue(const nTunnel: string;
-  const nPValue: Double);
+  const nPValue: Double; const nZeroValid: Boolean);
 var nIdx: Integer;
     nPT: PBWTunnel;
 begin
-  if nPValue <= 0 then Exit;
+  if (nPValue < 0) or ((nPValue = 0) and (not nZeroValid)) then Exit;
   nIdx := FindTunnel(nTunnel, True);
   if nIdx < 0 then Exit;
 
   FSyncLock.Enter;
   try
     nPT := FTunnels[nIdx];
-    if (nPT.FBill <> '') and (nPT.FValue > 0) then
+    if (nPT.FBill <> '') and ((nPT.FValue > 0) or nZeroValid) then
     begin
       nPT.FValTruckP := nPValue;
       nPT.FWeightMax := nPT.FValue + nPValue + nPT.FValAdjust - nPT.FValKPFix -
