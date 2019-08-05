@@ -84,6 +84,7 @@ type
     FSendItem,FRecvItem: TRFIDReaderCmd;
     //发送&返回指令
   protected
+    procedure SyncDoCard;
     procedure DoExecute;
     procedure Execute; override;
     //执行线程
@@ -104,6 +105,9 @@ type
   end;
 
   //----------------------------------------------------------------------------
+  THYReaderEventMode = (emThread, emMain);
+  //事件模式: 线程;主进程
+
   THYReaderProc = procedure (const nItem: PHYReaderItem);
   THYReaderEvent = procedure (const nItem: PHYReaderItem) of Object;
 
@@ -130,6 +134,7 @@ type
     //读卡对象
     FOnProc: THYReaderProc;
     FOnEvent: THYReaderEvent;
+    FEventMode: THYReaderEventMode;
     //事件定义
   protected
     procedure ClearBuffer(const nFree: Boolean);
@@ -157,6 +162,7 @@ type
     property Readers: TList read FReaders;
     property OnCardProc: THYReaderProc read FOnProc write FOnProc;
     property OnCardEvent: THYReaderEvent read FOnEvent write FOnEvent;
+    property EventMode: THYReaderEventMode read FEventMode write FEventMode;
     //属性相关
   end;
 
@@ -175,6 +181,7 @@ constructor THYReaderManager.Create;
 var nIdx: Integer;
 begin
   FEnable := False;
+  FEventMode := emThread;
   FThreadCount := 1;
   FMonitorCount := 1;  
 
@@ -1041,15 +1048,35 @@ begin
     finally
       FOwner.FSyncLock.Leave;
     end;
-    
-    if Assigned(FOwner.FOnProc) then
-      FOwner.FOnProc(nReader);
-    //xxxxx
 
-    if Assigned(FOwner.FOnEvent) then
-      FOwner.FOnEvent(nReader);
-    //xxxxx
+    if FOwner.EventMode = emThread then
+    begin
+      if Assigned(FOwner.FOnProc) then
+        FOwner.FOnProc(nReader);
+      //xxxxx
+
+      if Assigned(FOwner.FOnEvent) then
+        FOwner.FOnEvent(nReader);
+      //xxxxx
+    end else
+
+    if FOwner.FEventMode = emMain then
+    begin
+      Synchronize(SyncDoCard);
+      //run in main
+    end;
   end;
+end;
+
+procedure THYRFIDReader.SyncDoCard;
+begin
+  if Assigned(FOwner.FOnProc) then
+    FOwner.FOnProc(FActiveReader);
+  //xxxxx
+
+  if Assigned(FOwner.FOnEvent) then
+    FOwner.FOnEvent(FActiveReader);
+  //xxxxx
 end;
 
 //Date: 2016-11-23

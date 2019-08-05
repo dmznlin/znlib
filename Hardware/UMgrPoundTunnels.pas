@@ -1124,7 +1124,8 @@ end;
 //Parm: 通道;值
 //Desc: 设置nTunnel的值
 procedure TPoundTunnelManager.SetData(const nTunnel: string; const nValue: Double);
-var nPT: PPTTunnelItem;
+var nVal: Double;
+    nPT: PPTTunnelItem;
 begin
   FSyncLock.Enter;
   try
@@ -1135,22 +1136,26 @@ begin
               Assigned(nPT.FPort.FEventTunnel.FOnData))) then Exit;
       //no event
 
-      nPT.FPort.FCOMValue := nValue;
+      nVal := nValue * nPT.FPort.FDataEnlarge;
+      nVal := Float2Float(nVal, nPT.FPort.FDataPrecision, False);
+      //adjust precision
+
+      nPT.FPort.FCOMValue := nVal;
       nPT.FPort.FCOMData := '';
       //clear data
 
       if Assigned(FOnTunnelData) then
-        FOnTunnelData(nValue, nPT.FPort);
+        FOnTunnelData(nVal, nPT.FPort);
       //xxxxx
 
       if Assigned(nPT.FPort.FEventTunnel) then
       begin
         if Assigned(nPT.FPort.FEventTunnel.FOnData) then
-           nPT.FPort.FEventTunnel.FOnData(nValue);
+           nPT.FPort.FEventTunnel.FOnData(nVal);
         //xxxxx
                 
         if Assigned(nPT.FPort.FEventTunnel.FOnDataEx) then
-           nPT.FPort.FEventTunnel.FOnDataEx(nValue, nPT.FPort);
+           nPT.FPort.FEventTunnel.FOnDataEx(nVal, nPT.FPort);
         //xxxxx
       end;
     except
