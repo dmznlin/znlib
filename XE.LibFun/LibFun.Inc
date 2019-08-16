@@ -70,6 +70,15 @@
   //启用插件管理器
 {$ENDIF}
 
+{$IFDEF MQTTMessager}
+  {$IFDEF MSWin}
+    {$DEFINE LogManager}
+    //启用日志管理器
+    {$DEFINE EnableMQTTMessager}
+    //启用MQTT消息中心
+  {$ENDIF}
+{$ENDIF}
+
 {$IFDEF LogManager}
   {$DEFINE ThreadPool}
   //启用线程池

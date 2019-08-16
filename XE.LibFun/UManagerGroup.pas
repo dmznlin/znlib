@@ -15,6 +15,7 @@ uses
   {$IFDEF EnableTaskMonitor}UTaskMonitor,{$ENDIF}
   {$IFDEF EnableThreadPool}UThreadPool,{$ENDIF}
   {$IFDEF EnableChannelManager}UMgrChannel,{$ENDIF}
+  {$IFDEF EnableMQTTMessager}UMosMessager,{$ENDIF}
   {$IFDEF EnableParamManager}UParameters,{$ENDIF} ULibFun;
 
 type
@@ -54,6 +55,8 @@ type
     //任务管理器
     {$IFDEF EnableThreadPool}FThreadPool: TThreadPoolManager;{$ENDIF}
     //线程管理器
+    {$IFDEF EnableMQTTMessager}FMessageCenter: TMQTTMessager;{$ENDIF}
+    //消息管理器
     {$IFDEF EnableParamManager}FParamsManager: TParameterManager;{$ENDIF}
     //参数管理器
     {$IFDEF EnableChannelManager}FChannelManager: TChannelManager;{$ENDIF}

@@ -20,8 +20,7 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.SyncObjs, Winapi.Windows, Vcl.PostMsg,
-  System.AnsiStrings, UMosquitto, UManagerGroup, UThreadPool, ULibFun,
-  ULibConst;
+  System.AnsiStrings, UMosquitto, UThreadPool;
 
 type
   PMQTTTopicItem = ^TMQTTTopicItem;
@@ -77,9 +76,13 @@ type
   TMQTTOnConnect = procedure (const nServer: string; const nPort: Integer;
     const nConnected: Boolean);
   TMQTTOnMessage = procedure (const nTopic,nPayload: string);
+  //过程声明
+
+  TMQTTEventMode = (emMain, emThread);
   TMQTTOnConnectEvent = procedure (const nServer: string; const nPort: Integer;
     const nConnected: Boolean) of object;
   TMQTTOnMessageEvent = procedure (const nTopic,nPayload: string) of object;
+  //事件声明
 
   TMQTTClient = class(TObject)
   private
@@ -105,6 +108,8 @@ type
     FEventData: TMQTTEventItems;
     FOnConnect: TMQTTOnConnect;
     FOnMessage: TMQTTOnMessage;
+    {*过程调用*}
+    FEventMode: TMQTTEventMode;
     FOnConnectEvent: TMQTTOnConnectEvent;
     FOnMessageEvent: TMQTTOnMessageEvent;
     {*事件相关*}
@@ -146,12 +151,16 @@ type
     property DetailLog: Boolean read FDetailLog write FDetailLog;
     property OnConnect: TMQTTOnConnect read FOnConnect write FOnConnect;
     property OnMessage: TMQTTOnMessage read FOnMessage write FOnMessage;
+    property EventMode: TMQTTEventMode read FEventMode write FEventMode;
     property OnConnectEvent: TMQTTOnConnectEvent read FOnConnectEvent write FOnConnectEvent;
     property OnMessageEvent: TMQTTOnMessageEvent read FOnMessageEvent write FOnMessageEvent;
     {*属性事件*}
   end;
 
 implementation
+
+uses
+  UManagerGroup, ULibFun, ULibConst;
 
 procedure WriteLog(const nEvent: string);
 begin
@@ -191,9 +200,18 @@ begin
 
     if Assigned(nClient.FOnConnectEvent) then
     begin
-      nEvent.FEventType := etConn;
-      nEvent.FConnected := True;
-      nClient.SyncEvent(@nEvent);
+      case nClient.FEventMode of
+       emMain: //main thread event
+        begin
+          nEvent.FEventType := etConn;
+          nEvent.FConnected := True;
+          nClient.SyncEvent(@nEvent);
+        end;
+       emThread: //thread event
+        begin
+          nClient.FOnConnectEvent(nData.FServerHost, nData.FServerPort, True);
+        end;
+      end;
     end;
   end;
 end;
@@ -226,9 +244,18 @@ begin
 
     if Assigned(nClient.FOnConnectEvent) then
     begin
-      nEvent.FEventType := etConn;
-      nEvent.FConnected := False;
-      nClient.SyncEvent(@nEvent);
+      case nClient.FEventMode of
+       emMain: //main thread event
+        begin
+          nEvent.FEventType := etConn;
+          nEvent.FConnected := False;
+          nClient.SyncEvent(@nEvent);
+        end;
+       emThread: //thread event
+        begin
+          nClient.FOnConnectEvent(nData.FServerHost, nData.FServerPort, False);
+        end;
+      end;
     end;
   end;
 end;
@@ -325,10 +352,19 @@ begin
 
     if Assigned(nClient.FOnMessageEvent) then
     begin
-      nEvent.FEventType := etMsg;
-      nEvent.FTopic := nTopic;
-      nEvent.FPayload := nPayload;
-      nClient.SyncEvent(@nEvent);
+      case nClient.FEventMode of
+       emMain: //main thread event
+        begin
+          nEvent.FEventType := etMsg;
+          nEvent.FTopic := nTopic;
+          nEvent.FPayload := nPayload;
+          nClient.SyncEvent(@nEvent);
+        end;
+       emThread: //thread event
+        begin
+          nClient.FOnMessageEvent(nTopic, nPayload);
+        end;
+      end;
     end;
   end;
 end;
@@ -348,6 +384,8 @@ begin
 
   FKeepAlive := 600;
   FDetailLog := False;
+  FEventMode := emMain;
+
   SetLength(FTopics, 0);
   SetLength(FPublishs, 0);
   SetLength(FEventData, 0);

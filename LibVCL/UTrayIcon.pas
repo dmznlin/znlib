@@ -53,6 +53,7 @@ type
     FAnimate:         Boolean;
     FAppRestore:      TTrayIconMessage;
     FPopupMenuShow:   TTrayIconMessage;
+    FTaskbarCreated:  Cardinal;
     FApplicationHook: TWindowHook;
 
     FOnMinimize:      TNotifyEvent;
@@ -158,7 +159,8 @@ end;
 constructor TTrayIcon.Create(AOwner: TComponent);
 begin
   inherited Create(AOwner);
-
+  FTaskbarCreated := 0;
+  
   FIcon  := TIcon.Create();
   FTimer := TTimer.Create(Self);
 
@@ -246,6 +248,10 @@ begin
   begin
     if FVisible then
     begin
+      if FTaskbarCreated = 0 then
+        FTaskbarCreated := RegisterWindowMessage('TaskbarCreated');
+      //hook taskbar
+
       if not Shell_NotifyIcon(NIM_ADD, @FData) then
         raise EOutOfResources.Create(sCannotCreate);
       Hide := True;
@@ -339,6 +345,16 @@ var
   APoint: TPoint;
   Shift:  TShiftState;
 begin
+  if (FTaskbarCreated > 0) and (Message.Msg = FTaskbarCreated) then
+  try
+    Restore;
+    if Visible then
+      SetVisible(True);
+    //rebuild icon
+  except
+    //ignor any error
+  end;
+
   case Message.Msg of
     WM_QUERYENDSESSION: Message.Result := 1;
     WM_ENDSESSION:      EndSession;
