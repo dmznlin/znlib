@@ -177,7 +177,10 @@ begin
 
   if not (csDesigning in ComponentState) then
   begin
+    FTaskbarCreated := RegisterWindowMessage('TaskbarCreated');
+    //hook taskbar
     FillChar(FData, SizeOf(TNotifyIconData), 0);
+    
     with FData do
     begin
       cbSize := SizeOf(TNotifyIconData);
@@ -244,14 +247,11 @@ procedure TTrayIcon.SetVisible(Value: Boolean);
 begin
   FVisible := Value;
 
-  if not (csDesigning in ComponentState) then
+  if (not (csDesigning in ComponentState)) and
+     (FindWindow('Shell_TrayWnd', nil) > 0) then
   begin
     if FVisible then
     begin
-      if FTaskbarCreated = 0 then
-        FTaskbarCreated := RegisterWindowMessage('TaskbarCreated');
-      //hook taskbar
-
       if not Shell_NotifyIcon(NIM_ADD, @FData) then
         raise EOutOfResources.Create(sCannotCreate);
       Hide := True;
