@@ -593,8 +593,7 @@ end;
 function TPoundTunnelManager.ActivePort(const nTunnel: string;
   const nEvent: TOnTunnelDataEvent; const nOpenPort: Boolean;
   const nEventEx: TOnTunnelDataEventEx): Boolean;
-var nStr: string;
-    nPT: PPTTunnelItem;
+var nPT: PPTTunnelItem;
 begin
   Result := False;
   //xxxxx
@@ -625,19 +624,6 @@ begin
           ReadTimeout := 5 * 1000;
           ConnectTimeout := 5 * 1000;
         end;
-      end;
-
-      with nPT.FPort.FClient do
-      try
-        if not Connected then
-          Connect;
-        //尝试连接
-      except
-        nStr := '连接地磅[ %s:%d ]失败';
-        nStr := Format(nStr, [nPT.FPort.FHostIP, nPT.FPort.FHostPort]);
-
-        raise Exception.Create(nStr);
-        Exit;
       end;
 
       if not Assigned(FConnector) then
@@ -1039,9 +1025,15 @@ begin
       Synchronize(DoSyncEvent);
     Result := True;
   except
-    FOwner.DisconnectClient(FActiveClient);
-    //关闭链路
-    raise;
+    on nErr: Exception do
+    begin
+      WriteLog(Format('地磅[ %s ]读数失败,描述: %s', [FActiveTunnel.FID,
+        nErr.Message]));
+      //xxxxx
+
+      FOwner.DisconnectClient(FActiveClient);
+      //关闭链路
+    end;
   end;
 end;
 
