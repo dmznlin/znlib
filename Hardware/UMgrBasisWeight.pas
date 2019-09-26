@@ -117,6 +117,8 @@ type
     procedure StartService;
     procedure StopService;
     //起停服务
+    function IsBillBusy(const nBill: string;
+     const nData: PBWTunnel = nil): Boolean;
     function IsTunnelBusy(const nTunnel: string;
      const nData: PBWTunnel = nil): Boolean;
     //通道忙
@@ -295,6 +297,35 @@ begin
   if (Result < 0) and nLoged then
     WriteLog(Format('通道[ %s ]不存在.', [nTunnel]));
   //xxxxx
+end;
+
+//Date: 2019-09-12
+//Parm: 单据号
+//Desc: 若nBill存在则视为未装完
+function TBasisWeightManager.IsBillBusy(const nBill: string;
+  const nData: PBWTunnel): Boolean;
+var nIdx: Integer;
+    nPT: PBWTunnel;
+begin
+  Result := False;
+  //init
+  if nBill = '' then Exit;
+
+  FSyncLock.Enter;
+  try
+    for nIdx:=FTunnels.Count-1 downto 0 do
+    begin
+      nPT := FTunnels[nIdx];
+      if CompareText(nBill, nPT.FBill) <> 0 then Continue;
+      
+      Result := True;
+      if Assigned(nData) then
+        nData^ := nPT^;
+      Exit;
+    end;
+  finally
+    FSyncLock.Leave;
+  end;   
 end;
 
 //Date: 2018-12-27

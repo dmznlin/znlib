@@ -562,6 +562,9 @@ begin
     if not FClient.IOHandler.InputBufferIsEmpty then
       FClient.IOHandler.InputBuffer.ExtractToBytes(nBuf);
     //read data
+
+    CloseConnection();
+    //disconn for reconn
   except
     on nE: Exception do
     begin
