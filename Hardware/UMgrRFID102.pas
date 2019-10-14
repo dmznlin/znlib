@@ -258,7 +258,7 @@ begin
   for nIdx:=Low(FThreads) to High(FThreads) do
   begin
     if (nNum >= FThreadCount) or
-       (nNum > FReaders.Count) then Exit;
+       (nNum >= FReaders.Count) then Exit;
     //线程不能超过预定值,或不多余读头个数
 
     if nNum < FMonitorCount then
