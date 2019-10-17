@@ -134,6 +134,9 @@ var
 
 implementation
 
+const
+  cTruckNull = '0'; //空车牌
+
 procedure WriteLog(const nEvent: string);
 begin
   gSysLoger.AddLog(TTruckManager, 'AliVision', nEvent);
@@ -234,18 +237,29 @@ begin
 
       if Assigned(nNode) then //车牌识别
       begin
-        FCameras[nCamera].FTruck := UpperCase(Trim(nNode.AsString));
-        FCameras[nCamera].FTruckUpdate := GetTickCount();
+        nStr := UpperCase(Trim(nNode.AsString));
+        if nStr <> cTruckNull then
+        begin
+          FCameras[nCamera].FTruck := nStr;
+          FCameras[nCamera].FTruckUpdate := GetTickCount();
+
+          //WriteLog('Truck: ' + nStr);
+        end;
       end;
 
       nNode := nRoot.O['pd_result'];
       if Assigned(nNode) then //过磅检测
       begin
-        if nNode.AsInteger = 0 then
-             FCameras[nCamera].FState := tsNormal  //正常
-        else FCameras[nCamera].FState := tsOut;    //越界
+        nStr := nNode.AsString;
+        if nStr = '0' then                        //无车
+             FCameras[nCamera].FState := tsNone
+        else if nStr = '1' then
+             FCameras[nCamera].FState := tsNormal //有车且不越界
+        else FCameras[nCamera].FState := tsOut;   //越界
 
         FCameras[nCamera].FStateUpdate := GetTickCount();
+
+        //WriteLog('Status: ' + nStr);
       end;
     finally
       FSyncLock.Leave;
@@ -313,7 +327,7 @@ begin
         FName := AttributeByName['name'];
         SetLength(FCameras, 0);
 
-        FTruck := '';
+        FTruck := cTruckNull;
         FTruckPrev := '';
         FLastIn := 0;
         FLastOut := 0;
@@ -434,31 +448,26 @@ begin
             FCameras[nIdx].FState := tsNone;
           //更新超时视为无效
 
-          if FCameras[nIdx].FState <> tsNormal then
+          if FCameras[nIdx].FState = tsOut then
           begin
             nTruckNormal := False;
             //未完全上磅
+            FStateNew := FStateNew + [tsOut] - [tsNormal];
+            //车辆越界
           end;
 
-          if (FCameras[nIdx].FState = tsNormal) or
+          if (FCameras[nIdx].FState <> tsNone) or
              (GetTickCountDiff(FCameras[nIdx].FTruckUpdate) < FStatusUpdateInerval) then
           begin
             nTruckExists := True;
             //车辆在磅上,或车牌号刚更新
-          end;
-
-          if (FCameras[nIdx].FState = tsOut) or
-             (GetTickCountDiff(FCameras[nIdx].FStateUpdate) > FStatusUpdateInerval) then
-          begin
-            FStateNew := FStateNew + [tsOut] - [tsNormal];
-            //车辆越界
           end;
         end;
 
         if not nTruckExists then
         begin
           FTruckPrev := FTruck;
-          FTruck := '';
+          FTruck := cTruckNull;
           FLastOut := GetTickCount();
           FStateNew := FStateNew + [tsLeave];
         end;
@@ -471,7 +480,7 @@ begin
 
         for nIdx:=Low(FCameras) to High(FCameras) do
         begin
-          if (FCameras[nIdx].FTruck <> '') and
+          if (FCameras[nIdx].FTruck <> cTruckNull) and
              (GetTickCountDiff(FCameras[nIdx].FTruckUpdate) < FStatusUpdateInerval) then
           begin
             if FCameras[nIdx].FTruck <> FTruck then
@@ -521,7 +530,7 @@ begin
     if (tsNewOn in FStateNew) and (FStateNow <> tsNewOn) then //新车上磅
     begin
       FStateNow := tsNewOn;
-      if FTruck <> '' then
+      if FTruck <> cTruckNull then
         DoEvent;
       //xxxxx
     end;
@@ -529,7 +538,7 @@ begin
     if (tsLeave in FStateNew) and (FStateNow <> tsLeave) then //车辆离磅
     begin
       FStateNow := tsLeave;
-      if FTruckPrev <> '' then
+      if FTruckPrev <> cTruckNull then
         DoEvent;
       //xxxxx
     end;
@@ -537,7 +546,7 @@ begin
     if (tsNormal in FStateNew) and (FStateNow <> tsNormal) then //完全上磅
     begin
       FStateNow := tsNormal;
-      if FTruck <> '' then
+      if FTruck <> cTruckNull then
         DoEvent;
       //xxxxx
     end;
@@ -545,7 +554,7 @@ begin
     if (tsOut in FStateNew) and (FStateNow <> tsOut) then //未完全上磅
     begin
       FStateNow := tsOut;
-      if FTruck <> '' then
+      if FTruck <> cTruckNull then
         DoEvent;
       //xxxxx
     end;

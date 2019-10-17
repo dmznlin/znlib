@@ -462,7 +462,9 @@ begin
     end else
     begin
       FBase.FID := 1;
-      Inc(FBase.FLoop);
+      if FBase.FLoop < High(Cardinal) then
+           Inc(FBase.FLoop)
+      else FBase.FLoop := 1;
     end;
 
     Result := FBase;
