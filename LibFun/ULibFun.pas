@@ -1591,9 +1591,9 @@ begin
     Result := GetTickCount();
     //default
 
-    if Result >= nCount then
-         Result := Result - nCount
-    else Result := Result + High(Cardinal) - nCount + 1;
+    if (Result < nCount) and (nCount - Result > High(Cardinal) * 0.3) then
+         Result := Result + High(Cardinal) - nCount + 1
+    else Result := Result - nCount;
   end;
 end;
 

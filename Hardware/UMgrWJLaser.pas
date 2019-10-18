@@ -12,14 +12,15 @@ uses
   SyncObjs, UWaitItem, ULibFun, USysLoger;
 
 const
-  cLaserDataMax             = 720 * 2;
+  cLaserSinglePrecision     = 720;
+  cLaserDoublePrecision     = 720 * 2;
   //雷达可扫描180度,分辨率为0.5时,共360个点,每个点2个字节,共计720个字节.
   //当分辨率为0.25时,数据为720 x 2
-  cLaserDataParse           = Trunc(cLaserDataMax / 2);
 
-  cWJLaserMaxThread         = 10;
-  //最大线程数
+  cLaserDataParse           = cLaserSinglePrecision;
+  //解析后两个点为一个距离数据,使用0.25度扫描时,最多720组距离数据   
 
+  cWJLaserMaxThread         = 10;             //最大线程数
   cWJLaser_Wait_Short       = 2 * 1000;
   cWJLaser_Wait_Long        = 5 * 1000;       //线程等待
 
@@ -36,7 +37,7 @@ type
     FCommand     : Byte;                      //主指令号
     FSubCmd      : Byte;                      //子指令号
     FParams      : array[0..1] of Byte;       //命令参数
-    FData        : array[0..cLaserDataMax-1] of Byte;//数据
+    FData        : array[0..cLaserDoublePrecision-1] of Byte;//数据
     FVerify      : array[0..1] of Byte;       //校验值
     FFrameEnd    : array[0..1] of Byte;       //帧尾
   end;
@@ -70,10 +71,11 @@ type
     FHighBackLaser    : Cardinal;             //激光器正下方车尾方向高度
     FOffsetFrontLaser : Integer;              //激光器正下方向车头偏移量
     FOffsetBackLaser  : Integer;              //激光器正下方向车尾偏移量
+    FTruckExists      : Boolean;              //是否有车辆
     FTruckHighMin     : Cardinal;             //车厢高度(最小)
     FTruckHigh        : Cardinal;             //当前车高
     FTruckLong        : Cardinal;             //当前车长
-    
+
     FClient      : TIdTCPClient;              //通信链路
     FSerial      : Word;                      //帧序列号
     FData        : TWJLaserData;              //原始数据
@@ -434,7 +436,7 @@ end;
 //Desc: 扫描nActive激光器,若可用存入FActiveHost.
 procedure TWJLaserReader.ScanActiveHost(const nActive: Boolean);
 var nIdx: Integer;
-    nReader: PWJLaserHost;
+    nHost: PWJLaserHost;
 begin
   if nActive then //扫描活动
   with FOwner do
@@ -454,13 +456,13 @@ begin
         //扫描一轮,无效退出
       end;
 
-      nReader := FLaserHosts[FLaserActive];
+      nHost := FLaserHosts[FLaserActive];
       Inc(FLaserActive);
-      if nReader.FLocked or (not nReader.FEnable) then Continue;
+      if nHost.FLocked or (not nHost.FEnable) then Continue;
 
-      if nReader.FLastActive > 0 then 
+      if GetTickCountDiff(nHost.FLastActive, tdZero) >= cWJLaser_Wait_Short then
       begin
-        FActiveHost := nReader;
+        FActiveHost := nHost;
         FActiveHost.FLocked := True;
         Break;
       end;
@@ -484,13 +486,13 @@ begin
         //扫描一轮,无效退出
       end;
 
-      nReader := FLaserHosts[FLaserIndex];
+      nHost := FLaserHosts[FLaserIndex];
       Inc(FLaserIndex);
-      if nReader.FLocked or (not nReader.FEnable) then Continue;
+      if nHost.FLocked or (not nHost.FEnable) then Continue;
 
-      if nReader.FLastActive = 0 then 
+      if nHost.FLastActive = 0 then
       begin
-        FActiveHost := nReader;
+        FActiveHost := nHost;
         FActiveHost.FLocked := True;
         Break;
       end;
@@ -569,16 +571,17 @@ begin
     begin
       ParseLaserData(FActiveHost);
       //解析数据
-      
-      if FThreadType = ttActive then
-        FWaiter.Interval := cWJLaser_Wait_Short;
-      FActiveHost.FLastActive := GetTickCount;
-    end else
-    begin
-      if (FActiveHost.FLastActive > 0) and
-         (GetTickCountDiff(FActiveHost.FLastActive) >= 5 * 1000) then
-        FActiveHost.FLastActive := 0;
-      //未检测到有效车辆,自动转为不活动
+
+      if FActiveHost.FTruckExists then
+      begin
+        if FThreadType = ttActive then
+          FWaiter.Interval := cWJLaser_Wait_Short;
+        FActiveHost.FLastActive := GetTickCount;
+      end else
+      begin
+        FActiveHost.FLastActive := GetTickCount() + 5 * 1000;
+        //未检测到有效车辆,减低扫描频率
+      end;
     end;
   except
     on E:Exception do
@@ -586,7 +589,7 @@ begin
       FActiveHost.FLastActive := 0;
       //置为不活动
 
-      WriteLog(Format('Reader:[ %s:%d ] Msg: %s', [FActiveHost.FHost,
+      WriteLog(Format('Laser:[ %s:%d ] Msg: %s', [FActiveHost.FHost,
         FActiveHost.FPort, E.Message]));
       //xxxxx
 
@@ -775,20 +778,21 @@ end;
 
 //Date: 2019-10-14
 //Parm: 激光器
-//Desc: 解析nHost的FData数据
+//Desc: 解析nHost的FData点数据为距离数据,单位毫米
 procedure TWJLaserReader.ParseLaserData(const nHost: PWJLaserHost);
-var nIdx,nInt: Integer;
+var nIdx,nInt,nInt90: Integer;
     nDPrecision: Boolean;
 begin
   with FOwner, nHost.FData do
   try
     FSyncLock.Enter;
     nIdx := MakeWord(FLength[0], FLength[1]);
-    nDPrecision := nIdx > 1000;
-    //依据数据长度判定激光器扫描精度(单精度0.5度,双精度0.25度)
+    nDPrecision := nIdx > cLaserDoublePrecision;
+    //依据数据长度判定激光器扫描精度(单精度720点,双精度720*2点)
 
     nIdx := 0;
     nInt := 0;
+    nInt90 := -1;
     //init
 
     while True do
@@ -806,6 +810,13 @@ begin
         if nHost.FHighLaser >= Fy then
              FHigh := nHost.FHighLaser - Fy
         else FHigh := 0;
+
+        if FAngle = 90 then //激光器正下方高度
+        begin
+          nInt90 := nInt;
+          nHost.FHighUnderLaser := FHigh;
+          nHost.FTruckExists := FHigh > 0;
+        end;
       end;
 
       Inc(nIdx, 2);
@@ -813,7 +824,7 @@ begin
 
       if nDPrecision then
       begin
-        if nInt >= 720 then //双精度720个点值
+        if nInt >= cLaserDataParse then //双精度720个点值
         begin
           if nInt < cLaserDataParse then
             nHost.FDataParse[nInt].FAngle := -1;
@@ -821,7 +832,7 @@ begin
         end;
       end else
       begin
-        if nInt >= 360 then //单精度360个点值
+        if nInt >= cLaserDataParse / 2 then //单精度360个点值
         begin
           if nInt < cLaserDataParse then
             nHost.FDataParse[nInt].FAngle := -1;
@@ -829,9 +840,56 @@ begin
         end;
       end;
     end;
+
+    if (nInt90 < 0) or (not nHost.FTruckExists) then Exit;
+    //数据错误或无车,不予解析
+
+    nInt := nHost.FHighLaser;
+    for nIdx:=nInt90 downto 0 do
+    with nHost.FDataParse[nIdx] do
+    begin
+      if Fx >= nHost.FOffsetFrontLaser then Break;
+      //向车头方向偏移指定距离
+
+      if FHigh < nInt then
+      begin
+        nInt := FHigh;
+        if FHigh = 0 then Break;
+      end;
+    end;
+
+    if nInt > 0 then
+         nHost.FHighFrontLaser := nInt
+    else nHost.FHighFrontLaser := 0;
+    //向车头方向偏移一段距离的最低高度
+
+    nInt := nHost.FHighLaser;
+    for nIdx:=nInt90 to cLaserDataParse do
+    with nHost.FDataParse[nIdx] do
+    begin
+      if (FAngle < 0) or (Fx >= nHost.FOffsetBackLaser) then Break;
+      //无效数据 或 向车尾方向偏移指定距离
+
+      if FHigh < nInt then
+      begin
+        nInt := FHigh;
+        if FHigh = 0 then Break;
+      end;
+    end;
+
+    if nInt > 0 then
+         nHost.FHighBackLaser := nInt
+    else nHost.FHighBackLaser := 0;
+    //向车尾方向偏移一段距离的最低高度
   finally
     FSyncLock.Leave;
   end;
+
+  {$IFDEF DEBUG}
+  WriteLog(Format('车头:%d,%d 车尾:%d,%d 正下:%d,%d', [nHost.FOffsetFrontLaser,
+    nHost.FHighFrontLaser, nHost.FOffsetBackLaser, nHost.FHighBackLaser,
+    nHost.FHighLaser, nHost.FHighUnderLaser]));
+  {$ENDIF}
 end;
 
 initialization
