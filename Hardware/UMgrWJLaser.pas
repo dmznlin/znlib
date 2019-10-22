@@ -48,10 +48,11 @@ const
 type
   TWJLaserMatrix = record
     FAngle       : Single;                    //角度
-    FDistance    : Word;                      //直线距离
-    Fx           : Word;                      //水平距离
-    Fy           : Word;                      //垂直距离
-    FHigh        : Word;                      //离地距离
+    FDistance    : Integer;                   //直线距离
+    Fx           : Integer;                   //水平距离
+    Fy           : Integer;                   //垂直距离
+    FHigh        : Integer;                   //离地距离
+    FHighSame    : Integer;                   //同高点数
   end;
 
   PWJLaserHost = ^TWJLaserHost;
@@ -65,19 +66,23 @@ type
     FLocked      : Boolean;                   //是否锁定
     FLastActive  : Cardinal;                  //上次活动
 
-    FHighLaser        : Cardinal;             //激光器距离地面(安装)高度
-    FHighUnderLaser   : Cardinal;             //激光器正下方高度
-    FHighFrontLaser   : Cardinal;             //激光器正下方车头方向高度
-    FHighBackLaser    : Cardinal;             //激光器正下方车尾方向高度
+    FHighLaser        : Integer;              //激光器距离地面(安装)高度
+    FHighUnderLaser   : Integer;              //激光器正下方高度
+    FHighFrontLaser   : Integer;              //激光器正下方车头方向高度
+    FHighBackLaser    : Integer;              //激光器正下方车尾方向高度
     FOffsetFrontLaser : Integer;              //激光器正下方向车头偏移量
     FOffsetBackLaser  : Integer;              //激光器正下方向车尾偏移量
-    FTruckExists      : Boolean;              //是否有车辆
-    FTruckHighMin     : Cardinal;             //车厢高度(最小)
-    FTruckHigh        : Cardinal;             //当前车高
-    FTruckLong        : Cardinal;             //当前车长
+    FOffsetFloat      : Integer;              //车厢平整度
+
+    FTruckExists : Boolean;                   //是否有车辆
+    FTruckMinHigh: Integer;                   //车厢最小高度
+    FTruckMinLong: Integer;                   //车厢最小长度
+    FTruckHigh   : Integer;                   //当前车厢高度
+    FTruckLong   : Integer;                   //当前车厢长度
 
     FClient      : TIdTCPClient;              //通信链路
     FSerial      : Word;                      //帧序列号
+    FDPrecision  : Boolean;                   //数据是否双精度
     FData        : TWJLaserData;              //原始数据
     FDataParse   : array[0..cLaserDataParse-1] of TWJLaserMatrix; //解析后数据
     FOptions     : TStrings;                  //附加选项
@@ -112,6 +117,9 @@ type
     //发送指令
     procedure ParseLaserData(const nHost: PWJLaserHost);
     //解析数据
+    procedure DoOwnerEvent;
+    procedure DoEvent;
+    //执行事件
   public
     constructor Create(AOwner: TWJLaserManager; AType: TWJLaserThreadType);
     destructor Destroy; override;
@@ -124,8 +132,8 @@ type
   TWJLaserEventMode = (emThread, emMain);
   //事件模式: 线程;主进程
 
-  TWJLaserProc = procedure (const nItem: PWJLaserHost);
-  TWJLaserEvent = procedure (const nItem: PWJLaserHost) of Object;
+  TWJLaserProc = procedure (const nLaser: PWJLaserHost);
+  TWJLaserEvent = procedure (const nLaser: PWJLaserHost) of object;
 
   TWJLaserManager = class(TObject)
   private
@@ -153,7 +161,7 @@ type
     procedure CloseHost(const nHost: PWJLaserHost);
     //关闭读头
     function FindHost(const nHost: string): Integer;
-    //检索读头
+    //检索激光器
   public
     constructor Create;
     destructor Destroy; override;
@@ -187,7 +195,7 @@ begin
   FEnable := False;
   FEventMode := emThread;
   FThreadCount := 1;
-  FMonitorCount := 1;  
+  FMonitorCount := 1;
 
   for nIdx:=Low(FThreads) to High(FThreads) do
     FThreads[nIdx] := nil;
@@ -371,14 +379,19 @@ begin
         FLastActive := GetTickCount;
 
         FID := AttributeByName['id'];
+        FName := AttributeByName['name'];
         FHost := NodeByNameR('ip').ValueAsString;
         FPort := NodeByNameR('port').ValueAsInteger;
         FEnable := NodeByNameR('enable').ValueAsString <> 'N';
 
         FTunnel := NodeByNameR('tunnel').ValueAsString;
         FHighLaser := NodeByNameR('high').ValueAsInteger;
+        FTruckMinHigh := NodeByNameR('minTruckHigh').ValueAsInteger;
+        FTruckMinLong := NodeByNameR('minTruckLong').ValueAsInteger;
+
         FOffsetFrontLaser := NodeByNameR('offsetFront').ValueAsInteger;
         FOffsetBackLaser := NodeByNameR('offsetBack').ValueAsInteger;
+        FOffsetFloat := NodeByNameR('offsetFloat').ValueAsInteger;
 
         FClient := TIdTCPClient.Create;
         with FClient do
@@ -386,7 +399,7 @@ begin
           Host := FHost;
           Port := FPort;
           ReadTimeout := 3 * 1000;
-          ConnectTimeout := 3 * 1000;   
+          ConnectTimeout := 3 * 1000;
         end;
 
         nTmp := FindNode('options');
@@ -429,6 +442,36 @@ begin
 
   WaitFor;
   Free;
+end;
+
+procedure TWJLaserReader.Execute;
+begin
+  InitSingleRequst;
+  //初始化指令
+
+  while not Terminated do
+  try
+    FWaiter.EnterWait;
+    if Terminated then Exit;
+
+    FActiveHost := nil;
+    try
+      DoExecute;
+    finally
+      if Assigned(FActiveHost) then
+      begin
+        FOwner.FSyncLock.Enter;
+        FActiveHost.FLocked := False;
+        FOwner.FSyncLock.Leave;
+      end;
+    end;
+  except
+    on E: Exception do
+    begin
+      WriteLog(E.Message);
+      Sleep(500);
+    end;
+  end;
 end;
 
 //Date: 2019-10-09
@@ -496,36 +539,6 @@ begin
         FActiveHost.FLocked := True;
         Break;
       end;
-    end;
-  end;
-end;
-
-procedure TWJLaserReader.Execute;
-begin
-  InitSingleRequst;
-  //初始化指令
-  
-  while not Terminated do
-  try
-    FWaiter.EnterWait;
-    if Terminated then Exit;
-
-    FActiveHost := nil;
-    try
-      DoExecute;
-    finally
-      if Assigned(FActiveHost) then
-      begin
-        FOwner.FSyncLock.Enter;
-        FActiveHost.FLocked := False;
-        FOwner.FSyncLock.Leave;
-      end;
-    end;
-  except
-    on E: Exception do
-    begin
-      WriteLog(E.Message);
-      Sleep(500);
     end;
   end;
 end;
@@ -780,32 +793,39 @@ end;
 //Parm: 激光器
 //Desc: 解析nHost的FData点数据为距离数据,单位毫米
 procedure TWJLaserReader.ParseLaserData(const nHost: PWJLaserHost);
-var nIdx,nInt,nInt90: Integer;
-    nDPrecision: Boolean;
+var nIdx,nInt,nBase,nMax,nIdx90: Integer;
 begin
-  with FOwner, nHost.FData do
+  with FOwner do
   try
     FSyncLock.Enter;
-    nIdx := MakeWord(FLength[0], FLength[1]);
-    nDPrecision := nIdx > cLaserDoublePrecision;
+    with nHost.FData do
+      nIdx := MakeWord(FLength[0], FLength[1]);
+    nHost.FDPrecision := nIdx > cLaserDoublePrecision;
     //依据数据长度判定激光器扫描精度(单精度720点,双精度720*2点)
+
+    nMax := 0;
+    nBase := 0;
+    nIdx90 := -1;
 
     nIdx := 0;
     nInt := 0;
-    nInt90 := -1;
     //init
 
     while True do
     begin
       with nHost.FDataParse[nInt] do
       begin
-        if nDPrecision then
+        if nHost.FDPrecision then
              FAngle := nInt * 0.25
         else FAngle := nInt * 0.5;
 
-        FDistance := MakeWord(FData[nIdx], FData[nIdx + 1]);
-        Fx := Trunc(FDistance * Cos(FAngle * Pi / 180));
+        with nHost.FData do
+          FDistance := MakeWord(FData[nIdx], FData[nIdx + 1]);
+        //xxxxx
+
+        Fx := Trunc(FDistance * Cos(FAngle * Pi / 180)) * (-1); //小于90度为负
         Fy := Trunc(FDistance * Sin(FAngle * Pi / 180));
+        FHighSame := 0;
 
         if nHost.FHighLaser >= Fy then
              FHigh := nHost.FHighLaser - Fy
@@ -813,16 +833,34 @@ begin
 
         if FAngle = 90 then //激光器正下方高度
         begin
-          nInt90 := nInt;
+          nIdx90 := nInt;
           nHost.FHighUnderLaser := FHigh;
           nHost.FTruckExists := FHigh > 0;
+        end;
+
+        if FHigh > 0 then
+        begin
+          if Abs(FHigh - nHost.FDataParse[nBase].FHigh) < nHost.FOffsetFloat then
+          begin
+            Inc(nHost.FDataParse[nBase].FHighSame);
+            //统计计数
+          end else
+          begin
+            if nHost.FDataParse[nBase].FHighSame > nHost.FDataParse[nMax].FHighSame then
+              nMax := nBase;
+            nBase := nInt;
+          end; //统计相同高度值最多的项
+        end else
+        begin
+          nBase := nInt;
+          //地面不予统计
         end;
       end;
 
       Inc(nIdx, 2);
       Inc(nInt);
 
-      if nDPrecision then
+      if nHost.FDPrecision then
       begin
         if nInt >= cLaserDataParse then //双精度720个点值
         begin
@@ -841,11 +879,59 @@ begin
       end;
     end;
 
-    if (nInt90 < 0) or (not nHost.FTruckExists) then Exit;
-    //数据错误或无车,不予解析
+    //--------------------------------------------------------------------------
+    if (nIdx90 < 0) or (not nHost.FTruckExists) then
+    begin
+      nHost.FTruckExists := False;
+      nHost.FTruckHigh := 0;
+      nHost.FTruckLong := 0;
+
+      DoEvent;
+      Exit;
+    end; //数据错误或无车,不予解析
+
+    if nHost.FDataParse[nMax].FHighSame > 0 then
+    begin
+      with nHost.FDataParse[nMax] do
+        nInt := Abs(nHost.FDataParse[nMax + FHighSame].Fx - Fx);
+      //等高值的水平宽度,视为车厢长度
+
+      if (nInt >= nHost.FTruckMinLong) and (nInt > nHost.FTruckLong) then
+      begin
+        nHost.FTruckLong := nInt;
+        //正常时空车最长,随着装车会逐渐变短
+
+        nInt := 0;
+        for nIdx := nMax downto 0 do
+        begin
+          if (nIdx > 0) and (nHost.FDataParse[nIdx - 1].FHigh < 1) then
+          begin
+            nInt := nHost.FDataParse[nIdx].FHigh;
+            Break;
+          end; //下一个节点为地面,本节点即为左侧车高
+        end;
+
+        for nIdx:=nMax+nHost.FDataParse[nMax].FHighSame to cLaserDataParse-1 do
+        begin
+          if nHost.FDataParse[nIdx].FAngle < 0 then Break;
+          //invalid data
+
+          if (nIdx < cLaserDataParse - 1) and (nHost.FDataParse[nIdx + 1].FHigh < 1) then
+          begin
+            if nHost.FDataParse[nIdx].FHigh < nInt then
+              nInt := nHost.FDataParse[nIdx].FHigh;
+            Break;
+          end; //下一个节点为地面,本节点即为右侧车高
+        end;
+
+        if nInt > nHost.FTruckMinHigh then
+          nHost.FTruckHigh := nInt;
+        //车厢有效高度
+      end;
+    end;
 
     nInt := nHost.FHighLaser;
-    for nIdx:=nInt90 downto 0 do
+    for nIdx:=nIdx90-1 downto 0 do
     with nHost.FDataParse[nIdx] do
     begin
       if Fx >= nHost.FOffsetFrontLaser then Break;
@@ -864,7 +950,7 @@ begin
     //向车头方向偏移一段距离的最低高度
 
     nInt := nHost.FHighLaser;
-    for nIdx:=nInt90 to cLaserDataParse do
+    for nIdx:=nIdx90+1 to cLaserDataParse do
     with nHost.FDataParse[nIdx] do
     begin
       if (FAngle < 0) or (Fx >= nHost.FOffsetBackLaser) then Break;
@@ -885,11 +971,30 @@ begin
     FSyncLock.Leave;
   end;
 
-  {$IFDEF DEBUG}
-  WriteLog(Format('车头:%d,%d 车尾:%d,%d 正下:%d,%d', [nHost.FOffsetFrontLaser,
-    nHost.FHighFrontLaser, nHost.FOffsetBackLaser, nHost.FHighBackLaser,
-    nHost.FHighLaser, nHost.FHighUnderLaser]));
-  {$ENDIF}
+  DoEvent;
+  //执行事件
+end;
+
+procedure TWJLaserReader.DoEvent;
+begin
+  if FOwner.FEventMode = emThread then
+    DoOwnerEvent;
+  //xxxxx
+
+  if FOwner.FEventMode = emMain then
+    Synchronize(DoOwnerEvent);
+  //xxxxx
+end;
+
+procedure TWJLaserReader.DoOwnerEvent;
+begin
+  if Assigned(FOwner.FOnProc) then
+    FOwner.FOnProc(FActiveHost);
+  //xxxxx
+
+  if Assigned(FOwner.FOnEvent) then
+    FOwner.FOnEvent(FActiveHost);
+  //xxxxx
 end;
 
 initialization

@@ -7,10 +7,12 @@
 
 节点: lasers.laser
 *.enable: N,关闭;其它开启.
-*.id: 节点标识
+*.id,name: 节点标识
 *.ip,port: 读卡器地址
 *.tunnel: 通道号
 *.high: 距离地面的(安装)高度,单位毫米
+*.minTruckHigh: 车厢最小高度,单位毫米
+*.minTruckLong: 车厢最小长度,单位毫米
 *.offsetFront: 激光器正下方向车头方向偏移量,超出视为越界,单位毫米
 *.offsetBack: 激光器正下方向车尾方向偏移量,超出视为越界,单位毫米
 *.offsetFloat: 车厢底部高度浮动值,范围内视为平面,单位毫米
@@ -23,12 +25,14 @@
     <monitor>1</monitor>
   </config>
   <lasers>
-    <laser id="01001">
+    <laser id="01001" name="1#">
       <enable>Y</enable>
       <ip>192.168.0.221</ip>
       <port>8080</port>
       <tunnel>FH001</tunnel>
-      <high>5000</high>
+      <high>300</high>
+      <minTruckHigh>1</minTruckHigh>
+      <minTruckLong>1</minTruckLong>
       <offsetFront>500</offsetFront>
       <offsetBack>500</offsetBack>
       <offsetFloat>200</offsetFloat>
