@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="gb2312"?>
+<!--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+节点: config
+*.udp_port: 数据上报服务端口
+*.status_timeout: 车辆状态上报最长间隔,超时视为无效(单位秒)
+
+节点: cameras.item
+*.channel: 相机通道编号
+*.pound: 所在磅站标识
+*.reader: 对应的读卡器标识
+*.resolution: 解析度(宽,高)
+*.poundloc: 地磅范围坐标
+  1.左上:LT,LeftTop
+  2.左下:LB,LeftBottom
+  3,右上:RT,RightTop
+  4,右下:RB,RightBottom
+*.lineloc: 检测线开始、结束坐标
+
+节点: pounds.item
+*.id,name: 磅站标识,名称
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-->
+<vision>
+  <config>
+    <udp_port>8080</udp_port>
+    <status_timeout>2000</status_timeout>
+  </config>
+  <cameras>
+    <item channel="192168112301" name="1_In">
+      <pound>SY01</pound>
+      <reader>hy0101</reader>
+      <resolution>1920,1080</resolution>
+      <lineloc start="1,11" end="2,22" />
+      <poundloc LT="1,11" LB="2,22" RT="3,33" RB="4,44" />
+    </item>
+  </cameras>
+  <pounds>
+    <item id="SY01" name="1#磅">
+    </item>
+    <item id="SY02" name="2#磅">
+    </item>
+  </pounds>
+</vision>
