@@ -621,8 +621,8 @@ begin
           Host := nPT.FPort.FHostIP;
           Port := nPT.fPort.FHostPort;
           
-          ReadTimeout := 5 * 1000;
-          ConnectTimeout := 5 * 1000;
+          ReadTimeout := 2 * 1000;
+          ConnectTimeout := 2 * 1000;
         end;
       end;
 
@@ -937,33 +937,24 @@ begin
 
     with FOwner do
     begin
-      FSyncLock.Enter;
-      try
-        for nIdx:=FTunnels.Count - 1 downto 0 do
-        begin
-          nTunnel := FTunnels[nIdx];
-          if not nTunnel.FPort.FClientActive then Continue;
+      for nIdx:=FTunnels.Count - 1 downto 0 do
+      begin
+        nTunnel := FTunnels[nIdx];
+        if not nTunnel.FPort.FClientActive then Continue;
 
-          FActiveTunnel := nTunnel;
-          FActivePort   := nTunnel.FPort;
-          FActiveClient := nTunnel.FPort.FClient;
+        FActiveTunnel := nTunnel;
+        FActivePort   := nTunnel.FPort;
+        FActiveClient := nTunnel.FPort.FClient;
 
-          FSyncLock.Leave; //外部处理事件          
-          try
-            ReadPound;
-          finally
-            FSyncLock.Enter;
-          end;
-        end;
-      finally
-        FSyncLock.Leave;
+        ReadPound;
+        //读取数据
       end;
     end;
   except
     on E: Exception do
     begin
       WriteLog(E.Message);
-      Sleep(500);
+      Sleep(200);
     end;
   end; 
 end;
