@@ -96,6 +96,8 @@ type
 
     FHostIP: string;
     FHostPort: Integer;              //网络链路
+    FHostNetCheck: Integer;          //网络检测
+    FHostLastActive: Cardinal;       //网络活动
     FClient: TIdTCPClient;           //套接字
     FClientActive: Boolean;          //链路启用
 
@@ -350,7 +352,7 @@ begin
   nXML := TNativeXml.Create;
   try
     nXML.LoadFromFile(nFile);
-    nNode := nXML.Root.FindNode('ports');
+    nNode := nXML.Root.NodeByNameR('ports');
 
     for nIdx:=0 to nNode.NodeCount - 1 do
     with nNode.Nodes[nIdx] do
@@ -363,9 +365,9 @@ begin
       begin
         FID := AttributeByName['id'];
         FName := AttributeByName['name'];
-        FType := NodeByName('type').ValueAsString;
+        FType := NodeByNameR('type').ValueAsString;
 
-        nTmp := FindNode('conn');
+        nTmp := NodeByName('conn');
         if Assigned(nTmp) then
              nStr := nTmp.ValueAsString
         else nStr := 'com';
@@ -376,44 +378,44 @@ begin
            nPort.FConn := ctCOM;
         //xxxxxx
 
-        FPort := NodeByName('port').ValueAsString;
-        FRate := StrToBaudRate(NodeByName('rate').ValueAsString);
-        FDatabit := StrToDataBits(NodeByName('databit').ValueAsString);
-        FStopbit := StrToStopBits(NodeByName('stopbit').ValueAsString);
-        FParitybit := StrToParity(NodeByName('paritybit').ValueAsString);
-        FParityCheck := NodeByName('paritycheck').ValueAsString = 'Y';
+        FPort := NodeByNameR('port').ValueAsString;
+        FRate := StrToBaudRate(NodeByNameR('rate').ValueAsString);
+        FDatabit := StrToDataBits(NodeByNameR('databit').ValueAsString);
+        FStopbit := StrToStopBits(NodeByNameR('stopbit').ValueAsString);
+        FParitybit := StrToParity(NodeByNameR('paritybit').ValueAsString);
+        FParityCheck := NodeByNameR('paritycheck').ValueAsString = 'Y';
 
-        FCharBegin := Char(StrToInt(NodeByName('charbegin').ValueAsString));
-        FCharEnd := Char(StrToInt(NodeByName('charend').ValueAsString));
-        FPackLen := NodeByName('packlen').ValueAsInteger;
+        FCharBegin := Char(StrToInt(NodeByNameR('charbegin').ValueAsString));
+        FCharEnd := Char(StrToInt(NodeByNameR('charend').ValueAsString));
+        FPackLen := NodeByNameR('packlen').ValueAsInteger;
 
-        nTmp := FindNode('invalidlen');
+        nTmp := NodeByName('invalidlen');
         if Assigned(nTmp) then //直接指定截取长度
         begin
           FInvalidBegin := 0;
           FInvalidEnd := nTmp.ValueAsInteger;
         end else
         begin
-          FInvalidBegin := NodeByName('invalidbegin').ValueAsInteger;
-          FInvalidEnd := NodeByName('invalidend').ValueAsInteger;
+          FInvalidBegin := NodeByNameR('invalidbegin').ValueAsInteger;
+          FInvalidEnd := NodeByNameR('invalidend').ValueAsInteger;
         end;
 
-        FSplitTag := Char(StrToInt(NodeByName('splittag').ValueAsString));
-        FSplitPos := NodeByName('splitpos').ValueAsInteger;
-        FDataMirror := NodeByName('datamirror').ValueAsInteger = 1;
-        FDataEnlarge := NodeByName('dataenlarge').ValueAsFloat;
+        FSplitTag := Char(StrToInt(NodeByNameR('splittag').ValueAsString));
+        FSplitPos := NodeByNameR('splitpos').ValueAsInteger;
+        FDataMirror := NodeByNameR('datamirror').ValueAsInteger = 1;
+        FDataEnlarge := NodeByNameR('dataenlarge').ValueAsFloat;
 
-        nTmp := FindNode('databytehex');
+        nTmp := NodeByName('databytehex');
         if Assigned(nTmp) then
              FDataByteHex := nTmp.ValueAsInteger = 1
         else FDataByteHex := False;
 
-        nTmp := FindNode('dataprecision');
+        nTmp := NodeByName('dataprecision');
         if Assigned(nTmp) then
              FDataPrecision := nTmp.ValueAsInteger
         else FDataPrecision := 100;
 
-        nTmp := FindNode('maxval');
+        nTmp := NodeByName('maxval');
         if Assigned(nTmp) and (nTmp.AttributeByName['enable'] = 'y') then
         begin
           FMaxValue := nTmp.ValueAsFloat;
@@ -427,22 +429,27 @@ begin
           FMaxValid := 0;
         end;
 
-        nTmp := FindNode('minval');
+        nTmp := NodeByName('minval');
         if Assigned(nTmp) and (nTmp.AttributeByName['enable'] = 'y') then
              FMinValue := Float2Float(nTmp.ValueAsFloat, 100, False)
         else FMinValue :=0;
 
-        nTmp := FindNode('hostip');
+        nTmp := NodeByName('hostip');
         if Assigned(nTmp) then
           FHostIP := nTmp.ValueAsString;
         //xxxxx
 
-        nTmp := FindNode('hostport');
+        nTmp := NodeByName('hostport');
         if Assigned(nTmp) then
           FHostPort := nTmp.ValueAsInteger;
         //xxxxx
 
-        nTmp := FindNode('options');
+        nTmp := NodeByName('hostcheck');
+        if Assigned(nTmp) then
+             FHostNetCheck := nTmp.ValueAsInteger
+        else FHostNetCheck := 0;
+
+        nTmp := NodeByName('options');
         if Assigned(nTmp) then
         begin
           FOptions := TStringList.Create;
@@ -459,7 +466,7 @@ begin
       nPort.FEventTunnel := nil;
     end;
 
-    nNode := nXML.Root.FindNode('cameras');
+    nNode := nXML.Root.NodeByName('cameras');
     if Assigned(nNode) then
     begin
       for nIdx:=0 to nNode.NodeCount - 1 do
@@ -472,22 +479,22 @@ begin
         with nCamera^ do
         begin
           FID := AttributeByName['id'];
-          FHost := NodeByName('host').ValueAsString;
-          FPort := NodeByName('port').ValueAsInteger;
-          FUser := NodeByName('user').ValueAsString;
-          FPwd := NodeByName('password').ValueAsString;
-          FPicSize := NodeByName('picsize').ValueAsInteger;
-          FPicQuality := NodeByName('picquality').ValueAsInteger;
+          FHost := NodeByNameR('host').ValueAsString;
+          FPort := NodeByNameR('port').ValueAsInteger;
+          FUser := NodeByNameR('user').ValueAsString;
+          FPwd := NodeByNameR('password').ValueAsString;
+          FPicSize := NodeByNameR('picsize').ValueAsInteger;
+          FPicQuality := NodeByNameR('picquality').ValueAsInteger;
         end;
 
-        nTmp := FindNode('type');
+        nTmp := NodeByName('type');
         if Assigned(nTmp) then
              nCamera.FType := nTmp.ValueAsString
         else nCamera.FType := 'HKV';
       end;
     end;
 
-    nNode := nXML.Root.FindNode('tunnels');
+    nNode := nXML.Root.NodeByNameR('tunnels');
     for nIdx:=0 to nNode.NodeCount - 1 do
     with nNode.Nodes[nIdx] do
     begin
@@ -495,7 +502,7 @@ begin
       FTunnels.Add(nTunnel);
       FillChar(nTunnel^, SizeOf(TPTTunnelItem), #0);
 
-      nStr := NodeByName('port').ValueAsString;
+      nStr := NodeByNameR('port').ValueAsString;
       nTunnel.FPort := GetPort(nStr);
       if not Assigned(nTunnel.FPort) then
         raise Exception.Create(Format('通道[ %s.Port ]无效.', [nTunnel.FName]));
@@ -505,28 +512,28 @@ begin
       begin
         FID := AttributeByName['id'];
         FName := AttributeByName['name'];
-        FProber := NodeByName('prober').ValueAsString;
-        FReader := NodeByName('reader').ValueAsString;
-        FUserInput := NodeByName('userinput').ValueAsString = 'Y';
+        FProber := NodeByNameR('prober').ValueAsString;
+        FReader := NodeByNameR('reader').ValueAsString;
+        FUserInput := NodeByNameR('userinput').ValueAsString = 'Y';
 
-        FFactoryID := NodeByName('factory').ValueAsString;
-        FCardInterval := NodeByName('cardInterval').ValueAsInteger;
-        FSampleNum := NodeByName('sampleNum').ValueAsInteger;
-        FSampleFloat := NodeByName('sampleFloat').ValueAsInteger;
+        FFactoryID := NodeByNameR('factory').ValueAsString;
+        FCardInterval := NodeByNameR('cardInterval').ValueAsInteger;
+        FSampleNum := NodeByNameR('sampleNum').ValueAsInteger;
+        FSampleFloat := NodeByNameR('sampleFloat').ValueAsInteger;
 
-        nTmp := FindNode('options');
+        nTmp := NodeByName('options');
         if Assigned(nTmp) then
         begin
           FOptions := TStringList.Create;
           SplitStr(nTmp.ValueAsString, FOptions, 0, ';');
         end else FOptions := nil;
 
-        nTmp := FindNode('autoweight');
+        nTmp := NodeByName('autoweight');
         if Assigned(nTmp) then
              FAutoWeight := nTmp.ValueAsString = 'Y'
         else FAutoWeight := False; //南方特例,尽量不要用
 
-        nTmp := FindNode('camera');
+        nTmp := NodeByName('camera');
         if Assigned(nTmp) then
         begin
           nStr := nTmp.AttributeByName['id'];
@@ -967,9 +974,26 @@ begin
   Result := False;
   try
     if not FActiveClient.Connected then
+    begin
       FActiveClient.Connect;
-    //xxxxx
-    
+      FActivePort.FHostLastActive := GetTickCount();
+    end;
+
+    if (FActivePort.FHostNetCheck > 0) and (GetTickCountDiff
+       (FActivePort.FHostLastActive) >= FActivePort.FHostNetCheck) then
+    begin
+      WriteLog(Format('地磅[ %s ]读数超时,尝试检测网络.', [FActiveTunnel.FID]));
+      //xxxxx
+
+      FActivePort.FHostLastActive := GetTickCount();
+      nBuf := ToBytes(FActiveClient.IOHandler.ReadByte);
+      //读取1个字节,若网络异常则重连
+    end else
+    begin
+      SetLength(nBuf, 0);
+      //init
+    end;
+
     with FActiveClient do
     begin
       nVal := 0;
@@ -984,6 +1008,7 @@ begin
       end;
 
       if nVal < 1 then Exit;
+      FActivePort.FHostLastActive := GetTickCount;
       FActivePort.FCOMBuff := BytesToString(nBuf);
       FActivePort.FCOMData := FActivePort.FCOMData + FActivePort.FCOMBuff;
       //数据合并
