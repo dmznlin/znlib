@@ -440,6 +440,12 @@ function TOPCManager.ReadData(const nGroup,nPoint: string;
   const nReadStr: Boolean; const nTimeout: Integer): Boolean;
 var nIdx,nInt: Integer;
 begin
+  if not FServer.FEnabled then
+  begin
+    Result := False;
+    Exit;
+  end; //no service
+
   FSyncLock.Enter;
   try
     Result := False;
@@ -471,6 +477,7 @@ begin
 
     nIdx := FindGroup(nGroup, nPoint, @nInt);
     if (nIdx < 0) or (nInt < 0) then Exit;
+    if not FGroups[nIdx].FActive then Exit;
 
     with FGroups[nIdx].FItems[nInt] do
     begin
@@ -523,6 +530,9 @@ end;
 procedure TOPCManager.WriteOPC(const nData: TOPCWantDataItems);
 var i,nIdx,nInt: Integer;
 begin
+  if not FServer.FEnabled then Exit;
+  //no service
+  
   FSyncLock.Enter;
   try
     for nIdx:=Low(nData) to High(nData) do
@@ -530,6 +540,7 @@ begin
       nInt := FindGroup(nData[nIdx].FGroup, nData[nIdx].FItem, @i);
       if (nInt < 0) or (i < 0) then Continue;
 
+      if FGroups[nInt].FActive then
       with FGroups[nInt].FItems[i] do
       begin
         FValueWant := nData[nIdx].FValue;
