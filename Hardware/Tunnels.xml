@@ -22,6 +22,7 @@
 *.dataprecision: 数据精度,两位小数为100
 *.hostip: 网络通讯时主机
 *.hostport: 网络通讯时端口
+*.hostcheck: 超时未收到数据,则发送验证包(单位毫秒)
 *.minval: 地磅下限;enable为是否启用(y/n)
 *.maxval: 地磅上限;valid为超上线时取值;enable为是否启用(y/n)
 *.options: 附加参数,用于特定业务
@@ -69,6 +70,7 @@
 		<dataprecision>100</dataprecision>
 		<hostip>127.0.0.1</hostip>
 		<hostport>8000</hostport>
+		<hostcheck>0</hostcheck>
 		<minval enable="n">80</minval>
 		<maxval enable="n" valid="80">80</maxval>
 		<options>key1=value;key2=values</options>

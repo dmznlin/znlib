@@ -4,7 +4,6 @@
 *******************************************************************************}
 unit UMgrVoiceNet;
 
-{.$DEFINE DEBUG}
 interface
 
 uses
@@ -84,6 +83,7 @@ type
     FPort     : Integer;               //卡端口
     FEnable   : Boolean;               //是否启用
     FDefUsed  : Boolean;               //默认可用
+    FShowLog  : Boolean;               //显示日志
     FContent  : TList;                 //播发内容
     FResource : TList;                 //资源内容
 
@@ -424,10 +424,6 @@ begin
     nData.FCard := nCard;
     nData.FContent := nContent;
     nData.FAddTime := GetTickCount;
-
-    {$IFDEF DEBUG}
-    WriteLog('Add: ' + nText);
-    {$ENDIF}
   finally
     FSyncLock.Leave;
   end;   
@@ -465,14 +461,19 @@ begin
       begin
         FID     := AttributeByName['id'];
         FName   := AttributeByName['name'];
-        FHost   := NodeByName('ip').ValueAsString;
-        FPort   := NodeByName('port').ValueAsInteger;
-        FEnable := NodeByName('enable').ValueAsInteger = 1;
+        FHost   := NodeByNameR('ip').ValueAsString;
+        FPort   := NodeByNameR('port').ValueAsInteger;
+        FEnable := NodeByNameR('enable').ValueAsInteger = 1;
 
         nTmp := NodeByName('default');
         if Assigned(nTmp) then
              FDefUsed := nTmp.ValueAsString <> 'n'
         else FDefUsed := True;
+
+        nTmp := NodeByName('showlog');
+        if Assigned(nTmp) then
+             FShowLog := nTmp.ValueAsString <> 'n'
+        else FShowLog := True;
       end;
 
       nNode := nRoot.NodeByName('contents');
@@ -490,19 +491,19 @@ begin
           with nTmp,nParam^ do
           begin
             FID       := AttributeByName['id'];
-            FObject   := NodeByName('object').ValueAsString;
-            FSleep    := NodeByName('sleep').ValueAsInteger;
-            FText     := NodeByName('text').ValueAsString;
+            FObject   := NodeByNameR('object').ValueAsString;
+            FSleep    := NodeByNameR('sleep').ValueAsInteger;
+            FText     := NodeByNameR('text').ValueAsString;
 
             nTnd := NodeByName('peerword');
             if Assigned(nTnd) then
                  FPeerLong := nTnd.ValueAsInteger
             else FPeerLong := 220;
 
-            FTimes    := NodeByName('times').ValueAsInteger;
-            FInterval := NodeByName('interval').ValueAsInteger;
-            FRepeat   := NodeByName('repeat').ValueAsInteger;
-            FReInterval := NodeByName('reinterval').ValueAsInteger;
+            FTimes    := NodeByNameR('times').ValueAsInteger;
+            FInterval := NodeByNameR('interval').ValueAsInteger;
+            FRepeat   := NodeByNameR('repeat').ValueAsInteger;
+            FReInterval := NodeByNameR('reinterval').ValueAsInteger;
           end;
         end;
       end else nCard.FContent := nil;
@@ -803,12 +804,12 @@ begin
           FVoiceKeep := CalTextLength(nStr) * nParm.FPeerLong;
           //计算播放内容的时长
         end;
+
+        if nCard.FShowLog then
+          WriteLog(nStr);
+        //xxxxx
       end;
-
-      {$IFDEF DEBUG}
-      WriteLog('Get: ' + nTxt.FText);
-      {$ENDIF}
-
+      
       DisposeBufferItem;
       //处理完毕,释放
       Result := True;

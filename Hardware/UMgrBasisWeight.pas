@@ -31,6 +31,8 @@ type
     FValTruckP    : Double;            //车辆皮重
     FWeightMax    : Double;            //修正后可装量:定值,装车中允许的最大量
 
+    FShowDetail   : Boolean;           //显示明细日志
+    FShowLastRecv : Cardinal;          //上次接收数据
     FStatusNow    : TBWStatus;         //当前状态
     FStatusNew    : TBWStatus;         //新状态
     FStableDone   : Boolean;           //平稳状态
@@ -572,6 +574,10 @@ begin
       if IsNumber(nStr, True) then
            nTunnel.FValTwiceDiff := StrToFloat(nStr)
       else nTunnel.FValTwiceDiff := 0.2; //大约2个成人
+
+      nStr := nTunnel.FTunnel.FOptions.Values['ShowDetail'];
+      nTunnel.FShowDetail := CompareText(nStr, 'Y') = 0;
+      nTunnel.FShowLastRecv := 0;
     end;
 
     InitTunnelData(nTunnel, False);
@@ -599,6 +605,14 @@ begin
       if (nPort.FMinValue > 0) and (nValue < nPort.FMinValue) then
            nTunnel.FValTunnel := 0
       else nTunnel.FValTunnel := nValue;
+
+      if nTunnel.FShowDetail and (
+         GetTickCountDiff(nTunnel.FShowLastRecv) >= 1200) then
+      begin
+        WriteLog(Format('通道:[ %s.%s ] 数据:[ %.2f %.2f ]', [
+          nTunnel.FID, nTunnel.FTunnel.FName, nValue, nTunnel.FValTunnel]));
+        nTunnel.FShowLastRecv := GetTickCount();
+      end;
 
       if nTunnel.FValTunnel > nTunnel.FValMax then
         nTunnel.FValMax := nTunnel.FValTunnel;

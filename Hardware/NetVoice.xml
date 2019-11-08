@@ -5,6 +5,7 @@
 *.ip,port: 合成卡地址
 *.enable: 1,启用;其它,关闭
 *.default: 没有卡标识的内容可默认使用(y/n)
+*.showlog: 打印播发的语音内容日志(y/n)
 
 节点: card.contents.content
 *.object: 对象宏定义
@@ -26,6 +27,7 @@
     <port>8001</port>
     <enable>1</enable>
     <default>y</default>
+    <showlog>n</showlog>
     <contents>
         <content id="default">
             <object>tk</object>

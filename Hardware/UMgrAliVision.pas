@@ -58,12 +58,15 @@ type
     FName: string;                                //通道名称
     FTruck: string;                               //当前车辆
     FTruckPrev: string;                           //上一辆车
-    
+
     FLastIn: Cardinal;                            //上次进入
     FLastOut: Cardinal;                           //上次退出
     FStateNow: TTruckState;                       //当前状态
     FStateNew: TTruckStates;                      //更新状态
 
+    FValStr: string;
+    FValInt: Integer;
+    FValFloat: Double;                            //辅助数据
     FCameras: TCameraItems;                       //相机列表
   end;
   TPoundtems = array of TPoundItem;               //磅站列表
@@ -113,6 +116,8 @@ type
     procedure DoUDPRead(AThread: TIdUDPListenerThread;
       AData: TIdBytes; ABinding: TIdSocketHandle);
     //UDP上报
+    function AdjustTruck(const nTruck: string): string;
+    //车牌校正
   public
     constructor Create;
     destructor Destroy; override;
@@ -122,6 +127,9 @@ type
     procedure StartService;
     procedure StopService;
     //启停服务
+    function GetPoundData(const nID: string; var nData: TPoundItem): Boolean;
+    procedure SetPoundData(const nID: string; const nData: PPoundItem = nil);
+    //获取数据
     property UDPPort: Word read FUDPPort write FUDPPort;
     property OnStatusChange: TOnTruckStatusProc read FOnStatusProc write FOnStatusProc;
     property OnStatusChangeEvent: TOnTruckStatusEvent read FOnStatusEvent write FOnStatusEvent;
@@ -134,8 +142,50 @@ var
 
 implementation
 
+type
+  TProvinceName = record
+    FName: string;
+    FPinYin: string;
+  end;
+
 const
   cTruckNull = '0'; //空车牌
+
+  cTruckProvince: array[0..32] of TProvinceName = (
+    (FName: '皖'; FPinYin: 'Anhui'),
+    (FName: '京'; FPinYin: 'Beijing'),
+    (FName: '渝'; FPinYin: 'Chongqing'),
+    (FName: '闽'; FPinYin: 'Fujian'),
+    (FName: '甘'; FPinYin: 'Gansu'),
+    (FName: '粤'; FPinYin: 'Guangdong'),
+    (FName: '桂'; FPinYin: 'Guangxi'),
+    (FName: '黔'; FPinYin: 'Guizhou'),
+    (FName: '琼'; FPinYin: 'Hainan'),
+    (FName: '冀'; FPinYin: 'Hebei'),
+    (FName: '黑'; FPinYin: 'Heilongjiang'),
+    (FName: '豫'; FPinYin: 'Henan'),
+    (FName: '港'; FPinYin: 'HongKong'),
+    (FName: '鄂'; FPinYin: 'Hubei'),
+    (FName: '湘'; FPinYin: 'Hunan'),
+    (FName: '蒙'; FPinYin: 'InnerMongolia'),
+    (FName: '苏'; FPinYin: 'Jiangsu'),
+    (FName: '赣'; FPinYin: 'Jiangxi'),
+    (FName: '吉'; FPinYin: 'Jilin'),
+    (FName: '辽'; FPinYin: 'Liaoning'),
+    (FName: '澳'; FPinYin: 'Macau'),
+    (FName: '宁'; FPinYin: 'Ningxia'),
+    (FName: '青'; FPinYin: 'Qinghai'),
+    (FName: '陕'; FPinYin: 'Shaanxi'),
+    (FName: '鲁'; FPinYin: 'Shandong'),
+    (FName: '沪'; FPinYin: 'Shanghai'),
+    (FName: '晋'; FPinYin: 'Shanxi'),
+    (FName: '川'; FPinYin: 'Sichuan'),
+    (FName: '津'; FPinYin: 'Tianjin'),
+    (FName: '藏'; FPinYin: 'Tibet'),
+    (FName: '新'; FPinYin: 'Xinjiang'),
+    (FName: '滇'; FPinYin: 'Yunnan'),
+    (FName: '浙'; FPinYin: 'Zhejiang')
+  );
 
 procedure WriteLog(const nEvent: string);
 begin
@@ -213,6 +263,72 @@ begin
     end;
 end;
 
+//Date: 2019-11-05
+//Parm: 标识
+//Desc: 获取nID的当前数据
+function TTruckManager.GetPoundData(const nID: string;
+  var nData: TPoundItem): Boolean;
+var nIdx: Integer;
+begin
+  Result := False;
+  try
+    FSyncLock.Enter;
+    //lock first
+
+    for nIdx:=Low(FPounds) to High(FPounds) do
+     with FPounds[nIdx] do
+      if CompareText(nID, FID) = 0 then
+      begin
+        nData := FPounds[nIdx];
+        if nData.FTruck = cTruckNull then
+          nData.FTruck := '';
+        //xxxxx
+
+        if nData.FTruckPrev = cTruckNull then
+          nData.FTruckPrev := '';
+        //xxxxxx
+
+        Result := True;
+        Break;
+      end;
+  finally
+    FSyncLock.Leave;
+  end;   
+end;
+
+//Date: 2019-11-05
+//Parm: 地磅标识
+//Desc: 设置nID的辅助数据
+procedure TTruckManager.SetPoundData(const nID: string; const nData: PPoundItem);
+var nIdx: Integer;
+begin
+  try
+    FSyncLock.Enter;
+    //lock first
+
+    for nIdx:=Low(FPounds) to High(FPounds) do
+     with FPounds[nIdx] do
+      if CompareText(nID, FID) = 0 then
+      begin
+        if Assigned(nData) then
+        begin
+          FValStr := nData.FValStr;
+          FValInt := nData.FValInt;
+          FValFloat := nData.FValFloat;
+        end else
+        begin
+          FValStr := '';
+          FValInt := 0;
+          FValFloat := 0;
+        end;
+
+        Break;
+      end;
+  finally
+    FSyncLock.Leave;
+  end;
+end;
+
 procedure TTruckManager.DoUDPRead(AThread: TIdUDPListenerThread;
   AData: TIdBytes; ABinding: TIdSocketHandle);
 var nStr: string;
@@ -240,7 +356,7 @@ begin
         nStr := UpperCase(Trim(nNode.AsString));
         if nStr <> cTruckNull then
         begin
-          FCameras[nCamera].FTruck := nStr;
+          FCameras[nCamera].FTruck := AdjustTruck(nStr);
           FCameras[nCamera].FTruckUpdate := GetTickCount();
 
           //WriteLog('Truck: ' + nStr);
@@ -270,6 +386,25 @@ begin
       WriteLog(nErr.Message);
     end;
   end;
+end;
+
+//Date: 2019-11-05
+//Parm: 车牌号
+//Desc: 校正nTruck中的特定字符
+function TTruckManager.AdjustTruck(const nTruck: string): string;
+var nIdx: Integer;
+begin
+  for nIdx:=Low(cTruckProvince) to High(cTruckProvince) do
+  with cTruckProvince[nIdx] do
+  begin
+    if Pos(UpperCase(FPinYin), nTruck) > 0 then
+    begin
+      Result := StringReplace(nTruck, '<' + FPinYin + '>', FName, [rfIgnoreCase]);
+      Exit;
+    end;
+  end;
+
+  Result := nTruck;
 end;
 
 procedure TTruckManager.LoadConfig(const nFile: string);
