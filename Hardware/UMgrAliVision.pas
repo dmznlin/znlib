@@ -128,7 +128,8 @@ type
     procedure StopService;
     //启停服务
     function GetPoundData(const nID: string; var nData: TPoundItem): Boolean;
-    procedure SetPoundData(const nID: string; const nData: PPoundItem = nil);
+    procedure SetPoundData(const nID: string; const nData: PPoundItem = nil;
+      const nResetTruck: Boolean = False);
     //获取数据
     property UDPPort: Word read FUDPPort write FUDPPort;
     property OnStatusChange: TOnTruckStatusProc read FOnStatusProc write FOnStatusProc;
@@ -297,9 +298,10 @@ begin
 end;
 
 //Date: 2019-11-05
-//Parm: 地磅标识
+//Parm: 地磅标识;数据;重置车牌
 //Desc: 设置nID的辅助数据
-procedure TTruckManager.SetPoundData(const nID: string; const nData: PPoundItem);
+procedure TTruckManager.SetPoundData(const nID: string; const nData: PPoundItem;
+  const nResetTruck: Boolean);
 var nIdx: Integer;
 begin
   try
@@ -320,6 +322,12 @@ begin
           FValStr := '';
           FValInt := 0;
           FValFloat := 0;
+        end;
+
+        if nResetTruck then
+        begin
+          FTruck := cTruckNull;
+          FTruckPrev := cTruckNull;
         end;
 
         Break;
