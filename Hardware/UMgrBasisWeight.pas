@@ -54,6 +54,11 @@ type
     FFixParams    : TStrings;          //固定参数
     FSampleIndex  : Integer;           //采样索引
     FValSamples   : array of Double;   //数据采样
+
+    {*以下为特定系统专用*}
+    FEnable       : Boolean;           //是否可用
+    FLevel1       : Boolean;           //是否阀门关一级
+    FLevel2       : Boolean;           //是否阀门关二级
   end;
 
   TBasisWeightManager = class;
@@ -260,6 +265,10 @@ begin
     nTunnel.FStableDone := False;
     nTunnel.FWeightOver := False;
     nTunnel.FWeightDone := False;
+    
+    nTunnel.FLevel1 := False;
+    nTunnel.FLevel2 := False;
+    //xxxxx
 
     nTunnel.FValue := 0;
     nTunnel.FValHas := 0;
@@ -543,7 +552,7 @@ begin
     New(nTunnel);
     FTunnels.Add(nTunnel);
     nTunnel.FTunnel := FTunnelManager.Tunnels[nIdx];
-    
+
     nTunnel.FID := nTunnel.FTunnel.FID;
     nTunnel.FParams := TStringList.Create;
     nTunnel.FFixParams := nil;
