@@ -28,6 +28,7 @@ type
     FValKPFix     : Double;            //防超修正:定值,防止发超的保留量
     FValKPPercent : Double;            //防超修正:百分比,防止发超的保留量
     FValTwiceDiff : Double;            //数据差额:定值,两次平稳数据的有效差额
+    FValDoneInc   : Double;            //自动补装:装车完成后自动增加提货量
     FValTruckP    : Double;            //车辆皮重
     FWeightMax    : Double;            //修正后可装量:定值,装车中允许的最大量
 
@@ -384,6 +385,16 @@ begin
                           nValue * nPT.FValKPPercent;
         //表头最大重量
       end;
+    end else
+
+    if nPT.FWeightDone then //同单据再次装车
+    begin
+      nPT.FWeightDone := False;
+      nPT.FWeightOver := False;
+
+      if nPT.FValDoneInc > 0 then
+        nPT.FWeightMax := nPT.FWeightMax + nPT.FValDoneInc;
+      //自动补货
     end;
 
     if nParams <> '' then
@@ -569,6 +580,11 @@ begin
       if IsNumber(nStr, True) then
            nTunnel.FValKPPercent := StrToFloat(nStr)
       else nTunnel.FValKPPercent := 0;
+
+      nStr := nTunnel.FTunnel.FOptions.Values['IncWhenDone'];
+      if IsNumber(nStr, True) then
+           nTunnel.FValDoneInc := StrToFloat(nStr)
+      else nTunnel.FValDoneInc := 0;
 
       nStr := nTunnel.FTunnel.FOptions.Values['TwiceDiff'];
       if IsNumber(nStr, True) then
