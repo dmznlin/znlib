@@ -10,6 +10,7 @@
 *.id,name: 节点标识
 *.ip,port: 读卡器地址
 *.tunnel: 通道号
+*.workport: 放料口角度,默认90度
 *.high: 距离地面的(安装)高度,单位毫米
 *.minTruckHigh: 车厢最小高度,单位毫米
 *.minTruckLong: 车厢最小长度,单位毫米
@@ -30,7 +31,8 @@
       <ip>192.168.0.221</ip>
       <port>8080</port>
       <tunnel>FH001</tunnel>
-      <high>300</high>
+      <workport a="90" b="130" />
+      <high>300</high>       
       <minTruckHigh>1</minTruckHigh>
       <minTruckLong>1</minTruckLong>
       <offsetFront>500</offsetFront>

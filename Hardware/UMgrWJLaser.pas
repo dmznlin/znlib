@@ -55,6 +55,11 @@ type
     FHighSame    : Integer;                   //同高点数
   end;
 
+  TWJLaserPort = record
+    FName        : string;                    //料口标识
+    FAngle       : Single;                    //激光器角度
+  end;
+
   PWJLaserHost = ^TWJLaserHost;
   TWJLaserHost = record
     FID          : string;                    //标识
@@ -74,11 +79,19 @@ type
     FOffsetBackLaser  : Integer;              //激光器正下方向车尾偏移量
     FOffsetFloat      : Integer;              //车厢平整度
 
-    FTruckExists : Boolean;                   //是否有车辆
     FTruckMinHigh: Integer;                   //车厢最小高度
     FTruckMinLong: Integer;                   //车厢最小长度
-    FTruckHigh   : Integer;                   //当前车厢高度
+    FTruckExists : Boolean;                   //是否有车辆
     FTruckLong   : Integer;                   //当前车厢长度
+    FTruckWidth  : Integer;                   //当前车厢宽度
+    FTruckHeight : Integer;                   //当前车厢板距地高度
+    //实际业务相对复杂,激光器可能无法扫描到车厢.所以车厢参数由业务系统给出.
+    //其中车厢高度指车厢四周最低箱板的上边沿距地高度
+
+    FWorkNow     : Integer;                   //当前料口索引
+    FWorkPorts   : array of TWJLaserPort;     //可用料口列表
+    //当一个激光器扫描多个料口时,不同的料口对应不同的扫描角度,该角度在激光器
+    //安装后是一个固定值.
 
     FClient      : TIdTCPClient;              //通信链路
     FSerial      : Word;                      //帧序列号
@@ -151,8 +164,8 @@ type
     //同步锁定
     FThreads: array[0..cWJLaserMaxThread-1] of TWJLaserReader;
     //通讯对象
-    FOnProc: TWJLaserProc;
-    FOnEvent: TWJLaserEvent;
+    FOnDataProc: TWJLaserProc;
+    FOnDataEvent: TWJLaserEvent;
     FEventMode: TWJLaserEventMode;
     //事件定义
   protected
@@ -171,9 +184,12 @@ type
     procedure StartService;
     procedure StopService;
     //启停服务
+    function LockTruck(const nLong,nWidth,nHeight: Integer;
+      const nTimeout: Integer = 0): Boolean;
+    //锁定车辆
     property Lasers: TList read FLaserHosts;
-    property OnCardProc: TWJLaserProc read FOnProc write FOnProc;
-    property OnCardEvent: TWJLaserEvent read FOnEvent write FOnEvent;
+    property OnDataProc: TWJLaserProc read FOnDataProc write FOnDataProc;
+    property OnDataEvent: TWJLaserEvent read FOnDataEvent write FOnDataEvent;
     property EventMode: TWJLaserEventMode read FEventMode write FEventMode;
     //属性相关
   end;
@@ -314,7 +330,8 @@ begin
 end;
 
 procedure TWJLaserManager.LoadConfig(const nFile: string);
-var nIdx: Integer;
+var nStr: string;
+    nIdx,nInt: Integer;
     nXML: TNativeXml;
     nHost: PWJLaserHost;
     nDefHost: TWJLaserHost;
@@ -392,6 +409,22 @@ begin
         FOffsetFrontLaser := NodeByNameR('offsetFront').ValueAsInteger;
         FOffsetBackLaser := NodeByNameR('offsetBack').ValueAsInteger;
         FOffsetFloat := NodeByNameR('offsetFloat').ValueAsInteger;
+
+        nTmp := NodeByNameR('workport');
+        SetLength(FWorkPorts, nTmp.AttributeCount);
+        FWorkNow := 0;
+        nInt := 0;
+
+        while nInt < nTmp.AttributeCount do
+        begin
+          nStr := nTmp.AttributeValue[nInt];
+          if IsNumber(nStr, True) then
+               FWorkPorts[nInt].FAngle := StrToFloat(nStr)
+          else FWorkPorts[nInt].FAngle := 90;
+
+          FWorkPorts[nInt].FName := nTmp.AttributeName[nInt];
+          Inc(nInt);
+        end;
 
         FClient := TIdTCPClient.Create;
         with FClient do
@@ -883,7 +916,7 @@ begin
     if (nIdx90 < 0) or (not nHost.FTruckExists) then
     begin
       nHost.FTruckExists := False;
-      nHost.FTruckHigh := 0;
+      //nHost.FTruckHigh := 0;
       nHost.FTruckLong := 0;
 
       DoEvent;
@@ -925,7 +958,7 @@ begin
         end;
 
         if nInt > nHost.FTruckMinHigh then
-          nHost.FTruckHigh := nInt;
+          //nHost.FTruckHigh := nInt;
         //车厢有效高度
       end;
     end;
@@ -988,13 +1021,22 @@ end;
 
 procedure TWJLaserReader.DoOwnerEvent;
 begin
-  if Assigned(FOwner.FOnProc) then
-    FOwner.FOnProc(FActiveHost);
+  if Assigned(FOwner.FOnDataProc) then
+    FOwner.FOnDataProc(FActiveHost);
   //xxxxx
 
-  if Assigned(FOwner.FOnEvent) then
-    FOwner.FOnEvent(FActiveHost);
+  if Assigned(FOwner.FOnDataEvent) then
+    FOwner.FOnDataEvent(FActiveHost);
   //xxxxx
+end;
+
+//Date: 2020-01-03
+//Parm: 车厢长,宽,高;等待超时
+//Desc: 检测车厢是否在放料口下方
+function TWJLaserManager.LockTruck(const nLong, nWidth, nHeight,
+  nTimeout: Integer): Boolean;
+begin
+
 end;
 
 initialization
