@@ -4,6 +4,7 @@
 *.enable: N为禁用,其它为启用
 *.showlog: 显示播发日志,N为禁止
 *.voicename: 语音库名称,为空时表示默认
+*.voicerate: 播放速率,0为默认,大于0为加速
 
 节点: contents.content
 *.object: 对象宏定义
@@ -29,6 +30,7 @@ TTS有效标识:
     <enable>Y</enable>
     <showlog>Y</showlog>
     <voicename>Tatyana</voicename>
+    <voicerate>0</voicerate>
   </config>
   <contents>
     <content id="default">

@@ -49,6 +49,7 @@ type
     FEnable   : Boolean;               //是否启用
     FShowLog  : Boolean;               //显示日志
     FVoiceName: string;                //语音库名
+    FVoiceRate: Integer;               //播放速率
     FContent  : TList;                 //播发内容
     FResource : TList;                 //资源内容
 
@@ -324,6 +325,11 @@ begin
       FEnable := NodeByNameR('enable').ValueAsString <> 'N';
       FVoiceName := Trim(NodeByNameR('voicename').ValueAsString);
 
+      nNode := NodeByName('voicerate');
+      if Assigned(nNode) then
+           FVoiceRate := nNode.ValueAsInteger
+      else FVoiceRate := 0;
+
       nNode := NodeByName('showlog');
       if Assigned(nNode) then
            FShowLog := nNode.ValueAsString <> 'N'
@@ -414,6 +420,7 @@ begin
     FTTSVoicer := CoSpVoice.Create;
     SetTTSVoice(FOwner.FConfig.FVoiceName);
     //init voice
+    FTTSVoicer.Rate := FOwner.FConfig.FVoiceRate;
 
     while True do
     begin
