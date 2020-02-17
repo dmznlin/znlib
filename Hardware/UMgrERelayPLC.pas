@@ -179,7 +179,7 @@ type
   end;
 
 var
-  gERelayManager: TERelayManager = nil;
+  gERelayManagerPLC: TERelayManager = nil;
   //全局使用
 
 implementation
@@ -1271,7 +1271,7 @@ begin
 end;
 
 initialization
-  gERelayManager := nil;
+  gERelayManagerPLC := nil;
 finalization
-  FreeAndNil(gERelayManager);
+  FreeAndNil(gERelayManagerPLC);
 end.
