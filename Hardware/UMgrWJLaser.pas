@@ -88,6 +88,8 @@ type
     //实际业务相对复杂,激光器可能无法扫描到车厢.所以车厢参数由业务系统给出.
     //其中车厢高度指车厢四周最低箱板的上边沿距地高度
 
+    FTruckInPosition  : Boolean;              //车辆是否在料口下方
+    FWorkNowName : string;                    //当前料口标识      
     FWorkNow     : Integer;                   //当前料口索引
     FWorkPorts   : array of TWJLaserPort;     //可用料口列表
     //当一个激光器扫描多个料口时,不同的料口对应不同的扫描角度,该角度在激光器
@@ -184,7 +186,9 @@ type
     procedure StartService;
     procedure StopService;
     //启停服务
-    function LockTruck(const nLong,nWidth,nHeight: Integer;
+    procedure ActiveLaserPort(const nLaser,nPort: string);
+    //激活料口
+    function LockTruck(const nLaser: string; const nLong,nWidth,nHeight: Integer;
       const nTimeout: Integer = 0): Boolean;
     //锁定车辆
     property Lasers: TList read FLaserHosts;
@@ -329,6 +333,91 @@ begin
   end;
 end;
 
+//Date: 2020-02-29
+//Parm: 激光器;料口标识
+//Desc: 设置nHost的活动料口为nPort
+procedure TWJLaserManager.ActiveLaserPort(const nLaser, nPort: string);
+var nIdx,nInt: Integer;
+    nHost: PWJLaserHost;
+begin
+  FSyncLock.Enter;
+  try
+    nIdx := FindHost(nLaser);
+    if nIdx < 0 then
+    begin
+      WriteLog(Format('laser %s is not exits', [nLaser]));
+      Exit;
+    end;
+
+    nHost := FLaserHosts[nIdx];
+    nInt := -1;
+    //xxxxx
+    
+    for nIdx:=Low(nHost.FWorkPorts) to High(nHost.FWorkPorts) do
+    begin
+      if CompareText(nHost.FworkPorts[nIdx].FName, nPort) = 0 then
+      begin
+        nInt := nIdx;
+        Break;
+      end;
+    end;
+
+    if nInt < 0 then
+    begin
+      WriteLog(Format('laser port %s.%s is not exits', [nLaser, nPort]));
+      Exit;
+    end;
+
+    nHost.FWorkNowName := nHost.FworkPorts[nInt].FName;
+    InterlockedExchange(nHost.FWorkNow, nInt);
+  finally
+    FSyncLock.Leave;
+  end;   
+end;
+
+//Date: 2020-01-03
+//Parm: 车厢长,宽,高;等待超时
+//Desc: 检测车厢是否在放料口下方
+function TWJLaserManager.LockTruck(const nLaser: string; const nLong, nWidth,
+  nHeight, nTimeout: Integer): Boolean;
+var nIdx: Integer;
+    nInit: Cardinal;
+    nHost: PWJLaserHost;
+begin
+  FSyncLock.Enter;
+  try
+    Result := False;
+    nIdx := FindHost(nLaser);
+    if nIdx < 0 then
+    begin
+      WriteLog(Format('laser %s is not exits', [nLaser]));
+      Exit;
+    end;
+
+    nHost := FLaserHosts[nIdx];
+    Result := nHost.FTruckInPosition;
+    if (nTimeout < 1) or Result then Exit;
+
+    nInit := GetTickCount();
+    while not Result do
+    try
+      FSyncLock.Leave;
+      Sleep(1);
+
+      Result := nHost.FTruckInPosition;
+      if GetTickCountDiff(nInit) > nTimeout then
+      begin
+        WriteLog(Format('laser %s is locked timeout', [nLaser]));
+        Break;
+      end;
+    finally
+      FSyncLock.Enter;
+    end;
+  finally
+    FSyncLock.Leave;
+  end;
+end;
+
 procedure TWJLaserManager.LoadConfig(const nFile: string);
 var nStr: string;
     nIdx,nInt: Integer;
@@ -412,7 +501,6 @@ begin
 
         nTmp := NodeByNameR('workport');
         SetLength(FWorkPorts, nTmp.AttributeCount);
-        FWorkNow := 0;
         nInt := 0;
 
         while nInt < nTmp.AttributeCount do
@@ -425,6 +513,10 @@ begin
           FWorkPorts[nInt].FName := nTmp.AttributeName[nInt];
           Inc(nInt);
         end;
+
+        FWorkNow := 0;
+        FWorkNowName := FWorkPorts[FWorkNow].FName;
+        //default acitve port
 
         FClient := TIdTCPClient.Create;
         with FClient do
@@ -1028,15 +1120,6 @@ begin
   if Assigned(FOwner.FOnDataEvent) then
     FOwner.FOnDataEvent(FActiveHost);
   //xxxxx
-end;
-
-//Date: 2020-01-03
-//Parm: 车厢长,宽,高;等待超时
-//Desc: 检测车厢是否在放料口下方
-function TWJLaserManager.LockTruck(const nLong, nWidth, nHeight,
-  nTimeout: Integer): Boolean;
-begin
-
 end;
 
 initialization
