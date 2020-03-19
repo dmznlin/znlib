@@ -16,7 +16,7 @@ uses
 
 //------------------------------------------------------------------------------
 type
-  TFloatRelationType = (rtGreater, rtGE, rtEqual, rtLE, rtLess);
+  TValueRelationType = (rtGreater, rtGE, rtEqual, rtLE, rtLess);
   //浮点关系(>, >=, =, <=, <)
 
   PMacroItem = ^TMacroItem;
@@ -95,7 +95,7 @@ function Float2PInt(const nValue: Double; const nPrecision: Integer;
 function Float2Float(const nValue: Double; const nPrecision: Integer;
  const nRound: Boolean = True): Double;
 //按精度转换浮点
-function FloatRelation(const nA,nB: Double; const nType: TFloatRelationType;
+function FloatRelation(const nA,nB: Double; const nType: TValueRelationType;
  const nPrecision: Integer = 100): Boolean;
 //浮点关系判定
 
@@ -178,6 +178,8 @@ function DateTimeSerial: string;
 function GetTickCountDiff(const nCount: Cardinal;
   const nDefault: TTickDefault = tdNow): Int64;
 //result = gettickcount - nCount
+function TickCountRelation(const nTickA,nTickB: Cardinal): TValueRelationType;
+//check tickcount relation
 
 implementation
 
@@ -790,7 +792,7 @@ end;
 //Date: 2010-7-14
 //Parm: 浮点数A,B;待判定关系;判定精度
 //Desc: 按nPrecision精度,判定nA、nB是否满足nType关系
-function FloatRelation(const nA,nB: Double; const nType: TFloatRelationType;
+function FloatRelation(const nA,nB: Double; const nType: TValueRelationType;
  const nPrecision: Integer = 100): Boolean;
 var nIA,nIB: Int64;
 begin
@@ -1594,6 +1596,27 @@ begin
     if (Result < nCount) and (nCount - Result > High(Cardinal) * 0.3) then
          Result := Result + High(Cardinal) - nCount + 1
     else Result := Result - nCount;
+  end;
+end;
+
+//Date: 2020-03-18
+//Desc: 对比GetTickCount值的关系,校正溢出归零问题
+function TickCountRelation(const nTickA,nTickB: Cardinal): TValueRelationType;
+begin
+  Result := rtEqual;
+  //default
+  if nTickA = nTickB then Exit;
+
+  if Abs(Int64(nTickA) - nTickB) > (High(Cardinal) * 0.3) then //差值过大视为归零
+  begin
+    if nTickA > nTickB then
+         Result := rtLess
+    else Result := rtGreater;
+  end else
+  begin
+    if nTickA > nTickB then
+         Result := rtGreater
+    else Result := rtLess;
   end;
 end;
 

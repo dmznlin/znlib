@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="gb2312"?>
+<!--++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+节点: config
+*.enable: N,关闭;其它开启.
+*.thread: 线程个数(1-5)
+*.localport: 监听端口
+*.hostkeep: 主机在保持时间内有效,单位秒
+*.blockmac: MAC黑名单,以逗号(,)分隔
+
+节点: probers.prober
+*.enable: N,关闭;其它开启.
+*.id: 节点标识
+*.ip,port: 探针地址
+*.position: 位置(in,进厂;out,出厂;pound,地磅;zt,栈台;sz,散装)
+*.tunnel: 通道号
+*.virtual: Y,虚拟读头;其它不虚拟
+*.reader: 读头标识,可多个,格式:001,002
+*.interval: 虚拟多读头时,每两个读头的刷卡间隔,单位毫秒
+*.type: 900,900m远距离;02n,现场近距离
+*.keeponce:同卡号连续刷卡时,卡号有效间隔,单位毫秒.
+*.keeppeer: Y,每keeponce视为一次;N,间隔keeponce刷卡视为一次.
+*.options: 附加参数,用于特定业务
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++-->
+<wifi>
+  <config>
+    <enable>Y</enable>
+    <thread>3</thread>
+    <localport>80</localport>
+    <hostkeep>60</hostkeep>
+    <blockmac></blockmac>
+  </config>
+  <probers>
+    <prober id="00f3f146">
+      <enable>Y</enable>
+      <ip>192.168.0.220</ip>
+      <port>8080</port>
+      <hostkeep>0</hostkeep>
+      <position>in</position>
+      <tunnel>FH001</tunnel>
+      <keeponce keeppeer="N">5000</keeponce>
+      <virtual reader="001,002" type="900" interval="100">N</virtual>
+      <options>key1=value;key2=value</options>
+    </prober>
+  </probers>
+</wifi>
