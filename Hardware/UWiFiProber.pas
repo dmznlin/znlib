@@ -8,7 +8,8 @@ interface
 
 uses
   Windows, Classes, SysUtils, IdCustomHTTPServer, IdHTTPServer, IdContext,
-  NativeXml, SyncObjs, superobject, UWaitItem, ULibFun, USysLoger;
+  NativeXml, SyncObjs, superobject, UMemDataPool, UWaitItem, ULibFun,
+  USysLoger;
 
 type
   TWiFiVitualType = (vt900, vt02n);
@@ -75,6 +76,8 @@ type
     //待解析数据
     FActiveHost: TWiFiHost;
     //WiFi主机
+    FOfflineHost: TList;
+    //离线主机
     FWaiter: TWaitObject;
     //等待对象
   protected
@@ -101,7 +104,6 @@ type
   TWiFiConfigure = record
     FEnableProbe : Boolean;              //启用探针
     FValidProbe  : Integer;              //有效探针数
-    FHostBuffer  : Integer;              //主机缓存
 
     FHostBlock   : Boolean;              //是否阻止
     FHostFlag    : string;               //主机标识
@@ -123,6 +125,7 @@ type
     //配置参数
     FProbers: TList;
     //探针列表
+    FIDHost: Integer;
     FWiFiHost: TList;
     FWiFiData: TWiFiData;
     //探针数据
@@ -138,14 +141,17 @@ type
     //事件相关
   protected
     procedure ClearProberList(const nFree: Boolean = False);
-    procedure ClearHostList(const nFree: Boolean = False);
+    procedure ClearHostList(var nList: TList; const nFree: Boolean);
     //清理资源
+    procedure RegisterDataType;
+    //注册数据
     procedure DoCommandGet(AContext: TIdContext;
       ARequestInfo: TIdHTTPRequestInfo; AResponseInfo: TIdHTTPResponseInfo);
     //处理数据
     function FindProber(const nID: string): Integer;
     //检索数据
-    function LockHost(const nMAC: string; const nProber: PWiFiProber): PWiFiHost;
+    function LockHost(const nMAC: string; const nProber: PWiFiProber;
+     const nOffline: TList = nil): PWiFiHost;
     //锁定数据
     function InHostList(const nMAC: string): Boolean;
     //在列表中
@@ -188,6 +194,9 @@ begin
     FHostList   := TStringList.Create;
   end;
 
+  RegisterDataType;
+  //由内存管理数据
+
   FProbers := TList.Create;
   FWiFiHost := TList.Create;
   FSyncLock := TCriticalSection.Create;
@@ -199,13 +208,44 @@ end;
 destructor TWiFiProberManager.Destroy;
 begin
   StopProber();
-  ClearHostList(True);
+  ClearHostList(FWiFiHost, True);
   ClearProberList(True);
 
   FConfig.FHostList.Free;
   FWebServer.Free;
   FSyncLock.Free;
   inherited;
+end;
+
+procedure OnNew(const nFlag: string; const nType: Word; var nData: Pointer);
+var nHost: PWiFiHost;
+begin
+  if nFlag = 'WiFiHost' then
+  begin
+    New(nHost);
+    nData := nHost;
+  end;
+end;
+
+procedure OnFree(const nFlag: string; const nType: Word; const nData: Pointer);
+begin
+  if nFlag = 'WiFiHost' then
+  begin
+    Dispose(PWiFiHost(nData));
+  end;
+end;
+
+//Desc: 注册数据类型
+procedure TWiFiProberManager.RegisterDataType;
+begin
+  if not Assigned(gMemDataManager) then
+    raise Exception.Create('WiFiProberManager Needs MemDataManager Support.');
+  //xxxxx
+
+  with gMemDataManager do
+  begin
+    FIDHost:= RegDataType('WiFiHost', 'WiFiProbe', OnNew, OnFree, 2);
+  end;
 end;
 
 //Date: 2020-03-17
@@ -233,18 +273,18 @@ end;
 //Date: 2020-03-19
 //Parm: 是否释放
 //Desc: 清理主机列表
-procedure TWiFiProberManager.ClearHostList(const nFree: Boolean);
+procedure TWiFiProberManager.ClearHostList(var nList: TList; const nFree: Boolean);
 var nIdx: Integer;
 begin
-  if Assigned(FWiFiHost) then
+  if Assigned(nList) then
   begin
-    for nIdx:=FWiFiHost.Count - 1 downto 0 do
-      Dispose(PWiFiHost(FWiFiHost[nIdx]));
+    for nIdx:=nList.Count - 1 downto 0 do
+      gMemDataManager.UnLockData(nList[nIdx]);
     //xxxxx
     
     if nFree then
-         FreeAndNil(FWiFiHost)
-    else FWiFiHost.Clear;
+         FreeAndNil(nList)
+    else nList.Clear;
   end;
 end;
 
@@ -306,7 +346,7 @@ begin
     FProbeThreads[nIdx] := nil;
   end;
 
-  ClearHostList(False);
+  ClearHostList(FWiFiHost, False);
   //clear buffer
 end;
 
@@ -328,66 +368,57 @@ begin
 end;
 
 //Date: 2020-03-19
-//Parm: MAC;探针
+//Parm: MAC;探针;已离线主机
 //Desc: 锁定nProber上的nMAC主机
 function TWiFiProberManager.LockHost(const nMAC: string;
- const nProber: PWiFiProber): PWiFiHost;
-var nIdx,nInt,nMax: Integer;
+ const nProber: PWiFiProber; const nOffline: TList): PWiFiHost;
+var nIdx: Integer;
     nHost: PWiFiHost;
 begin
-  nMax := FConfig.FValidProbe * FConfig.FHostBuffer;
-  nInt := -1;
-  //init
-  
+  Result := nil;
   for nIdx:=FWiFiHost.Count-1 downto 0 do
   begin
     nHost := FWiFiHost[nIdx];
     if nHost.FMAC = nMAC then
     begin
       Result := nHost;
-      Exit;
+      Break;
     end;
 
     if (nHost.FValid) and
        (GetTickCountDiff(nHost.FLastActive) >= nHost.FProber.FHostKeep) then
     begin
-      nHost.FValid := False;
-      //节点超时
-    end;
-
-    if not nHost.FValid then
-    begin
-      if nInt < 0 then //节点无效复用
+      if Assigned(nOffline) then
       begin
-        nInt := nIdx;
-        nHost.FMAC := '';
-        nHost.FLastActive := 0;
+        nHost.FValid := False;
+        nOffline.Add(nHost);
       end else
-
-      if FWiFiHost.Count > nMax then //清理无效节点
       begin
-        Dispose(nHost);
-        FWiFiHost.Delete(nIdx);
+        gMemDataManager.UnLockData(nHost);
+        //release
       end;
+
+      FWiFiHost.Delete(nIdx);
+      //节点超时,移除
     end;
   end;
 
-  if nInt < 0 then
+  if not Assigned(Result) then
   begin
-    New(Result);
+    Result := gMemDataManager.LockData(FIDHost);
     FWiFiHost.Add(Result);
     Result.FMAC := '';
-  end else Result := FWiFiHost[nInt];
+  end;
 
-  Result.FValid := True;
-  //lock
-  Result.FProber := nProber;
- 
   if Result.FMAC <> nMAC then
   begin
     Result.FMAC := nMAC;
     Result.FCounter := 0;
   end;
+
+  Inc(Result.FCounter);
+  Result.FValid := True;
+  Result.FProber := nProber;
 end;
 
 //Date: 2020-03-20
@@ -516,13 +547,6 @@ begin
         SplitStr(FHostMAC, FHostList, 0, ',');
       //xxxxx
 
-      FHostBuffer := NodeByNameR('hostbuffer').ValueAsInteger;
-      if (FHostBuffer < 10) or (FHostBuffer > 100) then
-      begin
-        FHostBuffer := 50;
-        WriteLog('WiFi Probe Host-Buffer Need Between 10-100.');
-      end;
-
       FThreadNum := NodeByNameR('thread').ValueAsInteger;
       if (FThreadNum < 1) or (FThreadNum > 5) then
       begin
@@ -636,14 +660,16 @@ constructor TWiFiProbeThread.Create(AOwner: TWiFiProberManager);
 begin
   inherited Create(False);
   FreeOnTerminate := False;
-
   FOwner := AOwner;
+  
+  FOfflineHost := TList.Create;
   FWaiter := TWaitObject.Create;
   FWaiter.Interval := 100;
 end;
 
 destructor TWiFiProbeThread.Destroy;
 begin
+  FOwner.ClearHostList(FOfflineHost, True);
   FWaiter.Free;
   inherited;
 end;
@@ -742,19 +768,19 @@ begin
     begin
       try
         FSyncLock.Enter;
-        nHost := LockHost(nStr, nProber);
+        nHost := LockHost(nStr, nProber, FOfflineHost);
         if nProber.FKeepOnce > 0 then
         begin
           if GetTickCountDiff(nHost.FLastActive) < nProber.FKeepOnce then
           begin
             if not nProber.FKeepPeer then
-              nHost.FKeepLast := GetTickCount;
+              nHost.FLastActive := GetTickCount;
             Exit;
           end;
         end;
 
-        nHost.Frssi   := nHosts[nIdx].I['mac'];
-        nHost.Frange  := nHosts[nIdx].D['rssi'];
+        nHost.Frssi   := nHosts[nIdx].I['rssi'];
+        nHost.Frange  := nHosts[nIdx].D['range'];
         nHost.Fts     := nHosts[nIdx].S['ts'];
         nHost.Ftmc    := nHosts[nIdx].S['tmc'];
         nHost.Ftc     := nHosts[nIdx].S['tc'];
@@ -764,13 +790,14 @@ begin
         nHost.FLastActive := GetTickCount();
         
         if Assigned(FOnNewHost) or Assigned(FOnNewHostEvent) then
-          FActiveHost := nHost^;
-        //bind data
+             FActiveHost := nHost^ //bind data
+        else FActiveHost.FValid := False;
       finally
         FSyncLock.Leave;
       end;
 
-      DoEvent;
+      if FActiveHost.FValid then
+        DoEvent;
       //执行事件
     end;
   end;
@@ -788,6 +815,7 @@ begin
 end;
 
 procedure TWiFiProbeThread.DoOwnerEvent;
+var nIdx: Integer;
 begin
   if Assigned(FOwner.FOnNewHost) then
     FOwner.FOnNewHost(@FActiveHost);
@@ -796,6 +824,23 @@ begin
   if Assigned(FOwner.FOnNewHostEvent) then
     FOwner.FOnNewHostEvent(@FActiveHost);
   //xxxxx
+
+  if FOfflineHost.Count > 0 then
+  begin
+    for nIdx:=FOfflineHost.Count-1 downto 0 do
+    begin
+      if Assigned(FOwner.FOnNewHost) then
+        FOwner.FOnNewHost(FOfflineHost[nIdx]);
+      //xxxxx
+
+      if Assigned(FOwner.FOnNewHostEvent) then
+        FOwner.FOnNewHostEvent(FOfflineHost[nIdx]);
+      //xxxxx
+    end;
+
+    FOwner.ClearHostList(FOfflineHost, False);
+    //clear list
+  end;
 end;
 
 initialization

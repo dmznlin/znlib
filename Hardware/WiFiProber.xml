@@ -5,7 +5,6 @@
 *.thread: 线程个数(1-5)
 *.localport: 监听端口
 *.hostkeep: 主机在保持时间内有效,单位秒
-*.hostbuffer: 单个探针的主机缓存个数
 *.hostlist: 主机列表,以逗号(,)分隔
 *.block: Y,阻止列表中的主机;不阻止
 *.flag: 列表中主机标识,用于特定应用
@@ -41,7 +40,7 @@
       <hostkeep>0</hostkeep>
       <position>in</position>
       <tunnel>FH001</tunnel>
-      <keeponce keeppeer="N">5000</keeponce>
+      <keeponce keeppeer="Y">5000</keeponce>
       <virtual reader="001,002" type="900" interval="100">N</virtual>
       <options>key1=value;key2=value</options>
     </prober>
