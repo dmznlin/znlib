@@ -113,6 +113,7 @@ type
     FThreadNum   : Integer;              //检测线程数
     FWebPort     : Integer;              //数据接收端口
     FHostKeep    : Integer;              //主机信息保留时长(秒)
+    FCheckOffline: Cardinal;             //上次检测离线主机时间
   end;
 
   TWiFiOnNewHost = procedure (const nHost: PWiFiHost);
@@ -183,19 +184,15 @@ begin
 end;
 
 constructor TWiFiProberManager.Create;
+var nDef: TWiFiConfigure;
 begin
+  RegisterDataType;
   FEventMode := emThread;
   SetLength(FProbeThreads, 0);
 
-  with FConfig do
-  begin
-    FValidProbe := 0;
-    FHostMAC    := '';
-    FHostList   := TStringList.Create;
-  end;
-
-  RegisterDataType;
-  //由内存管理数据
+  FillChar(nDef, SizeOf(nDef), #0);
+  FConfig := nDef; //init all
+  FConfig.FHostList   := TStringList.Create;
 
   FProbers := TList.Create;
   FWiFiHost := TList.Create;
@@ -378,8 +375,12 @@ begin
   Result := nil;
   for nIdx:=FWiFiHost.Count-1 downto 0 do
   begin
+    if nIdx = 0 then
+      FConfig.FCheckOffline := GetTickCount();
+    //checked all
+
     nHost := FWiFiHost[nIdx];
-    if nHost.FMAC = nMAC then
+    if (nMAC <> '') and (nHost.FMAC = nMAC) then
     begin
       Result := nHost;
       Break;
@@ -403,6 +404,12 @@ begin
     end;
   end;
 
+  if nMAC = '' then //only for offline
+  begin
+    FConfig.FCheckOffline := GetTickCount();
+    Exit;
+  end;
+  
   if not Assigned(Result) then
   begin
     Result := gMemDataManager.LockData(FIDHost);
@@ -595,12 +602,9 @@ begin
         if nStr = 'sz' then FPosition := wpSZ else FPosition := wpUnkown;
 
         nTmp := FindNode('hostkeep');
-        if Assigned(nTmp) then
-        begin
-          FHostKeep := nTmp.ValueAsInteger;
-          if FHostKeep < 2 then FHostKeep := 2;
-          FHostKeep := FHostKeep * 1000;
-        end else FHostKeep := FConfig.FHostKeep;
+        if Assigned(nTmp) and (nTmp.ValueAsInteger >= 2) then
+             FHostKeep := nTmp.ValueAsInteger * 1000
+        else FHostKeep := FConfig.FHostKeep;
 
         nTmp := FindNode('tunnel');
         if Assigned(nTmp) then
@@ -720,6 +724,24 @@ begin
     if nHasData then
       DoExecute;
     //parse data
+
+    with FOwner do
+    begin
+      FSyncLock.Enter;
+      try
+        if GetTickCountDiff(FConfig.FCheckOffline, tdZero) > 5 * 1000 then
+          LockHost('', nil, FOfflineHost);
+        //get offline hosts
+      finally
+        FSyncLock.Leave;
+      end;
+
+      if FOfflineHost.Count > 0 then //offline event
+      begin
+        FActiveHost.FValid := False;
+        DoEvent;
+      end;
+    end;
   except
     on E: Exception do
     begin
@@ -753,7 +775,10 @@ begin
   nHosts := nJSON.A['data'];  
   for nIdx:=nHosts.Length - 1 downto 0 do
   begin
-    nStr := nHosts[nIdx].S['mac'];
+    nStr := Trim(nHosts[nIdx].S['mac']);
+    if nStr = '' then Continue;
+    //invalid mac
+
     if FOwner.InHostList(nStr) then
     begin
       if FOwner.FConfig.FHostBlock then Continue; //黑名单      
@@ -765,38 +790,40 @@ begin
     end;
 
     with FOwner do
-    begin
-      try
-        FSyncLock.Enter;
-        nHost := LockHost(nStr, nProber, FOfflineHost);
-        if nProber.FKeepOnce > 0 then
+    try
+      FActiveHost.FValid := False;
+      FSyncLock.Enter;
+      //get active and offline
+
+      nHost := LockHost(nStr, nProber, FOfflineHost);
+      nHost.FFlag := FActiveHost.FFlag;
+      //host flag is important
+
+      if nProber.FKeepOnce > 0 then
+      begin
+        if GetTickCountDiff(nHost.FLastActive) < nProber.FKeepOnce then
         begin
-          if GetTickCountDiff(nHost.FLastActive) < nProber.FKeepOnce then
-          begin
-            if not nProber.FKeepPeer then
-              nHost.FLastActive := GetTickCount;
-            Exit;
-          end;
-        end;
-
-        nHost.Frssi   := nHosts[nIdx].I['rssi'];
-        nHost.Frange  := nHosts[nIdx].D['range'];
-        nHost.Fts     := nHosts[nIdx].S['ts'];
-        nHost.Ftmc    := nHosts[nIdx].S['tmc'];
-        nHost.Ftc     := nHosts[nIdx].S['tc'];
-        nHost.Fds     := nHosts[nIdx].S['ds'];
-
-        nHost.FFlag := FActiveHost.FFlag;
-        nHost.FLastActive := GetTickCount();
-        
-        if Assigned(FOnNewHost) or Assigned(FOnNewHostEvent) then
-             FActiveHost := nHost^ //bind data
-        else FActiveHost.FValid := False;
-      finally
-        FSyncLock.Leave;
+          if not nProber.FKeepPeer then
+            nHost.FLastActive := GetTickCount;
+          Continue;
+        end; //同一主机多次出发时压缩事件
       end;
 
-      if FActiveHost.FValid then
+      nHost.Frssi   := nHosts[nIdx].I['rssi'];
+      nHost.Frange  := nHosts[nIdx].D['range'];
+      nHost.Fts     := nHosts[nIdx].S['ts'];
+      nHost.Ftmc    := nHosts[nIdx].S['tmc'];
+      nHost.Ftc     := nHosts[nIdx].S['tc'];
+      nHost.Fds     := nHosts[nIdx].S['ds'];
+      nHost.FLastActive := GetTickCount();
+
+      if Assigned(FOnNewHost) or Assigned(FOnNewHostEvent) then
+        FActiveHost := nHost^;
+      //bind data
+    finally
+      FSyncLock.Leave;
+
+      if FActiveHost.FValid or (FOfflineHost.Count > 0) then
         DoEvent;
       //执行事件
     end;
@@ -817,15 +844,18 @@ end;
 procedure TWiFiProbeThread.DoOwnerEvent;
 var nIdx: Integer;
 begin
-  if Assigned(FOwner.FOnNewHost) then
-    FOwner.FOnNewHost(@FActiveHost);
-  //xxxxx
+  if FActiveHost.FValid then //在线主机
+  begin
+    if Assigned(FOwner.FOnNewHost) then
+      FOwner.FOnNewHost(@FActiveHost);
+    //xxxxx
 
-  if Assigned(FOwner.FOnNewHostEvent) then
-    FOwner.FOnNewHostEvent(@FActiveHost);
-  //xxxxx
+    if Assigned(FOwner.FOnNewHostEvent) then
+      FOwner.FOnNewHostEvent(@FActiveHost);
+    //xxxxx
+  end;
 
-  if FOfflineHost.Count > 0 then
+  if FOfflineHost.Count > 0 then //离线主机
   begin
     for nIdx:=FOfflineHost.Count-1 downto 0 do
     begin

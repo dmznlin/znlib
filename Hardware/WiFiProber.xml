@@ -13,6 +13,7 @@
 *.enable: N,关闭;其它开启.
 *.id: 节点标识
 *.ip,port: 探针地址
+*.hostkeep: 有效时长(秒,>=2)
 *.position: 位置(in,进厂;out,出厂;pound,地磅;zt,栈台;sz,散装)
 *.tunnel: 通道号
 *.virtual: Y,虚拟读头;其它不虚拟
