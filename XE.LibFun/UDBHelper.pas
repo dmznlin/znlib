@@ -12,7 +12,8 @@ unit UDBHelper;
 interface
 
 uses
-  System.Classes, System.SysUtils, System.Generics.Collections;
+  System.Classes, System.SysUtils, System.Generics.Collections, Winapi.Windows,
+  Data.DB, Data.Win.ADODB, UManagerGroup, ULibFun;
 
 type
   TDBHelper = class;
@@ -27,15 +28,15 @@ type
 
   PDBConnConfig = ^TDBConnConfig;
   TDBConnConfig = record
-    FID   : string;                             //连接标识
-    FName : string;                             //连接名称
-    FConn : string;                             //连接字符串
+    FID    : string;                            //连接标识
+    FName  : string;                            //连接名称
+    FConn  : string;                            //连接字符串
+    FFitDB : TDBType;                           //适配数据库
   end;
 
   PDBConnData = ^TDBConnData;
   TDBConnData = record
-    FConnUser  : string;                        //用户设置连接字符串
-    FConnStr   : string;                        //系统有效连接字符串
+    FConnID    : string;                        //连接标识
     FConnected : Boolean;                       //连接状态
     FConneLast : Int64;                         //上次活动
   end;
@@ -77,10 +78,16 @@ type
 
   TDBHelper = class
   protected
-    FDefaultDB: TDBType;
-    {*默认数据库*}
+    FDefaultFit: TDBType;
+    {*默认适配类型*}
+    FDefaultDB: string;
+    {*默认数据库标识*}
+    FAutoReconnect: Boolean;
+    {*数据库自动重连*}
     FDBConfig: TDictionary<string, TDBConnConfig>;
     {*配置字典*}
+    procedure RegObjectPoolTypes;
+    {*注册对象*}
     procedure AddSystemTables(const nList: TList); virtual; abstract;
     procedure AddSystemIndexes(const nList: TList); virtual;
     procedure AddSystemTriggers(const nList: TList); virtual;
@@ -92,21 +99,180 @@ type
     constructor Create;
     destructor Destroy; override;
     {*创建释放*}
-    procedure AddDB(const nConfig: TDBConnConfig);
+    procedure AddDB(nConfig: TDBConnConfig);
     {*添加数据库*}
     procedure GetTables(const nList: TList);
     procedure ClearTables(const nList: TList; const nFree: Boolean=True);
     {*获取表信息*}
     function GetDB(const nID: string; var nConfig: TDBConnConfig): Boolean;
     {*获取数据库*}
+    function LockDBConn(nDB: string = ''): TADOConnection;
+    procedure ReleaseDBConn(const nConn: TADOConnection);
+    function CheckDBConn(const nConn: TADOConnection): string;
+    {*数据库链路*}
+    function LockDBQuery(const nDB: string = '';
+      const nBindConnection: Boolean = True): TADOQuery;
+    procedure ReleaseDBQuery(const nQuery: TADOQuery;
+      const nResetConn: Boolean = False; const nReleaseConn: Boolean = True);
+    {*数据库对象*}
+    function DBQuery(const nSQL: string; const nQuery: TADOQuery;
+      const nDB: string = ''; const nLockBookmark: Boolean = False): TDataSet;
+    function DBExecute(const nSQL: string; const nCmd: TADOQuery = nil;
+      const nDB: string = ''): Integer; overload;
+    function DBExecute(const nList: TStrings; const nCmd: TADOQuery = nil;
+      const nDB: string = ''): Integer; overload;
+    {*数据库操作*}
   end;
 
 implementation
 
+procedure WriteLog(const nEvent: string);
+begin
+  gMG.FLogManager.AddLog(TDBHelper, '数据库链路', nEvent);
+end;
+
+//------------------------------------------------------------------------------
+//Date: 2020-04-16
+//Parm: 字段名;字段类型;字段描述;默认值;适配数据库
+//Desc: 新增一个适配nDBType数据库的表字段
+function TDBTable.AddF(const nField, nType, nMemo, nDefVal: string;
+  nDBType: TDBType): PDBTable;
+var i,nIdx,nInt: Integer;
+begin
+  Result := @Self;
+  //return self address
+
+  if nDBType = dtDefault then
+    nDBType := FManager.FDefaultFit;
+  //set default
+
+  for nIdx := Low(FFields) to High(FFields) do
+  with FFields[nIdx] do
+  begin
+    if CompareText(nField, FName) = 0 then
+    begin
+      FMemo := nMemo;
+      FDefVal := nDefVal;
+      //update memo and default value
+
+      for i := Low(FType) to High(FType) do
+       if FType[i].FFitDB = nDBType then Exit;
+      //same db, same field
+
+      nInt := Length(FType);
+      SetLength(FType, nInt + 1);
+      with FType[nInt] do
+      begin
+        FName := nField;
+        FData := nType;
+        FFitDB := nDBType;
+      end;
+
+      Exit
+    end;
+  end;
+
+  nInt := Length(FFields);
+  SetLength(FFields, nInt + 1);
+  //new table field
+
+  with FFields[nInt] do
+  begin
+    FName := nField;
+    FMemo := nMemo;
+    FDefVal := nDefVal;
+
+    SetLength(FType, 1);
+    with FType[0] do
+    begin
+      FName := nField;
+      FData := nType;
+      FFitDB := nDBType;
+    end;
+  end;
+end;
+
+//Date: 2020-04-16
+//Parm: 索引名;索引数据;适配数据库
+//Desc: 新增一个适配nDBType的表索引
+function TDBTable.AddI(const nName,nIndex: string; nDBType: TDBType): PDBTable;
+var nIdx: Integer;
+begin
+  Result := @Self;
+  //return self address
+
+  if nDBType = dtDefault then
+    nDBType := FManager.FDefaultFit;
+  //set default
+
+  for nIdx := Low(FIndexes) to High(FIndexes) do
+  with FIndexes[nIdx] do
+  begin
+    if (CompareText(nName, FName) = 0) and (FFitDB = nDBType) then
+    begin
+      FData := nIndex;
+      Exit;
+    end; //same db,same index
+  end;
+
+  nIdx := Length(FIndexes);
+  SetLength(FIndexes, nIdx + 1);
+  //new index
+
+  with FIndexes[nIdx] do
+  begin
+    FName := nName;
+    FData := nIndex;
+    FFitDB := nDBType;
+  end;
+end;
+
+//Date: 2020-04-16
+//Parm: 触发器名;触发器数据;适配数据库
+//Desc: 新增一个适配nDBType的表触发器
+function TDBTable.AddT(const nName,nTrigger: string; nDBType: TDBType): PDBTable;
+var nIdx: Integer;
+begin
+  Result := @Self;
+  //return self address
+
+  if nDBType = dtDefault then
+    nDBType := FManager.FDefaultFit;
+  //set default
+
+  for nIdx := Low(FTriggers) to High(FTriggers) do
+  with FTriggers[nIdx] do
+  begin
+    if (CompareText(nName, FName) = 0) and (FFitDB = nDBType) then
+    begin
+      FData := nTrigger;
+      Exit;
+    end; //same db,same trigger
+  end;
+
+  nIdx := Length(FTriggers);
+  SetLength(FTriggers, nIdx + 1);
+  //new index
+
+  with FTriggers[nIdx] do
+  begin
+    FName := nName;
+    FData := nTrigger;
+    FFitDB := nDBType;
+  end;
+end;
+
+//------------------------------------------------------------------------------
 constructor TDBHelper.Create;
 begin
-  FDefaultDB := dtMySQL;
+  FDefaultDB := 'main';
+  FDefaultFit := dtMSSQL;
+
+  FAutoReconnect := True;
   FDBConfig := TDictionary<string, TDBConnConfig>.Create();
+
+  RegObjectPoolTypes;
+  //register pool
 end;
 
 destructor TDBHelper.Destroy;
@@ -115,10 +281,44 @@ begin
   inherited;
 end;
 
+//Date: 2020-04-17
+//Desc: 注册对象池
+procedure TDBHelper.RegObjectPoolTypes;
+var nCD: PDBConnData;
+begin
+  with gMG.FObjectPool do
+  begin
+    NewClass(TADOConnection,
+      function(var nData: Pointer): TObject
+      begin
+        Result := TADOConnection.Create(nil);
+        //new connction
+
+        New(nCD);
+        nData := nCD;
+        nCD.FConnID := '';
+      end,
+
+      procedure(const nObj: TObject; const nData: Pointer)
+      begin
+        nObj.Free;
+        Dispose(PDBConnData(nData));
+      end);
+    //ado conn
+
+    NewClass(TADOQuery,
+      function(var nData: Pointer): TObject
+      begin
+        Result := TADOQuery.Create(nil);
+      end);
+    //ado query
+  end;
+end;
+
 //Date: 2020-04-16
 //Parm: 表名称;列表
 //Desc: 检索nList中名称为nTable的表
-function TDBHelper.FindTable(const nTable: string; const nList: TList): PDBTable;
+function TDBHelper.FindTable(const nTable: string; const nList:TList): PDBTable;
 var nIdx: Integer;
 begin
   Result := nil;
@@ -193,8 +393,10 @@ end;
 //Date: 2020-04-16
 //Parm: 数据库配置
 //Desc: 新增数据库配置项
-procedure TDBHelper.AddDB(const nConfig: TDBConnConfig);
+procedure TDBHelper.AddDB(nConfig: TDBConnConfig);
 begin
+  if (nConfig.FFitDB <= Low(TDBType)) or (nConfig.FFitDB > High(TDBType)) then
+    nConfig.FFitDB := FDefaultFit;
   FDBConfig.Add(nConfig.FID, nConfig);
 end;
 
@@ -207,135 +409,355 @@ begin
 end;
 
 //------------------------------------------------------------------------------
-//Date: 2020-04-16
-//Parm: 字段名;字段类型;字段描述;默认值;适配数据库
-//Desc: 新增一个适配nDBType数据库的表字段
-function TDBTable.AddF(const nField, nType, nMemo, nDefVal: string;
-  nDBType: TDBType): PDBTable;
-var i,nIdx,nInt: Integer;
+//Date: 2020-04-17
+//Parm: 数据库标识
+//Desc: 获取nDB的连接对象
+function TDBHelper.LockDBConn(nDB: string): TADOConnection;
+var nStr: string;
+    nCD: PDBConnData;
+    nCfg: TDBConnConfig;
 begin
-  Result := @Self;
-  //return self address
-
-  if nDBType = dtDefault then
-    nDBType := FManager.FDefaultDB;
+  if nDB = '' then
+    nDB := FDefaultDB;
   //set default
 
-  for nIdx := Low(FFields) to High(FFields) do
-  with FFields[nIdx] do
+  if not GetDB(nDB, nCfg) then
   begin
-    if CompareText(nField, FName) = 0 then
+    nStr := Format('数据库[ %s ]不存在,请先配置.', [nDB]);
+    raise Exception.Create(nStr);
+  end;
+
+  Result := gMG.FObjectPool.Lock(TADOConnection, nil, @nCD,
+    function(const nObj: TObject; const nData: Pointer;
+     var nTimes: Integer): Boolean
     begin
-      FMemo := nMemo;
-      FDefVal := nDefVal;
-      //update memo and default value
-
-      for i := Low(FType) to High(FType) do
-       if FType[i].FFitDB = nDBType then Exit;
-      //same db, same field
-
-      nInt := Length(FType);
-      SetLength(FType, nInt + 1);
-      with FType[nInt] do
+      if nTimes = 1 then
       begin
-        FName := nField;
-        FData := nType;
-        FFitDB := nDBType;
+        Result := (not Assigned(nData)) or
+                  (PDBConnData(nData).FConnID = nDB);
+        //相同连接
+      end else
+      begin
+        Result := (not Assigned(nData)) or (
+          (not TADOConnection(nObj).Connected) or
+          (TDateTimeHelper.GetTickCountDiff(PDBConnData(nData).FConneLast) > 60 * 1000));
+        //空闲连接
       end;
 
-      Exit
-    end;
-  end;
+      if nTimes = 1 then
+        nTimes := 2;
+      //两轮扫描
+    end
+  ) as TADOConnection;
 
-  nInt := Length(FFields);
-  SetLength(FFields, nInt + 1);
-  //new table field
-
-  with FFields[nInt] do
+  with Result do
   begin
-    FName := nField;
-    FMemo := nMemo;
-    FDefVal := nDefVal;
+    nCD.FConneLast := GetTickCount();
+    nCD.FConnected := Connected;
+    //conn status
 
-    SetLength(FType, 1);
-    with FType[0] do
+    if nCD.FConnID <> nDB then
     begin
-      FName := nField;
-      FData := nType;
-      FFitDB := nDBType;
+      nCD.FConnID := nDB;
+      //id
+
+      Connected := False;
+      ConnectionString := nCfg.FConn;
+      LoginPrompt := False;
     end;
   end;
 end;
 
-//Date: 2020-04-16
-//Parm: 索引名;索引数据;适配数据库
-//Desc: 新增一个适配nDBType的表索引
-function TDBTable.AddI(const nName,nIndex: string;
-  nDBType: TDBType): PDBTable;
-var nIdx: Integer;
+//Date: 2020-04-17
+//Parm: 连接对象
+//Desc: 释放链路
+procedure TDBHelper.ReleaseDBConn(const nConn: TADOConnection);
 begin
-  Result := @Self;
-  //return self address
-
-  if nDBType = dtDefault then
-    nDBType := FManager.FDefaultDB;
-  //set default
-
-  for nIdx := Low(FIndexes) to High(FIndexes) do
-  with FIndexes[nIdx] do
+  if Assigned(nConn) then
   begin
-    if (CompareText(nName, FName) = 0) and (FFitDB = nDBType) then
-    begin
-      FData := nIndex;
-      Exit;
-    end; //same db,same index
-  end;
-
-  nIdx := Length(FIndexes);
-  SetLength(FIndexes, nIdx + 1);
-  //new index
-
-  with FIndexes[nIdx] do
-  begin
-    FName := nName;
-    FData := nIndex;
-    FFitDB := nDBType;
+    gMG.FObjectPool.Release(nConn);
   end;
 end;
 
-//Date: 2020-04-16
-//Parm: 触发器名;触发器数据;适配数据库
-//Desc: 新增一个适配nDBType的表触发器
-function TDBTable.AddT(const nName, nTrigger: string;
-  nDBType: TDBType): PDBTable;
-var nIdx: Integer;
+//Date: 2020-04-17
+//Parm: 数据库库链路
+//Desc: 检测nConn是否正常
+function TDBHelper.CheckDBConn(const nConn: TADOConnection): string;
+var nQuery: TADOQuery;
 begin
-  Result := @Self;
-  //return self address
+  nQuery := nil;
+  try
+    Result := '';
+    nQuery := LockDBQuery('', False);
 
-  if nDBType = dtDefault then
-    nDBType := FManager.FDefaultDB;
-  //set default
+    with nQuery do
+    try
+      Connection := nConn;
+      Close;
+      SQL.Text := 'select 1';
+      Open;
+    except
+      on nErr: Exception do
+      begin
+        Result := nErr.Message;
+        WriteLog(Result);
+      end;
+    end;
+  finally
+    ReleaseDBQuery(nQuery, False, False);
+  end;
+end;
 
-  for nIdx := Low(FTriggers) to High(FTriggers) do
-  with FTriggers[nIdx] do
+//Date: 2020-04-17
+//Parm: 数据库标识;绑定链路
+//Desc: 获取nDB数据的Query对象
+function TDBHelper.LockDBQuery(const nDB: string;
+  const nBindConnection: Boolean): TADOQuery;
+begin
+  Result := gMG.FObjectPool.Lock(TADOQuery) as TADOQuery;
+  with Result do
   begin
-    if (CompareText(nName, FName) = 0) and (FFitDB = nDBType) then
+    Close;
+    ParamCheck := False;
+
+    if nBindConnection then
+      Connection := LockDBConn(nDB);
+    //xxxxx
+  end;
+end;
+
+//Date: 2020-04-17
+//Parm: 对象;重置
+//Desc: 释放nQuery对象
+procedure TDBHelper.ReleaseDBQuery(const nQuery: TADOQuery;
+  const nResetConn, nReleaseConn: Boolean);
+var nCD: PDBConnData;
+begin
+  if Assigned(nQuery) then
+  begin
+    try
+      if nQuery.Active then
+        nQuery.Close;
+      //xxxxx
+
+      if nResetConn then
+      begin
+        nCD := gMG.FObjectPool.GetData(TADOConnection, nQuery.Connection);
+        if not nCD.FConnected then
+          nQuery.Connection.Connected := False;
+        //restore old status
+      end;
+    except
+      //ignor any error
+    end;
+
+    if nReleaseConn then
+      gMG.FObjectPool.Release(nQuery.Connection);
+    gMG.FObjectPool.Release(nQuery);
+  end;
+end;
+
+//Date: 2020-04-17
+//Parm: SQL;查询对象;锁定书签
+//Desc: 在nQuery上执行查询
+function TDBHelper.DBQuery(const nSQL: string; const nQuery: TADOQuery;
+  const nDB: string; const nLockBookmark: Boolean): TDataSet;
+var nStep: Integer;
+    nException: string;
+    nBookMark: TBookmark;
+begin
+  Result := nil;
+  nException := '';
+  nStep := 0;
+
+  while nStep <= 2 do
+  try
+    if nStep = 1 then
     begin
-      FData := nTrigger;
-      Exit;
-    end; //same db,same trigger
+      if CheckDBConn(nQuery.Connection) = '' then
+        Break;
+      //connection is ok
+    end else
+
+    if nStep = 2 then
+    begin
+      nQuery.Connection.Close;
+      nQuery.Connection.Open;
+    end; //reconnnect
+
+    if not nQuery.Connection.Connected then
+      nQuery.Connection.Connected := True;
+    //xxxxx
+
+    if nLockBookmark then
+    begin
+      nQuery.DisableControls;
+      nBookMark := nQuery.GetBookmark;
+    end; //lock bookmark first
+
+    try
+      nQuery.Close;
+      nQuery.SQL.Text := nSQL;
+      nQuery.Open;
+
+      Result := nQuery;
+      nException := '';
+
+      if nLockBookmark then
+      begin
+        if nQuery.BookmarkValid(nBookMark) then
+          nQuery.GotoBookmark(nBookMark);
+        //restore booktmark
+      end;
+
+      Break;
+    finally
+      if nLockBookmark then
+      begin
+        nQuery.FreeBookmark(nBookMark);
+        nQuery.EnableControls;
+      end;
+    end;
+  except
+    on nErr: Exception do
+    begin
+      Inc(nStep);
+      nException := nErr.Message;
+
+      if nException = '' then
+        nException := 'Unknow Error(Null).';
+      WriteLog(nException);
+
+      if (not FAutoReconnect) or (nStep > 2) then
+      begin
+        nQuery.Connection.Connected := False;
+        Break;
+      end;
+    end;
   end;
 
-  nIdx := Length(FTriggers);
-  SetLength(FTriggers, nIdx + 1);
-  //new index
+  if nException <> '' then
+    raise Exception.Create(nException);
+  //xxxxx
+end;
 
-  with FTriggers[nIdx] do
-  begin
-    FName := nName;
-    FData := nTrigger;
-    FFitDB := nDBType;
+//Date: 2020-04-17
+//Parm: SQL;对象;数据库标识
+//Desc: 在nDB上执行写入操作
+function TDBHelper.DBExecute(const nSQL: string; const nCmd: TADOQuery;
+  const nDB: string): Integer;
+var nC: TADOQuery;
+    nStep: Integer;
+    nException: string;
+begin
+  nC := nil;
+  try
+    if Assigned(nCmd) then
+         nC := nCmd
+    else nC := LockDBQuery(nDB);
+
+    Result := -1;
+    nException := '';
+    nStep := 0;
+
+    while nStep <= 2 do
+    try
+      if nStep = 1 then
+      begin
+        if CheckDBConn(nC.Connection) = '' then
+          Break;
+        //connection is ok
+      end else
+
+      if nStep = 2 then
+      begin
+        nC.Connection.Close;
+        nC.Connection.Open;
+      end; //reconnnect
+
+      if not nC.Connection.Connected then
+        nC.Connection.Connected := True;
+      //xxxxx
+
+      nC.Close;
+      nC.SQL.Text := nSQL;
+      Result := nC.ExecSQL;
+
+      nException := '';
+      Break;
+    except
+      on nErr: Exception do
+      begin
+        Inc(nStep);
+        nException := nErr.Message;
+
+        if nException = '' then
+          nException := 'Unknow Error(Null).';
+        WriteLog(nException);
+
+        if (not FAutoReconnect) or (nStep > 2) then
+        begin
+          nC.Connection.Connected := False;
+          Break;
+        end;
+      end;
+    end;
+  finally
+    if not Assigned(nCmd) then
+      ReleaseDBQuery(nC);
+    //xxxxx
+  end;
+
+  if nException <> '' then
+    raise Exception.Create(nException);
+  //xxxxx
+end;
+
+//Date: 2020-04-17
+//Parm: 列表;对象;数据库标识
+//Desc: 在nDB上批量执行nList写操作
+function TDBHelper.DBExecute(const nList: TStrings; const nCmd: TADOQuery;
+  const nDB: string): Integer;
+var nIdx: Integer;
+    nC: TADOQuery;
+begin
+  nC := nil;
+  try
+    if Assigned(nCmd) then
+         nC := nCmd
+    else nC := LockDBQuery(nDB);
+
+    if not nC.Connection.Connected then
+      nC.Connection.Connected := True;
+    //xxxxx
+
+    Result := 0;
+    try
+      nC.Connection.BeginTrans;
+      //trans start
+
+      for nIdx := 0 to nList.Count-1 do
+      with nC do
+      begin
+        Close;
+        SQL.Text := nList[nIdx];
+        Result := Result + ExecSQL;
+      end;
+
+      nC.Connection.CommitTrans;
+      //commit
+    except
+      on nErr: Exception do
+      begin
+        nC.Connection.RollbackTrans;
+        nC.Connection.Connected := False;
+        raise;
+      end;
+    end;
+  finally
+    if not Assigned(nCmd) then
+      ReleaseDBQuery(nC);
+    //xxxxx
   end;
 end;
 
