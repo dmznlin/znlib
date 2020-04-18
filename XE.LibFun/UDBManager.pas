@@ -77,6 +77,9 @@ type
     {*增加触发器*}
   end;
 
+  TDBSystemData = procedure (const nList: TList);
+  //for external-system fill database.table info
+
   TDBManager = class(TManagerBase)
   private
     FDefaultFit: TDBType;
@@ -85,16 +88,13 @@ type
     {*默认数据库标识*}
     FAutoReconnect: Boolean;
     {*数据库自动重连*}
+    FSystemDataList: array of TDBSystemData;
+    {*数据表配置信息*}
     FDBConfig: TDictionary<string, TDBConnConfig>;
-    {*配置字典*}
+    {*数据库配置字典*}
   protected
     procedure RegObjectPoolTypes;
     {*注册对象*}
-    procedure AddSystemTables(const nList: TList); virtual; abstract;
-    procedure AddSystemIndexes(const nList: TList); virtual;
-    procedure AddSystemTriggers(const nList: TList); virtual;
-    function AddTable(const nTable: string; const nList: TList): PDBTable;
-    {*添加数据*}
     function FindTable(const nTable: string; const nList: TList): PDBTable;
     {*检索数据*}
   public
@@ -105,6 +105,9 @@ type
     {*注册对象*}
     procedure AddDB(nConfig: TDBConnConfig);
     {*添加数据库*}
+    procedure AddSystemData(const nData: TDBSystemData);
+    function AddTable(const nTable: string; const nList: TList): PDBTable;
+    {*添加数据*}
     procedure GetTables(const nList: TList);
     procedure ClearTables(const nList: TList; const nFree: Boolean=True);
     {*获取表信息*}
@@ -380,30 +383,17 @@ begin
 end;
 
 //Date: 2020-04-16
-//Desc: 添加数据库索引
-procedure TDBManager.AddSystemIndexes(const nList: TList);
-begin
-  //for sub-type
-end;
-
-//Date: 2020-04-16
-//Desc: 添加数据表触发器
-procedure TDBManager.AddSystemTriggers(const nList: TList);
-begin
-  //for sub-type
-end;
-
-//Date: 2020-04-16
 //Parm: 列表
 //Desc: 获取系统表信息
 procedure TDBManager.GetTables(const nList: TList);
+var nIdx: Integer;
 begin
   ClearTables(nList, False);
   //init first
 
-  AddSystemTables(nList);
-  AddSystemIndexes(nList);
-  AddSystemTriggers(nList);
+  for nIdx := Low(FSystemDataList) to High(FSystemDataList) do
+    FSystemDataList[nIdx](nList);
+  //xxxxx
 end;
 
 //Date: 2020-04-16
@@ -429,7 +419,11 @@ procedure TDBManager.AddDB(nConfig: TDBConnConfig);
 begin
   if (nConfig.FFitDB <= Low(TDBType)) or (nConfig.FFitDB > High(TDBType)) then
     nConfig.FFitDB := FDefaultFit;
-  FDBConfig.Add(nConfig.FID, nConfig);
+  //check default
+
+  if FDBConfig.ContainsKey(nConfig.FID) then
+       FDBConfig.Items[nConfig.FID] := nConfig
+  else FDBConfig.Add(nConfig.FID, nConfig);
 end;
 
 //Date: 2020-04-16
@@ -441,10 +435,26 @@ begin
 end;
 
 //Date: 2020-04-18
+//Parm: 配置方法
+//Desc: 新增数据配置方法
+procedure TDBManager.AddSystemData(const nData: TDBSystemData);
+var nIdx: Integer;
+begin
+  for nIdx := Low(FSystemDataList) to High(FSystemDataList) do
+    if @FSystemDataList[nIdx] = @nData then Exit;
+  //has exists
+
+  nIdx := Length(FSystemDataList);
+  SetLength(FSystemDataList, nIdx + 1);
+  FSystemDataList[nIdx] := nData;
+end;
+
+//Date: 2020-04-18
 //Parm: 列表;是否友好显示
 //Desc: 将管理器状态数据存入nList
 procedure TDBManager.GetStatus(const nList: TStrings; const nFriendly: Boolean);
 var nIdx: Integer;
+    nConn: TDBConnConfig;
 begin
   with TObjectStatusHelper do
   try
@@ -462,6 +472,14 @@ begin
     nList.Add(FixData('DefaultDB:', FDefaultDB));
     nList.Add(FixData('DefaultFit:', TStringHelper.Enum2Str<TDBType>(FDefaultFit)));
     nList.Add(FixData('AutoReconnect:', BoolToStr(FAutoReconnect, True)));
+
+    nIdx := 1;
+    for nConn in FDBConfig.Values do
+    begin
+      nList.Add(FixData(Format('DataBase %d:', [nIdx]),
+                        Format('%s.%s', [nConn.FID, nConn.FName])));
+      Inc(nIdx);
+    end; //get all support database
   finally
     SyncLeave;
   end;
