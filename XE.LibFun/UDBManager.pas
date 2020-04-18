@@ -7,16 +7,16 @@
     系统和数据库的适配.
   *.管理器支持不同数据库的差异,新增字段、索引、触发器时明确适配数据库类型.
 *******************************************************************************}
-unit UDBHelper;
+unit UDBManager;
 
 interface
 
 uses
   System.Classes, System.SysUtils, System.Generics.Collections, Data.Win.ADODB,
-  Data.DB, UManagerGroup, ULibFun;
+  Data.DB, UBaseObject;
 
 type
-  TDBHelper = class;
+  TDBManager = class;
   //define first
 
   TDBType = (dtDefault, dtAccess, dtMSSQL, dtMySQL, dtOracle, dtSQLLite,
@@ -59,7 +59,7 @@ type
 
   PDBTable = ^TDBTable;
   TDBTable = record
-    FManager  : TDBHelper;                      //所属管理器
+    FManager  : TDBManager;                      //所属管理器
     FName     : string;                         //表名称
     FFields   : array of TDBField;                //表字段
     FIndexes  : array of TDBData;               //表索引
@@ -77,8 +77,8 @@ type
     {*增加触发器*}
   end;
 
-  TDBHelper = class
-  protected
+  TDBManager = class(TManagerBase)
+  private
     FDefaultFit: TDBType;
     {*默认适配类型*}
     FDefaultDB: string;
@@ -87,6 +87,7 @@ type
     {*数据库自动重连*}
     FDBConfig: TDictionary<string, TDBConnConfig>;
     {*配置字典*}
+  protected
     procedure RegObjectPoolTypes;
     {*注册对象*}
     procedure AddSystemTables(const nList: TList); virtual; abstract;
@@ -100,6 +101,8 @@ type
     constructor Create;
     destructor Destroy; override;
     {*创建释放*}
+    class procedure RegistMe(const nReg: Boolean); override;
+    {*注册对象*}
     procedure AddDB(nConfig: TDBConnConfig);
     {*添加数据库*}
     procedure GetTables(const nList: TList);
@@ -122,13 +125,23 @@ type
     function DBExecute(const nList: TStrings; const nCmd: TADOQuery = nil;
       const nDB: string = ''): Integer; overload;
     {*数据库操作*}
+    procedure GetStatus(const nList: TStrings;
+      const nFriendly: Boolean = True); override;
+    {*获取状态*}
+    property DefaultDB: string read FDefaultDB write FDefaultDB;
+    property DefaultFit: TDBType read FDefaultFit write FDefaultFit;
+    property AutoReconnect: Boolean read FAutoReconnect write FAutoReconnect;
+    {*属性相关*}
   end;
 
 implementation
 
+uses
+  ULibFun, UManagerGroup;
+
 procedure WriteLog(const nEvent: string);
 begin
-  gMG.FLogManager.AddLog(TDBHelper, '数据库链路', nEvent);
+  gMG.FLogManager.AddLog(TDBManager, '数据库链路', nEvent);
 end;
 
 //------------------------------------------------------------------------------
@@ -263,7 +276,7 @@ begin
 end;
 
 //------------------------------------------------------------------------------
-constructor TDBHelper.Create;
+constructor TDBManager.Create;
 begin
   FDefaultDB := 'main';
   FDefaultFit := dtMSSQL;
@@ -275,15 +288,33 @@ begin
   //register pool
 end;
 
-destructor TDBHelper.Destroy;
+destructor TDBManager.Destroy;
 begin
   FDBConfig.Free;
   inherited;
 end;
 
+//Parm: 是否注册
+//Desc: 向系统注册管理器对象
+class procedure TDBManager.RegistMe(const nReg: Boolean);
+var nIdx: Integer;
+begin
+  nIdx := GetMe(TDBManager);
+  if nReg then
+  begin
+    if not Assigned(gMG.FManagers[nIdx].FManager) then
+      gMG.FManagers[nIdx].FManager := TDBManager.Create;
+    gMG.FDBManager := gMG.FManagers[nIdx].FManager as TDBManager;
+  end else
+  begin
+    gMG.FDBManager := nil;
+    FreeAndNil(gMG.FManagers[nIdx].FManager);
+  end;
+end;
+
 //Date: 2020-04-17
 //Desc: 注册对象池
-procedure TDBHelper.RegObjectPoolTypes;
+procedure TDBManager.RegObjectPoolTypes;
 var nCD: PDBConnData;
 begin
   with gMG.FObjectPool do
@@ -319,7 +350,7 @@ end;
 //Date: 2020-04-16
 //Parm: 表名称;列表
 //Desc: 检索nList中名称为nTable的表
-function TDBHelper.FindTable(const nTable: string; const nList:TList): PDBTable;
+function TDBManager.FindTable(const nTable: string; const nList:TList): PDBTable;
 var nIdx: Integer;
 begin
   Result := nil;
@@ -334,7 +365,7 @@ end;
 //Date: 2020-04-16
 //Parm: 表名称;列表
 //Desc: 添加一个表
-function TDBHelper.AddTable(const nTable: string; const nList: TList): PDBTable;
+function TDBManager.AddTable(const nTable: string; const nList: TList): PDBTable;
 begin
   Result := FindTable(nTable, nList);
   if not Assigned(Result) then
@@ -350,14 +381,14 @@ end;
 
 //Date: 2020-04-16
 //Desc: 添加数据库索引
-procedure TDBHelper.AddSystemIndexes(const nList: TList);
+procedure TDBManager.AddSystemIndexes(const nList: TList);
 begin
   //for sub-type
 end;
 
 //Date: 2020-04-16
 //Desc: 添加数据表触发器
-procedure TDBHelper.AddSystemTriggers(const nList: TList);
+procedure TDBManager.AddSystemTriggers(const nList: TList);
 begin
   //for sub-type
 end;
@@ -365,7 +396,7 @@ end;
 //Date: 2020-04-16
 //Parm: 列表
 //Desc: 获取系统表信息
-procedure TDBHelper.GetTables(const nList: TList);
+procedure TDBManager.GetTables(const nList: TList);
 begin
   ClearTables(nList, False);
   //init first
@@ -378,7 +409,7 @@ end;
 //Date: 2020-04-16
 //Parm: 列表;是否释放
 //Desc: 清理nList表信息
-procedure TDBHelper.ClearTables(const nList: TList;
+procedure TDBManager.ClearTables(const nList: TList;
   const nFree: Boolean);
 var nIdx: Integer;
 begin
@@ -394,7 +425,7 @@ end;
 //Date: 2020-04-16
 //Parm: 数据库配置
 //Desc: 新增数据库配置项
-procedure TDBHelper.AddDB(nConfig: TDBConnConfig);
+procedure TDBManager.AddDB(nConfig: TDBConnConfig);
 begin
   if (nConfig.FFitDB <= Low(TDBType)) or (nConfig.FFitDB > High(TDBType)) then
     nConfig.FFitDB := FDefaultFit;
@@ -404,16 +435,43 @@ end;
 //Date: 2020-04-16
 //Parm: 数据库标识;配置
 //Desc: 获取标识为nID的信息
-function TDBHelper.GetDB(const nID: string; var nConfig: TDBConnConfig): Boolean;
+function TDBManager.GetDB(const nID: string; var nConfig: TDBConnConfig): Boolean;
 begin
   Result := FDBConfig.TryGetValue(nID, nConfig);
+end;
+
+//Date: 2020-04-18
+//Parm: 列表;是否友好显示
+//Desc: 将管理器状态数据存入nList
+procedure TDBManager.GetStatus(const nList: TStrings; const nFriendly: Boolean);
+var nIdx: Integer;
+begin
+  with TObjectStatusHelper do
+  try
+    SyncEnter;
+    inherited GetStatus(nList, nFriendly);
+
+    if not nFriendly then
+    begin
+      nList.Add('DefaultDB=' + FDefaultDB);
+      nList.Add('DefaultFit=' + TStringHelper.Enum2Str<TDBType>(FDefaultFit));
+      nList.Add('AutoReconnect=' + BoolToStr(FAutoReconnect, True));
+      Exit;
+    end;
+
+    nList.Add(FixData('DefaultDB:', FDefaultDB));
+    nList.Add(FixData('DefaultFit:', TStringHelper.Enum2Str<TDBType>(FDefaultFit)));
+    nList.Add(FixData('AutoReconnect:', BoolToStr(FAutoReconnect, True)));
+  finally
+    SyncLeave;
+  end;
 end;
 
 //------------------------------------------------------------------------------
 //Date: 2020-04-17
 //Parm: 数据库标识
 //Desc: 获取nDB的连接对象
-function TDBHelper.LockDBConn(nDB: string): TADOConnection;
+function TDBManager.LockDBConn(nDB: string): TADOConnection;
 var nStr: string;
     nInThread: Cardinal;
     nCD: PDBConnData;
@@ -489,7 +547,7 @@ end;
 //Date: 2020-04-17
 //Parm: 连接对象
 //Desc: 释放链路
-procedure TDBHelper.ReleaseDBConn(const nConn: TADOConnection);
+procedure TDBManager.ReleaseDBConn(const nConn: TADOConnection);
 begin
   if Assigned(nConn) then
   begin
@@ -500,7 +558,7 @@ end;
 //Date: 2020-04-17
 //Parm: 数据库标识
 //Desc: 检测nConn是否正常
-function TDBHelper.CheckDBConn(nDB: string = ''): string;
+function TDBManager.CheckDBConn(nDB: string = ''): string;
 var nQuery: TADOQuery;
 begin
   nQuery := nil;
@@ -528,7 +586,7 @@ end;
 //Date: 2020-04-17
 //Parm: 数据库标识
 //Desc: 获取nDB数据的Query对象
-function TDBHelper.LockDBQuery(const nDB: string): TADOQuery;
+function TDBManager.LockDBQuery(const nDB: string): TADOQuery;
 begin
   Result := gMG.FObjectPool.Lock(TADOQuery) as TADOQuery;
   with Result do
@@ -542,7 +600,7 @@ end;
 //Date: 2020-04-17
 //Parm: 对象;重置
 //Desc: 释放nQuery对象
-procedure TDBHelper.ReleaseDBQuery(const nQuery: TADOQuery;
+procedure TDBManager.ReleaseDBQuery(const nQuery: TADOQuery;
   const nResetConn: Boolean);
 var nCD: PDBConnData;
 begin
@@ -572,7 +630,7 @@ end;
 //Date: 2020-04-17
 //Parm: SQL;查询对象;锁定书签
 //Desc: 在nQuery上执行查询
-function TDBHelper.DBQuery(const nSQL: string; const nQuery: TADOQuery;
+function TDBManager.DBQuery(const nSQL: string; const nQuery: TADOQuery;
   const nDB: string; const nLockBookmark: Boolean): TDataSet;
 var nStep: Integer;
     nException: string;
@@ -656,7 +714,7 @@ end;
 //Date: 2020-04-17
 //Parm: SQL;对象;数据库标识
 //Desc: 在nDB上执行写入操作
-function TDBHelper.DBExecute(const nSQL: string; const nCmd: TADOQuery;
+function TDBManager.DBExecute(const nSQL: string; const nCmd: TADOQuery;
   const nDB: string): Integer;
 var nC: TADOQuery;
     nStep: Integer;
@@ -728,7 +786,7 @@ end;
 //Date: 2020-04-17
 //Parm: 列表;对象;数据库标识
 //Desc: 在nDB上批量执行nList写操作
-function TDBHelper.DBExecute(const nList: TStrings; const nCmd: TADOQuery;
+function TDBManager.DBExecute(const nList: TStrings; const nCmd: TADOQuery;
   const nDB: string): Integer;
 var nIdx: Integer;
     nC: TADOQuery;

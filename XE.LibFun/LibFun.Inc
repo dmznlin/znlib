@@ -70,6 +70,13 @@
   //启用插件管理器
 {$ENDIF}
 
+{$IFDEF DBManager}
+  {$DEFINE LogManager}
+  //启用日志管理器
+  {$DEFINE EnableDBManager}
+  //启用数据库管理器
+{$ENDIF}
+
 {$IFDEF MQTTMessager}
   {$IFDEF MSWin}
     {$DEFINE LogManager}

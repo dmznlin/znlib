@@ -10,6 +10,7 @@ interface
 uses
   System.Rtti, System.SysUtils, System.Classes, UBaseObject, UObjectPool,
   UMemDataPool,
+  {$IFDEF EnableDBManager}UDBManager,{$ENDIF}
   {$IFDEF EnableLogManager}UMgrLog,{$ENDIF}
   {$IFDEF EnablePlugManager}UMgrPlugs,{$ENDIF}
   {$IFDEF EnableTaskMonitor}UTaskMonitor,{$ENDIF}
@@ -57,6 +58,8 @@ type
     //线程管理器
     {$IFDEF EnableMQTTMessager}FMessageCenter: TMQTTMessager;{$ENDIF}
     //消息管理器
+    {$IFDEF EnableDBManager}FDBManager: TDBManager;{$ENDIF}
+    //数据库管理器
     {$IFDEF EnableParamManager}FParamsManager: TParameterManager;{$ENDIF}
     //参数管理器
     {$IFDEF EnableChannelManager}FChannelManager: TChannelManager;{$ENDIF}
