@@ -335,8 +335,8 @@ begin
     nCurID := GetCurrentThreadId;
 
     nTimer := gMG.FObjectPool.Lock(TWaitTimer, nil, @nItem,
-      function(const nObj: TObject; const nData: Pointer;
-       var nTimes: Integer): Boolean
+      function(const nObj: TObject; const nData: Pointer; var nTimes: Integer;
+        const nUsed: Boolean): Boolean
       begin
         nItem := nData;
         Result := (not Assigned(nItem)) or ((nItem.FThread = 0) or
@@ -369,8 +369,8 @@ begin
     nCurID := GetCurrentThreadId;
 
     nTimer := gMG.FObjectPool.Lock(TWaitTimer, nil, @nItem,
-      function(const nObj: TObject; const nData: Pointer;
-       var nTimes: Integer): Boolean
+      function(const nObj: TObject; const nData: Pointer; var nTimes: Integer;
+        const nUsed: Boolean): Boolean
       begin
         nItem := nData;
         if nTimes = 1 then
@@ -392,7 +392,7 @@ begin
         if nTimes = 1 then
           nTimes := 2;
         //É¨Ãè2ÂÖ
-      end, True) as TWaitTimer;
+      end, False, True) as TWaitTimer;
     //xxxxx
 
     if Assigned(nTimer) then

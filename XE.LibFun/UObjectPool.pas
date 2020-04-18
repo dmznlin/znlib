@@ -27,6 +27,7 @@ type
     FObject: TObject;             //对象
     FData: Pointer;               //附加
     FUsed: Boolean;               //使用中
+    FCounter: Cardinal;           //使用计数
   end;
 
   PObjectPoolClass = ^TObjectPoolClass;
@@ -42,7 +43,7 @@ type
   end;
 
   TObjectLockFilter = reference to function(const nObject: TObject;
-    const nData: Pointer; var nTimes: Integer): Boolean;
+    const nData: Pointer; var nTimes: Integer; const nUsed: Boolean): Boolean;
   //锁定时筛选
 
   TObjectPoolManager = class(TManagerBase)
@@ -73,7 +74,8 @@ type
     procedure NewNormalClass;
     //注册类型
     function Lock(const nClass: TClass; nNew: TObjectNewOne = nil;
-      const nData: PPointer = nil; const nFilter: TObjectLockFilter = nil;
+      const nData: PPointer = nil;
+      const nFilter: TObjectLockFilter = nil; nFilterAll: Boolean = False;
       const nLockNil: Boolean = False): TObject;
     procedure Release(const nObject: TObject; const nReset: Boolean = True);
     //锁定释放
@@ -271,10 +273,10 @@ begin
 end;
 
 //Date: 2017-03-23
-//Parm: 对象类型;创建方法;扩展数据;筛选策略;允许返空
+//Parm: 对象类型;创建方法;扩展数据;筛选策略;筛选全部数据;允许返空
 //Desc: 返回nClass的对象指针
 function TObjectPoolManager.Lock(const nClass:TClass; nNew:TObjectNewOne;
-  const nData: PPointer; const nFilter: TObjectLockFilter;
+  const nData: PPointer; const nFilter: TObjectLockFilter; nFilterAll: Boolean;
   const nLockNil: Boolean): TObject;
 var nIdx,i,nVal,nRepeat,nTimes: Integer;
     nItem: PObjectPoolItem;
@@ -291,6 +293,10 @@ begin
        (not Assigned(FPool[nIdx].FNewOne))) then
       raise Exception.Create(ClassName + ': Lock Object Need "Create" Method.');
     //xxxxx
+
+    if nFilterAll and (not Assigned(nFilter)) then
+      nFilterAll := False;
+    //reset filterAll when no filter
 
     if nIdx < 0 then
       nIdx := NewClass(nClass, nNew);
@@ -320,11 +326,19 @@ begin
           nItem := FItems[i];
           nVal := nTimes;
 
-          if (not nItem.FUsed) and ((not Assigned(nFilter)) or
-              nFilter(nItem.FObject, nItem.FData, nVal)) then
+          if (nFilterAll or (not nItem.FUsed)) and ((not Assigned(nFilter)) or
+              nFilter(nItem.FObject, nItem.FData, nVal, nItem.FUsed)) then
           begin
             Result := nItem.FObject;
-            nItem.FUsed := True;
+            if nItem.FUsed then
+            begin
+              Inc(nItem.FCounter);
+              //更新计数
+            end else
+            begin
+              nItem.FUsed := True;
+              nItem.FCounter := 1;
+            end;
 
             if Assigned(nData) then
               nData^ := nItem.FData;
@@ -349,6 +363,7 @@ begin
         nItem.FObject := nNew(nItem.FData);
         Result := nItem.FObject;
         nItem.FUsed := True;
+        nItem.FCounter := 1;
 
         if Assigned(nData) then
           nData^ := nItem.FData;
@@ -403,10 +418,19 @@ begin
           begin
             Dec(FPool[nIdx].FNumLocked);
             Dec(Self.FNumLocked);
-            nItem.FUsed := False;
 
-            if nReset and Assigned(FResetOne) then
-              FResetOne(nItem.FObject, nItem.FData);
+            if nItem.FCounter > 0 then
+              Dec(nItem.FCounter);
+            //dec counter
+
+            if nItem.FCounter < 1 then
+            begin
+              nItem.FUsed := False;
+              if nReset and Assigned(FResetOne) then
+                FResetOne(nItem.FObject, nItem.FData);
+              //reset
+            end;
+
             Exit;
           end;
         end;

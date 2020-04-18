@@ -12,8 +12,8 @@ unit UDBHelper;
 interface
 
 uses
-  System.Classes, System.SysUtils, System.Generics.Collections, Winapi.Windows,
-  Data.DB, Data.Win.ADODB, UManagerGroup, ULibFun;
+  System.Classes, System.SysUtils, System.Generics.Collections, Data.Win.ADODB,
+  Data.DB, UManagerGroup, ULibFun;
 
 type
   TDBHelper = class;
@@ -39,6 +39,7 @@ type
     FConnID    : string;                        //连接标识
     FConnected : Boolean;                       //连接状态
     FConneLast : Int64;                         //上次活动
+    FInThread  : Cardinal;                      //所在线程
   end;
 
   PDBData = ^TDBData;
@@ -108,12 +109,11 @@ type
     {*获取数据库*}
     function LockDBConn(nDB: string = ''): TADOConnection;
     procedure ReleaseDBConn(const nConn: TADOConnection);
-    function CheckDBConn(const nConn: TADOConnection): string;
+    function CheckDBConn(nDB: string = ''): string;
     {*数据库链路*}
-    function LockDBQuery(const nDB: string = '';
-      const nBindConnection: Boolean = True): TADOQuery;
+    function LockDBQuery(const nDB: string = ''): TADOQuery;
     procedure ReleaseDBQuery(const nQuery: TADOQuery;
-      const nResetConn: Boolean = False; const nReleaseConn: Boolean = True);
+      const nResetConn: Boolean = False);
     {*数据库对象*}
     function DBQuery(const nSQL: string; const nQuery: TADOQuery;
       const nDB: string = ''; const nLockBookmark: Boolean = False): TDataSet;
@@ -291,12 +291,13 @@ begin
     NewClass(TADOConnection,
       function(var nData: Pointer): TObject
       begin
-        Result := TADOConnection.Create(nil);
-        //new connction
-
+        Result := TADOConnection.Create(nil); //new connction
         New(nCD);
         nData := nCD;
+
         nCD.FConnID := '';
+        nCD.FInThread := 0;
+        //init value
       end,
 
       procedure(const nObj: TObject; const nData: Pointer)
@@ -414,6 +415,7 @@ end;
 //Desc: 获取nDB的连接对象
 function TDBHelper.LockDBConn(nDB: string): TADOConnection;
 var nStr: string;
+    nInThread: Cardinal;
     nCD: PDBConnData;
     nCfg: TDBConnConfig;
 begin
@@ -427,32 +429,48 @@ begin
     raise Exception.Create(nStr);
   end;
 
+  nInThread := TThread.Current.ThreadID;
+  //调用者所在线程
+
   Result := gMG.FObjectPool.Lock(TADOConnection, nil, @nCD,
-    function(const nObj: TObject; const nData: Pointer;
-     var nTimes: Integer): Boolean
+    function(const nObj: TObject; const nData: Pointer; var nTimes: Integer;
+      const nUsed: Boolean): Boolean
+    var nConn: PDBConnData;
     begin
+      nConn := nData;
+      //conn config
+
       if nTimes = 1 then
       begin
-        Result := (not Assigned(nData)) or
-                  (PDBConnData(nData).FConnID = nDB);
-        //相同连接
+        Result := nUsed and Assigned(nConn) and (nConn.FInThread = nInThread);
+        //同线程同连接
+      end else
+
+      if nTimes = 2 then
+      begin
+        Result := (not nUsed) and (not Assigned(nConn)) or (nConn.FConnID = nDB);
+        //同库连接
       end else
       begin
-        Result := (not Assigned(nData)) or (
-          (not TADOConnection(nObj).Connected) or
-          (TDateTimeHelper.GetTickCountDiff(PDBConnData(nData).FConneLast) > 60 * 1000));
+        Result := (not nUsed) and ((not Assigned(nConn)) or
+          (TDateTimeHelper.GetTickCountDiff(nConn.FConneLast) > 60 * 1000) or
+          (not TADOConnection(nObj).Connected));
         //空闲连接
       end;
 
       if nTimes = 1 then
-        nTimes := 2;
-      //两轮扫描
-    end
-  ) as TADOConnection;
+        nTimes := 3;
+      //三轮扫描
+    end, True) as TADOConnection;
+  //xxxxx
 
   with Result do
   begin
-    nCD.FConneLast := GetTickCount();
+    if nCD.FInThread <> nInThread then
+      nCD.FInThread := nInThread;
+    //bind thread
+
+    nCD.FConneLast := TDateTimeHelper.GetTickCount();
     nCD.FConnected := Connected;
     //conn status
 
@@ -480,19 +498,18 @@ begin
 end;
 
 //Date: 2020-04-17
-//Parm: 数据库库链路
+//Parm: 数据库标识
 //Desc: 检测nConn是否正常
-function TDBHelper.CheckDBConn(const nConn: TADOConnection): string;
+function TDBHelper.CheckDBConn(nDB: string = ''): string;
 var nQuery: TADOQuery;
 begin
   nQuery := nil;
   try
     Result := '';
-    nQuery := LockDBQuery('', False);
+    nQuery := LockDBQuery(nDB);
 
     with nQuery do
     try
-      Connection := nConn;
       Close;
       SQL.Text := 'select 1';
       Open;
@@ -504,25 +521,21 @@ begin
       end;
     end;
   finally
-    ReleaseDBQuery(nQuery, False, False);
+    ReleaseDBQuery(nQuery);
   end;
 end;
 
 //Date: 2020-04-17
-//Parm: 数据库标识;绑定链路
+//Parm: 数据库标识
 //Desc: 获取nDB数据的Query对象
-function TDBHelper.LockDBQuery(const nDB: string;
-  const nBindConnection: Boolean): TADOQuery;
+function TDBHelper.LockDBQuery(const nDB: string): TADOQuery;
 begin
   Result := gMG.FObjectPool.Lock(TADOQuery) as TADOQuery;
   with Result do
   begin
     Close;
     ParamCheck := False;
-
-    if nBindConnection then
-      Connection := LockDBConn(nDB);
-    //xxxxx
+    Connection := LockDBConn(nDB);
   end;
 end;
 
@@ -530,7 +543,7 @@ end;
 //Parm: 对象;重置
 //Desc: 释放nQuery对象
 procedure TDBHelper.ReleaseDBQuery(const nQuery: TADOQuery;
-  const nResetConn, nReleaseConn: Boolean);
+  const nResetConn: Boolean);
 var nCD: PDBConnData;
 begin
   if Assigned(nQuery) then
@@ -551,8 +564,7 @@ begin
       //ignor any error
     end;
 
-    if nReleaseConn then
-      gMG.FObjectPool.Release(nQuery.Connection);
+    ReleaseDBConn(nQuery.Connection);
     gMG.FObjectPool.Release(nQuery);
   end;
 end;
@@ -574,9 +586,9 @@ begin
   try
     if nStep = 1 then
     begin
-      if CheckDBConn(nQuery.Connection) = '' then
-        Break;
-      //connection is ok
+      if CheckDBConn(nDB) = '' then
+           Break  //connection is ok
+      else raise Exception.Create('verify connection failure');
     end else
 
     if nStep = 2 then
@@ -664,9 +676,9 @@ begin
     try
       if nStep = 1 then
       begin
-        if CheckDBConn(nC.Connection) = '' then
-          Break;
-        //connection is ok
+        if CheckDBConn(nDB) = '' then
+             Break  //connection is ok
+        else raise Exception.Create('verify connection failure');
       end else
 
       if nStep = 2 then
