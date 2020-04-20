@@ -47,7 +47,7 @@ unit UThreadPool;
 interface
 
 uses
-  System.Classes, System.SysUtils, {$IFDEF MSWin}Winapi.Windows,{$ENDIF}
+  System.Classes, System.SysUtils, {$IFDEF MSWin}Winapi.ActiveX,{$ENDIF}
   {$IFDEF POSIX}Posix.Pthread,{$ENDIF}UWaitItem, UBaseObject;
 
 const
@@ -88,6 +88,7 @@ type
     FProcedure    : TThreadProcedure;            //待执行函数
     FProcEvent    : TThreadProcEvent;            //待执行事件
     FProcRefer    : TThreadProcRefer;            //待执行匿名
+    FCoInitialize : Boolean;                     //执行COM初始化
   end;
 
   PThreadWorker = ^TThreadWorker;
@@ -104,6 +105,7 @@ type
   TThreadNV = record
     FName         : string;                      //对象名称
     FValue        : Cardinal;                    //有效值
+    FMemo         : string;                      //描述信息
   end;
 
   TThreadManagerStatus = record
@@ -139,6 +141,8 @@ type
     FWorkIdleStart: Cardinal;
     FWorkIdleLast: Cardinal;
     {*空闲计时*}
+    FCoInitialize: Boolean;
+    {*COM初始化*}
   protected
     procedure DoRun;
     procedure Execute; override;
@@ -195,7 +199,8 @@ type
     procedure DeleteWorker(const nIdx: Integer);
     procedure ClearWorkers(const nFree: Boolean);
     {*清理资源*}
-    procedure IncErrorCounter(const nName: string; const nLock: Boolean = True);
+    procedure IncErrorCounter(const nName: string; const nLock: Boolean = True;
+      const nMemo: string = '');
     {*错误计数*}
     procedure SetRunnerMin(const nValue: Word);
     procedure SetRunnerMax(const nValue: Word);
@@ -369,6 +374,8 @@ begin
     //不限次数
     FCallMaxTake := cThreadMaxRunTake;
     //最大运行耗时
+    FCoInitialize := False;
+    //默认不执行COM初始化
   end;
 end;
 
@@ -481,7 +488,7 @@ begin
           1.若删除操作由主线程发起,则主线程处于锁定状态.
           2.若Worker在线程中执行时,使用Synchronize同步VCL操作.
           3.则以上两步操作会死锁,所以主线程调用时延迟清理.}
-        nInMain := GetCurrentThreadId = MainThreadID;
+        nInMain := TThread.Current.ThreadID = MainThreadID;
         if (nWorker.FStartCall = 0) or nInMain then
         begin
           if (nWorker.FStartCall = 0) or (not nInMain) then
@@ -627,7 +634,7 @@ begin
           2.若Worker在线程中执行时,使用Synchronize同步VCL操作.
           3.则以上两步操作会死锁,所以主线程调用时不等待.}
         if (nWorker.FStartCall = 0) or
-           (GetCurrentThreadId = MainThreadID) then Exit;
+           (TThread.Current.ThreadID = MainThreadID) then Exit;
         //未被调用或主线程调用
 
         nExists := True;
@@ -693,13 +700,14 @@ end;
 //Parm: 调用方;是否锁定
 //Desc: 累加运行错误计数
 procedure TThreadPoolManager.IncErrorCounter(const nName: string;
-  const nLock: Boolean);
+  const nLock: Boolean; const nMemo: string);
 begin
   if nLock then SyncEnter;
   try
     with FStatus.FRunErrors[FStatus.FRunErrorIndex] do
     begin
       FName := nName;
+      FMemo := nMemo;
       FValue := TDateTimeHelper.GetTickCount();
     end;
 
@@ -845,7 +853,7 @@ begin
     begin
       if FValue < 1 then Continue;
       nList.Add(FixData(Format('Thread RunError %d:', [nInt + 1]),
-        Format('计时:%s 名称:%s', [FValue.ToString, FName])));
+        Format('%s: %s', [FName, FMemo])));
       //xxxxx
     end;
   finally
@@ -938,8 +946,11 @@ begin
     if Terminated then Exit;
     FWaiter.EnterWait;
   except
-    FOwner.IncErrorCounter('TThreadMonitor');
-    //ignor any error
+    on nErr: Exception do
+    begin
+      FOwner.IncErrorCounter('TThreadMonitor', True, nErr.Message);
+      //ignor any error
+    end;
   end;
 end;
 
@@ -1089,7 +1100,7 @@ begin
       nVal := TDateTimeHelper.GetTickCountDiff(nWorker.FStartCall);
       if (nWorker.FWorker.FCallMaxTake > 0) and
          (nWorker.FWorker.FCallMaxTake <= nVal) then
-        FOwner.IncErrorCounter(nWorker.FWorker.FWorkerName, False);
+        FOwner.IncErrorCounter(nWorker.FWorker.FWorkerName, False, '长时间挂起');
       //Worker长时间挂起,视为异常
     end;
 
@@ -1126,6 +1137,8 @@ begin
 
   FOwner := AOwner;
   FTag := ATag;
+  FCoInitialize := False;
+
   FWorkInterval := 1;
   FWorkIdleStart := 0;
   FWorkIdleLast := 0;
@@ -1312,6 +1325,18 @@ begin
         Continue;
       end;
 
+      {$IFDEF MSWin}
+      if FActiveWorker.FWorker.FCoInitialize and (not FCoInitialize) then
+      begin
+        FCoInitialize := CoInitialize(nil) = S_OK;
+        //COM init first
+
+        if not FCoInitialize then
+          CoUninitialize();
+        //配对解除初始化调用
+      end;
+      {$ENDIF}
+
       DoRun();
       if Terminated then Exit;
       nInit := TDateTimeHelper.GetTickCountDiff(FActiveWorker.FStartCall);
@@ -1329,9 +1354,18 @@ begin
       end;
     end;
   except
-    FOwner.IncErrorCounter('TThreadRunner');
-    //ignor any error
+    on nErr: Exception do
+    begin
+      FOwner.IncErrorCounter('TThreadRunner', True, nErr.Message);
+      //ignor any error
+    end;
   end;
+
+  {$IFDEF MSWin}
+  if FCoInitialize then
+    CoUninitialize();
+  //xxxxx
+  {$ENDIF}
 end;
 
 procedure TThreadRunner.DoRun;

@@ -246,7 +246,8 @@ type
       const nSeparator: Boolean = True): string; static;
     //change nDate to string value
     class function Time2Str(const nTime: TDateTime;
-      const nSeparator: Boolean = True): string; static;
+      const nSeparator: Boolean = True;
+      const nMSec: Boolean = False): string; static;
     //change nTime to string value
     class function DateTime2Str(const nDT: TDateTime): string; static;
     //change nDT to string value
@@ -1947,11 +1948,23 @@ begin
 end;
 
 class function TDateTimeHelper.Time2Str(const nTime: TDateTime;
-  const nSeparator: Boolean): string;
+  const nSeparator,nMSec: Boolean): string;
 begin
   if nSeparator then
-       Result := FormatDateTime('HH:MM:SS', nTime)
-  else Result := FormatDateTime('HHMMSS', nTime);
+  begin
+    Result := 'HH:MM:SS';
+    if nMSec then
+      Result := Result + ':ZZZ';
+    //Milliseconds
+  end else
+  begin
+    Result := 'HHMMSS';
+    if nMSec then
+      Result := Result + 'ZZZ';
+    //Milliseconds
+  end;
+
+  Result := FormatDateTime(Result, nTime);
 end;
 
 class function TDateTimeHelper.Str2DateTime(const nStr: string): TDateTime;

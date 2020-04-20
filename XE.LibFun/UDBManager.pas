@@ -3,9 +3,23 @@
   描述: 数据库管理器及连接池
 
   备注:
-  *.表结构包括:字段、索引、默认值、触发器,管理器自动创建不存在的内容,达到
-    系统和数据库的适配.
+  *.表结构包括:字段、索引、默认值、触发器、存储过程,管理器自动创建不存在的内容,
+    达到系统和数据库的适配.
   *.管理器支持不同数据库的差异,新增字段、索引、触发器时明确适配数据库类型.
+  *.使用方法:
+    1.编写数据库描述函数:
+      procedure SystemTables(const nList: TList);
+      begin
+        gMG.FDBManager.AddTable('Sys_Dict', nList).              //连写模式
+        AddF('D_ID',     'varChar(15)', '记录标识').
+        AddF('D_Port',   'Integer', '端口', '80').               //默认值写法1
+        AddF('D_Serial', 'Integer Default -1', '装置号', '-1').  //默认值写法2
+      end;
+    2.将描述函数加入管理器:
+      gMG.FDBManager.AddSystemData(SystemTables);
+    3.使用管理器初始化数据库:
+      gMG.FDBManager.InitDB();
+
 *******************************************************************************}
 unit UDBManager;
 
@@ -59,11 +73,12 @@ type
 
   PDBTable = ^TDBTable;
   TDBTable = record
-    FManager  : TDBManager;                      //所属管理器
+    FManager  : TDBManager;                     //所属管理器
     FName     : string;                         //表名称
-    FFields   : array of TDBField;                //表字段
+    FFields   : array of TDBField;              //表字段
     FIndexes  : array of TDBData;               //表索引
     FTriggers : array of TDBData;               //触发器
+    FProcedures: array of TDBData;              //存储过程
     {*表属性*}
     function AddF(const nField,nType,nMemo: string;
       const nDefVal: string = '';
@@ -73,6 +88,9 @@ type
       nDBType: TDBType = dtDefault): PDBTable;
     {*增加索引*}
     function AddT(const nName,nTrigger: string;
+      nDBType: TDBType = dtDefault): PDBTable;
+    {*增加触发器*}
+    function AddP(const nName,nProcedure: string;
       nDBType: TDBType = dtDefault): PDBTable;
     {*增加触发器*}
   end;
@@ -97,19 +115,27 @@ type
     {*注册对象*}
     function FindTable(const nTable: string; const nList: TList): PDBTable;
     {*检索数据*}
+    function InitAccess(const nDB: string; const nTables: TList;
+      const nMemo: TStrings): Boolean;
+    function InitMSSQL(const nDB: string; const nTables: TList;
+      const nMemo: TStrings): Boolean;
+    function InitPostgre(const nDB: string; const nTables: TList;
+      const nMemo: TStrings): Boolean;
+    {*初始化数据库*}
   public
     constructor Create;
     destructor Destroy; override;
     {*创建释放*}
     class procedure RegistMe(const nReg: Boolean); override;
     {*注册对象*}
-    procedure AddDB(nConfig: TDBConnConfig);
-    {*添加数据库*}
+    function InitDB(const nDB: string; const nMemo: TStrings = nil): Boolean;
+    {*初始化数据库*}
     procedure AddSystemData(const nData: TDBSystemData);
+    procedure AddDB(nConfig: TDBConnConfig);
     function AddTable(const nTable: string; const nList: TList): PDBTable;
     {*添加数据*}
     procedure GetTables(const nList: TList);
-    procedure ClearTables(const nList: TList; const nFree: Boolean=True);
+    procedure ClearTables(const nList: TList; const nFree: Boolean = False);
     {*获取表信息*}
     function GetDB(const nID: string; var nConfig: TDBConnConfig): Boolean;
     {*获取数据库*}
@@ -142,8 +168,10 @@ implementation
 uses
   ULibFun, UManagerGroup;
 
-procedure WriteLog(const nEvent: string);
+procedure WriteLog(const nEvent: string; const nMemo: TStrings = nil);
 begin
+  if Assigned(nMemo) then
+    nMemo.Add(TDateTimeHelper.Time2Str(Now(), True, True) + #9 + nEvent);
   gMG.FLogManager.AddLog(TDBManager, '数据库链路', nEvent);
 end;
 
@@ -278,6 +306,42 @@ begin
   end;
 end;
 
+//Date: 2020-04-20
+//Parm: 存储过程名;存储过程脚本;适配数据库
+//Desc: 新增一个适配nDBType的存储过程
+function TDBTable.AddP(const nName, nProcedure: string;
+  nDBType: TDBType): PDBTable;
+var nIdx: Integer;
+begin
+  Result := @Self;
+  //return self address
+
+  if nDBType = dtDefault then
+    nDBType := FManager.FDefaultFit;
+  //set default
+
+  for nIdx := Low(FProcedures) to High(FProcedures) do
+  with FProcedures[nIdx] do
+  begin
+    if (CompareText(nName, FName) = 0) and (FFitDB = nDBType) then
+    begin
+      FData := nProcedure;
+      Exit;
+    end; //same db,same procedure
+  end;
+
+  nIdx := Length(FTriggers);
+  SetLength(FTriggers, nIdx + 1);
+  //new index
+
+  with FTriggers[nIdx] do
+  begin
+    FName := nName;
+    FData := nProcedure;
+    FFitDB := nDBType;
+  end;
+end;
+
 //------------------------------------------------------------------------------
 constructor TDBManager.Create;
 begin
@@ -376,6 +440,11 @@ begin
     New(Result);
     nList.Add(Result);
     Result.FName := nTable;
+
+    SetLength(Result.FFields, 0);
+    SetLength(Result.FIndexes, 0);
+    SetLength(Result.FTriggers, 0);
+    SetLength(Result.FProcedures, 0);
   end;
 
   Result.FManager := Self;
@@ -483,6 +552,379 @@ begin
   finally
     SyncLeave;
   end;
+end;
+
+//------------------------------------------------------------------------------
+//Date: 2020-04-20
+//Parm: 数据库标识
+//Desc: 初始化nDB数据库
+function TDBManager.InitDB(const nDB: string; const nMemo: TStrings): Boolean;
+var nList: TList;
+    nCfg: TDBConnConfig;
+begin
+  Result := False;
+  if Assigned(nMemo) then
+    nMemo.Clear;
+  //xxxxx
+
+  if not GetDB(nDB, nCfg) then
+  begin
+    WriteLog(Format('数据库[ %s ]不存在,请先配置.', [nDB]), nMemo);
+    Exit;
+  end;
+
+  nList := gMG.FObjectPool.Lock(TList) as TList;
+  try
+    GetTables(nList);
+    //get database data
+
+    try
+      case nCfg.FFitDB of
+       dtMSSQL   : Result := InitMSSQL(nDB, nList, nMemo);   //SQLServer
+       dtAccess  : Result := InitAccess(nDB, nList, nMemo);  //Access
+       dtPostgre : Result := InitPostgre(nDB, nList, nMemo); //Postgre
+      end;
+    except
+      on nErr: Exception do
+      begin
+        WriteLog(nErr.Message, nMemo);
+      end;
+    end;
+  finally
+    ClearTables(nList);
+    gMG.FObjectPool.Release(nList);
+  end;
+end;
+
+//Date: 2020-04-20
+//Parm: 数据库标识;数据;备注信息
+//Desc: 初始化SQLServer数据库nDB
+function TDBManager.InitMSSQL(const nDB: string; const nTables: TList;
+  const nMemo: TStrings): Boolean;
+var nStr: string;
+    i,j,nIdx,nInt: Integer;
+    nTable: PDBTable;
+    nQuery: TADOQuery;
+    nListA,nListB,nListC: TStrings;
+begin
+  Result := True;
+  nQuery := nil;
+
+  nListA := nil;
+  nListB := nil;
+  nListC := nil;
+  try
+    nListA := gMG.FObjectPool.Lock(TStrings) as TStrings;
+    nListA.Clear;
+    nListB := gMG.FObjectPool.Lock(TStrings) as TStrings;
+    nListB.Clear;
+    nListC := gMG.FObjectPool.Lock(TStrings) as TStrings;
+    nListC.Clear;
+
+    WriteLog('::: 创建数据表 :::', nMemo);
+    nStr := 'Select so.name as tName From sysobjects so ' +
+            'Where xtype=''U''';
+    //query all user tables
+
+    nQuery := LockDBQuery(nDB);
+    with DBQuery(nStr, nQuery) do
+    begin
+      First;
+      while not Eof do
+      begin
+        nListC.Add(FieldByName('tName').AsString);
+        Next;
+      end;
+    end; //enum all user tables
+
+    for nIdx := nTables.Count -1 downto 0 do
+    begin
+      nTable := nTables[nIdx];
+      if nListC.IndexOf(nTable.FName) >= 0 then
+      begin
+        WriteLog('已存在: ' + nTable.FName , nMemo);
+        Continue;
+      end;
+
+      nInt := 0;
+      nStr := Format('Create Table %s(', [nTable.FName]);
+      //build new sql
+
+      for i := Low(nTable.FFields) to High(nTable.FFields) do
+       with nTable.FFields[i] do
+        for j := Low(FType) to High(FType) do
+         if FType[j].FFitDB = dtMSSQL then
+         begin
+           if nInt = 0 then
+                nStr := nStr + Format('%s %s', [FName, FType[j].FData])
+           else nStr := nStr + Format(',%s %s', [FName, FType[j].FData]);
+
+           Inc(nInt);
+           Break;
+         end;
+      //comine all fields
+
+      if nInt > 0 then //有效字段
+      begin
+        nListB.Add(nStr + ')');
+        WriteLog('已创建: ' + nTable.FName, nMemo);
+      end else
+      begin
+        WriteLog('无字段: ' + nTable.FName, nMemo);
+      end;
+    end;
+
+    //--------------------------------------------------------------------------
+    WriteLog('::: 修复字段 :::', nMemo);
+    nStr := 'Select so.name tName,sc.name fName From sysobjects so ' +
+            ' Inner Join syscolumns sc On sc.id=so.id ' +
+            'Where so.xtype=''U''';
+    //query all table fields
+
+    with DBQuery(nStr, nQuery) do
+    begin
+      nListA.Clear;
+      First;
+
+      while not Eof do
+      begin
+        nStr := FieldByName('tName').AsString + '.' +  //table
+                FieldByName('fName').AsString;         //field
+        nListA.Add(nStr);
+        Next;
+      end;
+    end; //enum all table fields
+
+    for nIdx := nTables.Count -1 downto 0 do
+    begin
+      nTable := nTables[nIdx];
+      if nListC.IndexOf(nTable.FName) < 0 then Continue;
+      //new table will create soon
+
+      for i := Low(nTable.FFields) to High(nTable.FFields) do
+      with nTable.FFields[i] do
+      begin
+        if nListA.IndexOf(nTable.FName + '.' + FName) >= 0 then Continue;
+        //field exists
+        nInt := 0;
+
+        for j := Low(FType) to High(FType) do
+        if FType[j].FFitDB = dtMSSQL then
+        begin
+          nStr := Format('Alter Table %s Add %s %s', [nTable.FName, FName,
+            FType[j].FData]);
+          nListB.Add(nStr);
+
+          WriteLog(Format('已修复: %s.%s', [nTable.FName, FName]), nMemo);
+          Inc(nInt);
+          Break;
+        end;
+
+        if nInt < 1 then
+        begin
+          WriteLog(Format('空字段: %s.%s', [nTable.FName, FName]), nMemo);
+        end;
+      end;
+    end;
+
+    if nListB.Count > 0 then
+    begin
+      DBExecute(nListB, nil, nDB);
+      //优先保证表和字段完整
+      nListB.Clear;
+    end;
+
+    //--------------------------------------------------------------------------
+    WriteLog('::: 修复默认值 :::', nMemo);
+    nStr := 'Select so.name tName,sc.name fName From dbo.sysobjects so ' +
+            ' Inner Join dbo.syscolumns sc On sc.id=so.id ' +
+            ' Inner Join dbo.syscomments sm On sm.id=sc.cdefault ' +
+            'Where so.xtype = ''U''';
+    //query all default values
+
+    with DBQuery(nStr, nQuery) do
+    begin
+      nListA.Clear;
+      First;
+
+      while not Eof do
+      begin
+        nStr := FieldByName('tName').AsString + '.' +  //table
+                FieldByName('fName').AsString;         //field
+        nListA.Add(nStr);
+        Next;
+      end;
+    end; //enum all default values
+
+    for nIdx := nTables.Count -1 downto 0 do
+    begin
+      nTable := nTables[nIdx];
+      for i := Low(nTable.FFields) to High(nTable.FFields) do
+      with nTable.FFields[i] do
+      begin
+        if FDefVal = '' then Continue;
+        //no default value
+
+        if nListA.IndexOf(nTable.FName + '.' + FName) >= 0 then
+        begin
+          WriteLog(Format('已存在: %s.%s', [nTable.FName, FName]), nMemo);
+          Continue;
+        end;
+
+        nStr := 'Alter Table %s Add Default(%s) For %s';
+        nStr := Format(nStr, [nTable.FName, FDefVal, FName]);
+        nListB.Add(nStr); //增加默认值
+
+        nStr := 'Update %s Set %s=%s Where %s Is Null';
+        nStr := Format(nStr, [nTable.FName, FName, FDefVal, FName]);
+        nListB.Add(nStr); //更新旧数据的默认值
+        WriteLog(Format('已修复: %s.%s', [nTable.FName, FName]), nMemo);
+      end;
+    end;
+
+    //--------------------------------------------------------------------------
+    WriteLog('::: 创建索引 :::', nMemo);
+    nStr := 'Select t.name as tName,i.name as iName From sys.indexes i ' +
+            ' Inner Join sys.objects t On t.object_id=i.object_id ' +
+            'Where t.is_ms_shipped<>1 and i.index_id > 0';
+    //query all indexes
+
+    with DBQuery(nStr, nQuery) do
+    begin
+      nListA.Clear;
+      First;
+
+      while not Eof do
+      begin
+        nStr := FieldByName('tName').AsString + '.' +
+                FieldByName('iName').AsString;
+        nListA.Add(nStr);
+        Next;
+      end;
+    end; //enum all indexes
+
+    for nIdx := nTables.Count -1 downto 0 do
+    begin
+      nTable := nTables[nIdx];
+      for i := Low(nTable.FIndexes) to High(nTable.FIndexes) do
+      with nTable.FIndexes[i] do
+      begin
+        if nListA.IndexOf(nTable.FName + '.' + FName) >= 0 then
+        begin
+          WriteLog(Format('已存在: %s.%s', [nTable.FName, FName]), nMemo);
+          Continue;
+        end;
+
+        if FFitDB = dtMSSQL then
+        begin
+          nListB.Add(FData);
+          WriteLog(Format('已创建: %s.%s', [nTable.FName, FName]), nMemo);
+        end;
+      end;
+    end;
+
+    //--------------------------------------------------------------------------
+    WriteLog('::: 创建触发器 :::', nMemo);
+    nStr := 'Select t2.name as tName,t1.name as trName From sys.triggers t1 ' +
+            'Inner Join sys.tables t2 On t2.object_id= t1.parent_id ' +
+            'Where t1.type=''TR''';
+    //query all triggers
+
+    with DBQuery(nStr, nQuery) do
+    begin
+      nListA.Clear;
+      First;
+
+      while not Eof do
+      begin
+        nStr := FieldByName('tName').AsString + '.' +
+                FieldByName('trName').AsString;
+        nListA.Add(nStr);
+        Next;
+      end;
+    end; //enum all triggers
+
+    for nIdx := nTables.Count -1 downto 0 do
+    begin
+      nTable := nTables[nIdx];
+      for i := Low(nTable.FTriggers) to High(nTable.FTriggers) do
+      with nTable.FTriggers[i] do
+      begin
+        if nListA.IndexOf(nTable.FName + '.' + FName) >= 0 then
+        begin
+          WriteLog(Format('已存在: %s.%s', [nTable.FName, FName]), nMemo);
+          Continue;
+        end;
+
+        if FFitDB = dtMSSQL then
+        begin
+          nListB.Add(FData);
+          WriteLog(Format('已创建: %s.%s', [nTable.FName, FName]), nMemo);
+        end;
+      end;
+    end;
+
+    //--------------------------------------------------------------------------
+    WriteLog('::: 创建存储过程 :::', nMemo);
+    nStr := 'Select so.object_id as fID,so.name as fName From sys.objects so ' +
+            'Where is_ms_shipped<>1 and so.type=''P''';
+    //query all procedure
+
+    with DBQuery(nStr, nQuery) do
+    begin
+      nListA.Clear;
+      First;
+
+      while not Eof do
+      begin
+        nListA.Add(FieldByName('fName').AsString);
+        Next;
+      end;
+    end; //enum all procedure
+
+    for nIdx := nTables.Count -1 downto 0 do
+    begin
+      nTable := nTables[nIdx];
+      for i := Low(nTable.FProcedures) to High(nTable.FProcedures) do
+      with nTable.FProcedures[i] do
+      begin
+        if nListA.IndexOf(FName) >= 0 then
+        begin
+          WriteLog(Format('已存在: %s.%s', [nTable.FName, FName]), nMemo);
+          Continue;
+        end;
+
+        if FFitDB = dtMSSQL then
+        begin
+          nListB.Add(FData);
+          WriteLog(Format('已创建: %s.%s', [nTable.FName, FName]), nMemo);
+        end;
+      end;
+    end;
+
+    if nListB.Count > 0 then
+      DBExecute(nListB, nil, nDB);
+    //init db
+  finally
+    gMG.FObjectPool.Release(nListA);
+    gMG.FObjectPool.Release(nListB);
+    gMG.FObjectPool.Release(nListC);
+    ReleaseDBQuery(nQuery);
+  end;
+end;
+
+function TDBManager.InitAccess(const nDB: string; const nTables: TList;
+  const nMemo: TStrings): Boolean;
+begin
+  Result := False;
+  //to do
+end;
+
+function TDBManager.InitPostgre(const nDB: string; const nTables: TList;
+  const nMemo: TStrings): Boolean;
+begin
+  Result := False;
+  //to do
 end;
 
 //------------------------------------------------------------------------------
