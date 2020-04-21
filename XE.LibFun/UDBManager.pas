@@ -73,12 +73,12 @@ type
 
   PDBTable = ^TDBTable;
   TDBTable = record
-    FManager  : TDBManager;                     //所属管理器
-    FName     : string;                         //表名称
-    FFields   : array of TDBField;              //表字段
-    FIndexes  : array of TDBData;               //表索引
-    FTriggers : array of TDBData;               //触发器
-    FProcedures: array of TDBData;              //存储过程
+    FDefaultFit : TDBType;                      //适配(默认)
+    FName       : string;                       //表名称
+    FFields     : array of TDBField;            //表字段
+    FIndexes    : array of TDBData;             //表索引
+    FTriggers   : array of TDBData;             //触发器
+    FProcedures : array of TDBData;             //存储过程
     {*表属性*}
     function AddF(const nField,nType,nMemo: string;
       const nDefVal: string = '';
@@ -132,7 +132,8 @@ type
     {*初始化数据库*}
     procedure AddSystemData(const nData: TDBSystemData);
     procedure AddDB(nConfig: TDBConnConfig);
-    function AddTable(const nTable: string; const nList: TList): PDBTable;
+    function AddTable(const nTable: string; const nList: TList;
+      nDBType: TDBType = dtDefault): PDBTable;
     {*添加数据*}
     procedure GetTables(const nList: TList);
     procedure ClearTables(const nList: TList; const nFree: Boolean = False);
@@ -163,6 +164,10 @@ type
     {*属性相关*}
   end;
 
+var
+  gDBManager: TDBManager = nil;
+  //全局使用
+
 implementation
 
 uses
@@ -187,7 +192,7 @@ begin
   //return self address
 
   if nDBType = dtDefault then
-    nDBType := FManager.FDefaultFit;
+    nDBType := FDefaultFit;
   //set default
 
   for nIdx := Low(FFields) to High(FFields) do
@@ -246,7 +251,7 @@ begin
   //return self address
 
   if nDBType = dtDefault then
-    nDBType := FManager.FDefaultFit;
+    nDBType := FDefaultFit;
   //set default
 
   for nIdx := Low(FIndexes) to High(FIndexes) do
@@ -281,7 +286,7 @@ begin
   //return self address
 
   if nDBType = dtDefault then
-    nDBType := FManager.FDefaultFit;
+    nDBType := FDefaultFit;
   //set default
 
   for nIdx := Low(FTriggers) to High(FTriggers) do
@@ -317,7 +322,7 @@ begin
   //return self address
 
   if nDBType = dtDefault then
-    nDBType := FManager.FDefaultFit;
+    nDBType := FDefaultFit;
   //set default
 
   for nIdx := Low(FProcedures) to High(FProcedures) do
@@ -377,6 +382,9 @@ begin
     gMG.FDBManager := nil;
     FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
+
+  gDBManager := gMG.FDBManager;
+  //启用全局变量
 end;
 
 //Date: 2020-04-17
@@ -432,7 +440,8 @@ end;
 //Date: 2020-04-16
 //Parm: 表名称;列表
 //Desc: 添加一个表
-function TDBManager.AddTable(const nTable: string; const nList: TList): PDBTable;
+function TDBManager.AddTable(const nTable: string; const nList: TList;
+  nDBType: TDBType): PDBTable;
 begin
   Result := FindTable(nTable, nList);
   if not Assigned(Result) then
@@ -447,8 +456,9 @@ begin
     SetLength(Result.FProcedures, 0);
   end;
 
-  Result.FManager := Self;
-  //for table config
+  if nDBType = dtDefault then
+    nDBType := FDefaultFit;
+  Result.FDefaultFit := nDBType;
 end;
 
 //Date: 2020-04-16

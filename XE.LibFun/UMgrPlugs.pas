@@ -255,6 +255,9 @@ begin
     gMG.FPlugManager := nil;
     FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
+
+  gPlugManager := gMG.FPlugManager;
+  //启用全局变量
 end;
 
 procedure TPlugManager.RunAfterRegistAllManager;

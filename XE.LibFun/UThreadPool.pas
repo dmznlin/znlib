@@ -331,6 +331,9 @@ begin
     gMG.FThreadPool := nil;
     FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
+
+  gThreadPoolManager := gMG.FThreadPool;
+  //启用全局变量
 end;
 
 procedure TThreadPoolManager.SetRunnerMax(const nValue: Word);

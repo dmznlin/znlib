@@ -111,6 +111,9 @@ begin
     gMG.FTaskMonitor := nil;
     FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
+
+  gTaskMonitor := gMG.FTaskMonitor;
+  //启用全局变量
 end;
 
 procedure TTaskMonitor.RunAfterRegistAllManager;

@@ -151,6 +151,7 @@ type
     //按条件选择字符串
     class function Enum2Str<T>(const nEnum: T): string; static;
     class function Str2Enum<T>(const nEnum: string): T; static;
+    class procedure EnumItems<T>(const nList: TStrings); static;
     //获取枚举类型字符串描述
     class function Ansi_UTF8(const nStr: string): string; static;
     class function Ansi_Unicode(const nStr: string): string; static;
@@ -1296,6 +1297,31 @@ begin
     end;
 
     Result := nTEnum.GetValue<T>(nDef);
+  finally
+    Free;
+  end;
+end;
+
+//Date: 2020-04-21
+//Parm: 列表
+//Desc: 将T的所有项名称存入nList
+class procedure TStringHelper.EnumItems<T>(const nList: TStrings);
+var nStr: string;
+    nType: TRttiType;
+    nTEnum: TRttiEnumerationType;
+begin
+  with TRttiContext.Create do
+  try
+    nList.Clear;
+    nType := GetType(TypeInfo(T));
+    if not (nType is TRttiEnumerationType) then
+      raise Exception.Create('TStringHelper.EnumItems: Invalid EnumType.');
+    //xxxxx
+
+    nTEnum := nType as TRttiEnumerationType;
+    for nStr in nTEnum.GetNames do
+      nList.Add(nStr);
+    //xxxxx
   finally
     Free;
   end;

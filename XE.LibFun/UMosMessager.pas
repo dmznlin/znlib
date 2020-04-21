@@ -136,6 +136,9 @@ begin
     gMG.FMessageCenter := nil;
     FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
+
+  gMQTTMessager := gMG.FMessageCenter;
+  //启用全局变量
 end;
 
 //Date: 2019-08-30

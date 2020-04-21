@@ -170,6 +170,9 @@ begin
     gMG.FLogManager := nil;
     FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
+
+  gLogManager := gMG.FLogManager;
+  //启用全局变量
 end;
 
 procedure TLogManager.RunAfterRegistAllManager;

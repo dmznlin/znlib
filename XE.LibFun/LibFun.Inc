@@ -43,7 +43,7 @@
 //组件类别
 
 {$IFDEF RemObjects}
-  {.$DEFINE RO_v90}
+  {$DEFINE RO_v90}
   //使用ver9.0的RemObjects
   {$DEFINE EnableChannelManager}
   //启用通道管理器
@@ -75,6 +75,13 @@
   //启用日志管理器
   {$DEFINE EnableDBManager}
   //启用数据库管理器
+{$ENDIF}
+
+{$IFDEF MenuManager}
+  {$DEFINE LogManager}
+  //启用日志管理器
+  {$DEFINE EnableMenuManager}
+  //启用菜单管理器
 {$ENDIF}
 
 {$IFDEF MQTTMessager}

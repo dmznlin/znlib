@@ -66,6 +66,10 @@ type
     //属性相关
   end;
 
+var
+  gChannelManager: TChannelManager = nil;
+  //全局使用
+
 implementation
 
 uses
@@ -116,6 +120,9 @@ begin
     gMG.FChannelManager := nil;
     FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
+
+  gChannelManager := gMG.FChannelManager;
+  //启用全局变量
 end;
 
 //Desc: 清理通道对象
