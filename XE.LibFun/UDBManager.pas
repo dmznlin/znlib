@@ -79,6 +79,8 @@ type
     FIndexes    : array of TDBData;             //表索引
     FTriggers   : array of TDBData;             //触发器
     FProcedures : array of TDBData;             //存储过程
+    FRecords    : array of TDBData;             //默认记录
+    FSameTables : array of string;              //同结构表
     {*表属性*}
     function AddF(const nField,nType,nMemo: string;
       const nDefVal: string = '';
@@ -93,9 +95,14 @@ type
     function AddP(const nName,nProcedure: string;
       nDBType: TDBType = dtDefault): PDBTable;
     {*增加触发器*}
+    function AddR(const nName,nSQL: string;
+      nDBType: TDBType = dtDefault): PDBTable;
+    {*增加初始化记录*}
+    function Copy(const nTable: string): PDBTable;
+    {*复制表结构*}
   end;
 
-  TDBSystemData = procedure (const nList: TList);
+  TDBTableBuilder = procedure (const nList: TList);
   //for external-system fill database.table info
 
   TDBManager = class(TManagerBase)
@@ -106,7 +113,7 @@ type
     {*默认数据库标识*}
     FAutoReconnect: Boolean;
     {*数据库自动重连*}
-    FSystemDataList: array of TDBSystemData;
+    FTableBuilders: array of TDBTableBuilder;
     {*数据表配置信息*}
     FDBConfig: TDictionary<string, TDBConnConfig>;
     {*数据库配置字典*}
@@ -130,7 +137,7 @@ type
     {*注册对象*}
     function InitDB(const nDB: string; const nMemo: TStrings = nil): Boolean;
     {*初始化数据库*}
-    procedure AddSystemData(const nData: TDBSystemData);
+    procedure AddTableBuilder(const nBuilder: TDBTableBuilder);
     procedure AddDB(nConfig: TDBConnConfig);
     function AddTable(const nTable: string; const nList: TList;
       nDBType: TDBType = dtDefault): PDBTable;
@@ -300,9 +307,7 @@ begin
   end;
 
   nIdx := Length(FTriggers);
-  SetLength(FTriggers, nIdx + 1);
-  //new index
-
+  SetLength(FTriggers, nIdx + 1); //new trigger
   with FTriggers[nIdx] do
   begin
     FName := nName;
@@ -335,16 +340,65 @@ begin
     end; //same db,same procedure
   end;
 
-  nIdx := Length(FTriggers);
-  SetLength(FTriggers, nIdx + 1);
-  //new index
-
-  with FTriggers[nIdx] do
+  nIdx := Length(FProcedures);
+  SetLength(FProcedures, nIdx + 1); //new procedure
+  with FProcedures[nIdx] do
   begin
     FName := nName;
     FData := nProcedure;
     FFitDB := nDBType;
   end;
+end;
+
+//Date: 2020-04-21
+//Parm: SQL脚本;适配数据库
+//Desc: 新增一个适配nDBType的SQL
+function TDBTable.AddR(const nName, nSQL: string; nDBType: TDBType): PDBTable;
+var nIdx: Integer;
+begin
+  Result := @Self;
+  //return self address
+
+  if nDBType = dtDefault then
+    nDBType := FDefaultFit;
+  //set default
+
+  for nIdx := Low(FRecords) to High(FRecords) do
+  with FRecords[nIdx] do
+  begin
+    if (CompareText(nName, FName) = 0) and (FFitDB = nDBType) then
+    begin
+      FData := nSQL;
+      Exit;
+    end; //same db,same procedure
+  end;
+
+  nIdx := Length(FRecords);
+  SetLength(FRecords, nIdx + 1); //new record
+  with FRecords[nIdx] do
+  begin
+    FName := nName;
+    FData := nSQL;
+    FFitDB := nDBType;
+  end;
+end;
+
+//Date: 2020-04-21
+//Parm: 表名称
+//Desc: 依据当前表结构创建nTable表
+function TDBTable.Copy(const nTable: string): PDBTable;
+var nIdx: Integer;
+begin
+  Result := @Self;
+  //return self address
+
+  for nIdx := Low(FSameTables) to High(FSameTables) do
+    if CompareText(nTable, FSameTables[nIdx]) = 0 then Exit;
+  //has exists
+
+  nIdx := Length(FSameTables);
+  SetLength(FSameTables, nIdx + 1);
+  FSameTables[nIdx] := nTable;
 end;
 
 //------------------------------------------------------------------------------
@@ -451,9 +505,11 @@ begin
     Result.FName := nTable;
 
     SetLength(Result.FFields, 0);
+    SetLength(Result.FRecords, 0);
     SetLength(Result.FIndexes, 0);
     SetLength(Result.FTriggers, 0);
     SetLength(Result.FProcedures, 0);
+    SetLength(Result.FSameTables, 0);
   end;
 
   if nDBType = dtDefault then
@@ -470,8 +526,8 @@ begin
   ClearTables(nList, False);
   //init first
 
-  for nIdx := Low(FSystemDataList) to High(FSystemDataList) do
-    FSystemDataList[nIdx](nList);
+  for nIdx := Low(FTableBuilders) to High(FTableBuilders) do
+    FTableBuilders[nIdx](nList);
   //xxxxx
 end;
 
@@ -516,16 +572,16 @@ end;
 //Date: 2020-04-18
 //Parm: 配置方法
 //Desc: 新增数据配置方法
-procedure TDBManager.AddSystemData(const nData: TDBSystemData);
+procedure TDBManager.AddTableBuilder(const nBuilder: TDBTableBuilder);
 var nIdx: Integer;
 begin
-  for nIdx := Low(FSystemDataList) to High(FSystemDataList) do
-    if @FSystemDataList[nIdx] = @nData then Exit;
+  for nIdx := Low(FTableBuilders) to High(FTableBuilders) do
+    if @FTableBuilders[nIdx] = @nBuilder then Exit;
   //has exists
 
-  nIdx := Length(FSystemDataList);
-  SetLength(FSystemDataList, nIdx + 1);
-  FSystemDataList[nIdx] := nData;
+  nIdx := Length(FTableBuilders);
+  SetLength(FTableBuilders, nIdx + 1);
+  FTableBuilders[nIdx] := nBuilder;
 end;
 
 //Date: 2020-04-18
@@ -649,16 +705,27 @@ begin
 
     for nIdx := nTables.Count -1 downto 0 do
     begin
-      nTable := nTables[nIdx];
-      if nListC.IndexOf(nTable.FName) >= 0 then
-      begin
-        WriteLog('已存在: ' + nTable.FName , nMemo);
-        Continue;
-      end;
-
       nInt := 0;
-      nStr := Format('Create Table %s(', [nTable.FName]);
-      //build new sql
+      nTable := nTables[nIdx];
+      //table item
+      
+      if nListC.IndexOf(nTable.FName) < 0 then
+           Inc(nInt)
+      else WriteLog('已存在: ' + nTable.FName, nMemo);
+
+      for i := Low(nTable.FSameTables) to High(nTable.FSameTables) do
+      begin
+        if nListC.IndexOf(nTable.FSameTables[i]) < 0 then
+             Inc(nInt)
+        else WriteLog('已存在: ' + nTable.FSameTables[i], nMemo);
+      end;
+      
+      if nInt < 1 then Continue;      
+      //all tables exists
+      
+      nInt := 0;
+      nStr := '';
+      //build sql begin
 
       for i := Low(nTable.FFields) to High(nTable.FFields) do
        with nTable.FFields[i] do
@@ -666,7 +733,7 @@ begin
          if FType[j].FFitDB = dtMSSQL then
          begin
            if nInt = 0 then
-                nStr := nStr + Format('%s %s', [FName, FType[j].FData])
+                nStr := Format('%s %s', [FName, FType[j].FData])
            else nStr := nStr + Format(',%s %s', [FName, FType[j].FData]);
 
            Inc(nInt);
@@ -674,14 +741,31 @@ begin
          end;
       //comine all fields
 
-      if nInt > 0 then //有效字段
-      begin
-        nListB.Add(nStr + ')');
-        WriteLog('已创建: ' + nTable.FName, nMemo);
-      end else
+      if nInt < 1 then
       begin
         WriteLog('无字段: ' + nTable.FName, nMemo);
+        Continue;
       end;
+
+      if nListC.IndexOf(nTable.FName) < 0 then
+      begin
+        nListB.Add(Format('Create Table %s(%s)', [nTable.FName, nStr]));
+        WriteLog('已创建: ' + nTable.FName, nMemo);
+      end;
+
+      for i := Low(nTable.FSameTables) to High(nTable.FSameTables) do
+      begin
+        if nListC.IndexOf(nTable.FSameTables[i]) < 0 then
+        begin
+          nListB.Add(Format('Create Table %s(%s)', [nTable.FSameTables[i], nStr]));
+          WriteLog('已创建: ' + nTable.FSameTables[i], nMemo);
+        end;
+      end; //创建同结构表
+
+      for i := Low(nTable.FRecords) to High(nTable.FRecords) do
+       if nTable.FRecords[i].FFitDB = dtMSSQL then
+        nListB.Add(nTable.FRecords[i].FData);
+      //init table records
     end;
 
     //--------------------------------------------------------------------------
