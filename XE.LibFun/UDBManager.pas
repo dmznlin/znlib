@@ -45,8 +45,23 @@ uses
   Data.DB, UBaseObject;
 
 const
-  cDBTables  = '$TB.*';
   //任意表标识
+  sDBTables  = '$TB.*';
+
+  //自增字段
+  sField_Access_AutoInc          = 'Counter';
+  sField_SQLServer_AutoInc       = 'Integer IDENTITY (1,1) PRIMARY KEY';
+
+  //小数字段
+  sField_Access_Decimal          = 'Float';
+  sField_SQLServer_Decimal       = 'Decimal(15, 5)';
+
+  //图片字段
+  sField_Access_Image            = 'OLEObject';
+  sField_SQLServer_Image         = 'Image';
+
+  //日期相关
+  sField_SQLServer_Now           = 'getDate()';
 
 type
   TDBManager = class;
@@ -302,7 +317,7 @@ begin
     FData := nIndex;
     FFitDB := nDBType;
 
-    FParmI := Pos(cDBTables, nIndex);
+    FParmI := Pos(sDBTables, nIndex);
     FParmB := FParmI > 0;
   end;
 end;
@@ -340,7 +355,7 @@ begin
     FData := nTrigger;
     FFitDB := nDBType;
 
-    FParmI := Pos(cDBTables, nTrigger);
+    FParmI := Pos(sDBTables, nTrigger);
     FParmB := FParmI > 0;
   end;
 end;
@@ -417,7 +432,7 @@ begin
     FData := nRecord;
     FFitDB := nDBType;
 
-    FParmI := Pos(cDBTables, nRecord);
+    FParmI := Pos(sDBTables, nRecord);
     FParmB := FParmI > 0;
   end;
 end;
@@ -447,6 +462,7 @@ begin
   FDefaultFit := dtMSSQL;
 
   FAutoReconnect := True;
+  SetLength(FTableBuilders, 0);
   FDBConfig := TDictionary<string, TDBConnConfig>.Create();
 
   RegObjectPoolTypes;
@@ -796,7 +812,7 @@ begin
           if FParmB then //匹配任意表
           begin
             with TStringHelper do
-             nListB.Add(MacroValue(FData, [MI(cDBTables, nTable.FSameTbs[k])]));
+             nListB.Add(MacroValue(FData, [MI(sDBTables, nTable.FSameTbs[k])]));
             //替换表名称
           end else
 
@@ -965,7 +981,7 @@ begin
           if FParmB then //匹配任意表
           begin
             with TStringHelper do
-             nListB.Add(MacroValue(FData, [MI(cDBTables, nTable.FSameTbs[k])]));
+             nListB.Add(MacroValue(FData, [MI(sDBTables, nTable.FSameTbs[k])]));
             //替换表名称
             WriteLog(Format('已创建: %s.%s', [nTable.FSameTbs[k], FName]), nMemo);
           end else
@@ -1021,7 +1037,7 @@ begin
           if FParmB then //匹配任意表
           begin
             with TStringHelper do
-             nListB.Add(MacroValue(FData, [MI(cDBTables, nTable.FSameTbs[k])]));
+             nListB.Add(MacroValue(FData, [MI(sDBTables, nTable.FSameTbs[k])]));
             //替换表名称
             WriteLog(Format('已创建: %s.%s', [nTable.FSameTbs[k], FName]), nMemo);
           end else
