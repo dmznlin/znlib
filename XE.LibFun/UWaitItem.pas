@@ -332,7 +332,7 @@ begin
   try
     if not FHasRegist then
       ManageTimer(False);
-    nCurID := GetCurrentThreadId;
+    nCurID := TThread.Current.ThreadID;
 
     nTimer := gMG.FObjectPool.Lock(TWaitTimer, nil, @nItem,
       function(const nObj: TObject; const nData: Pointer; var nTimes: Integer;
@@ -366,7 +366,7 @@ begin
   try
     Result := 0;
     nMaxID.FID := 0;
-    nCurID := GetCurrentThreadId;
+    nCurID := TThread.Current.ThreadID;
 
     nTimer := gMG.FObjectPool.Lock(TWaitTimer, nil, @nItem,
       function(const nObj: TObject; const nData: Pointer; var nTimes: Integer;

@@ -18,13 +18,13 @@
         //field
         Copy('Sys_Dict2').
         //table
-        AddI('idx_prog', 'CREATE NONCLUSTERED INDEX idx_prog ON $TB.*(M_Prog ASC)').
+        AddI('idx_prog', 'CREATE INDEX idx_prog ON $TB.*(D_ID ASC)').
         //index
         AddT('tr_bi', 'CREATE TRIGGER tr_bi $TB.* AFTER INSERT AS BEGIN END').
         //trigger
         AddP('pro_do', '....').
         //procedure
-        AddR('init', 'INSERT INTO $TB.*(...)')
+        AddR('init', 'INSERT INTO $TB.* Values(...)')
         //初始化数据,建表时运行一次
       end;
     2.将描述函数加入管理器:
@@ -48,10 +48,6 @@ const
   //任意表标识
   sDBTables  = '$TB.*';
 
-  //自增字段
-  sField_Access_AutoInc          = 'Counter';
-  sField_SQLServer_AutoInc       = 'Integer IDENTITY (1,1) PRIMARY KEY';
-
   //小数字段
   sField_Access_Decimal          = 'Float';
   sField_SQLServer_Decimal       = 'Decimal(15, 5)';
@@ -62,6 +58,17 @@ const
 
   //日期相关
   sField_SQLServer_Now           = 'getDate()';
+
+  //自增字段
+  sField_Access_AutoInc          = 'Counter';
+  sField_SQLServer_AutoInc       = 'Integer IDENTITY (1,1) PRIMARY KEY';
+
+  //常用标记
+  sFlag_Yes                      = 'Y';         //是
+  sFlag_No                       = 'N';         //否
+  sFlag_Unknow                   = 'U';         //未知
+  sFlag_Enabled                  = 'Y';         //启用
+  sFlag_Disabled                 = 'N';         //禁用
 
 type
   TDBManager = class;
@@ -592,17 +599,19 @@ end;
 //Date: 2020-04-16
 //Parm: 列表;是否释放
 //Desc: 清理nList表信息
-procedure TDBManager.ClearTables(const nList: TList;
-  const nFree: Boolean);
+procedure TDBManager.ClearTables(const nList: TList; const nFree: Boolean);
 var nIdx: Integer;
 begin
-  for nIdx := nList.Count - 1 downto 0 do
-    Dispose(PDBTable(nList[nIdx]));
-  //xxxxx
+  if Assigned(nList) then
+  begin
+    for nIdx := nList.Count - 1 downto 0 do
+      Dispose(PDBTable(nList[nIdx]));
+    //xxxxx
 
-  if nFree then
-       nList.Free
-  else nList.Clear;
+    if nFree then
+         nList.Free
+    else nList.Clear;
+  end;
 end;
 
 //Date: 2020-04-16
