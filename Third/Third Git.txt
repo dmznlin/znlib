@@ -1,3 +1,7 @@
+*.NativeXML: xml解析包
+https://github.com/kattunga/NativeXml.git/trunk
+
+
 *.SuperObject: jason解析包
 https://github.com/hgourvest/superobject.git
 

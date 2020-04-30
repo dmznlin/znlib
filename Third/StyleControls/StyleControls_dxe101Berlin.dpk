@@ -1,0 +1,84 @@
+package StyleControls_dxe101Berlin;
+
+{$R *.res}
+{$IFDEF IMPLICITBUILDING This IFDEF should not be used by users}
+{$ALIGN 8}
+{$ASSERTIONS ON}
+{$BOOLEVAL OFF}
+{$DEBUGINFO OFF}
+{$EXTENDEDSYNTAX ON}
+{$IMPORTEDDATA ON}
+{$IOCHECKS ON}
+{$LOCALSYMBOLS ON}
+{$LONGSTRINGS ON}
+{$OPENSTRINGS ON}
+{$OPTIMIZATION OFF}
+{$OVERFLOWCHECKS OFF}
+{$RANGECHECKS OFF}
+{$REFERENCEINFO ON}
+{$SAFEDIVIDE OFF}
+{$STACKFRAMES ON}
+{$TYPEDADDRESS OFF}
+{$VARSTRINGCHECKS ON}
+{$WRITEABLECONST OFF}
+{$MINENUMSIZE 1}
+{$IMAGEBASE $400000}
+{$DEFINE DEBUG}
+{$ENDIF IMPLICITBUILDING}
+{$IMPLICITBUILD ON}
+
+requires
+  rtl,
+  vcl,
+  vclimg,
+  vclactnband,
+  designide,
+  xmlrtl,
+  vclie,
+  dbrtl,
+  vcldb;
+
+contains
+  scControls in 'scControls.pas',
+  scDrawUtils in 'scDrawUtils.pas',
+  scPReg in 'scPReg.pas',
+  scImageCollection in 'scImageCollection.pas',
+  scShellControls in 'scShellControls.pas',
+  scAdvancedControls in 'scAdvancedControls.pas',
+  scExtControls in 'scExtControls.pas',
+  scCalendar in 'scCalendar.pas',
+  scBitmapEditor in 'scBitmapEditor.pas' {scBitmapEditorForm},
+  scAppPager in 'scAppPager.pas',
+  scToolPager in 'scToolPager.pas',
+  scStyledForm in 'scStyledForm.pas',
+  scStyleManager in 'scStyleManager.pas',
+  scHint in 'scHint.pas',
+  scModernControls in 'scModernControls.pas',
+  scWebBrowser in 'scWebBrowser.pas',
+  scAdvancedPager in 'scAdvancedPager.pas',
+  scDBControls in 'scDBControls.pas',
+  scDBGrids in 'scDBGrids.pas',
+  scGrids in 'scGrids.pas',
+  scHtmlControls in 'scHtmlControls.pas',
+  scOpenFileDialog in 'scOpenFileDialog.pas' {scOpenFileDlgForm},
+  scOpenPictureDialog in 'scOpenPictureDialog.pas',
+  scSelectPathDialog in 'scSelectPathDialog.pas' {scSelPathDlgForm},
+  scColorDialog in 'scColorDialog.pas' {scColorDlgFrm},
+  scFontDialog in 'scFontDialog.pas' {scFontDlgFrm},
+  scPrinterDialog in 'scPrinterDialog.pas' {scPrintDlgFrm},
+  scColorControls in 'scColorControls.pas',
+  scDialogs in 'scDialogs.pas',
+  scGPControls in 'scGPControls.pas',
+  scGPUtils in 'scGPUtils.pas',
+  scGPMeters in 'scGPMeters.pas',
+  scGPImages in 'scGPImages.pas',
+  scDlgStrs in 'scDlgStrs.pas',
+  scGPDBControls in 'scGPDBControls.pas',
+  scGPExtControls in 'scGPExtControls.pas',
+  scGPPagers in 'scGPPagers.pas',
+  scGPVertPagers in 'scGPVertPagers.pas',
+  scFontViewer in 'scFontViewer.pas' {FontViewerForm},
+  scGPFontControls in 'scGPFontControls.pas',
+  scMsgDialog in 'scMsgDialog.pas' {scMsgDlgForm};
+
+end.

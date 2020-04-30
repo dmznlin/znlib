@@ -1,0 +1,12 @@
+How to add VCL Style support without adding scDevExStyleAdapter.pas to the StyleControls VCL package:
+
+1. Set LookAndFeel.NativeStyle properties to False in DevExpress controls.
+2. Set LookAndFeel.SkinName property to "VCLStyle" in DevExpress controls manually (without choosing from list).
+3. Add scDevExStyleAdapter.pas to the project (for example, to Uses of the main form)
+
+How to add VCL Style support for QuantumGrid and some other DevExpress controls:
+
+1. Add scDevExStyleAdapter.pas to the StyleControls VCL package and recompile it.
+2. Set LookAndFeel.NativeStyle properties to False in DevExpress controls.
+3. Set LookAndFeel.SkinName property to "VCLStyle" in DevExpress controls.
+

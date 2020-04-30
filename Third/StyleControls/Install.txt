@@ -1,0 +1,32 @@
+1. Remove old trial packages.
+
+2. 
+
+For Delphi:
+
+ - open StyleControls_d*.dpk file
+ - install package
+
+For C++Builder:
+
+ - open StyleControls_cb*.cbproj file
+ - install package
+
+3. Add folder with sources to the Library Path option in IDE.
+
+4. You can replace some default style hook classes to improve VCL Styles support in default controls.
+Just enable REPLACEDEFSTYLEHOOKS directive in scdefine.inc file.
+
+At this moment with this directive you replace:
+
+- TCoolBarStyleHook (TCoolBar control) and TToolBarStyleHook (TToolBar control) classes to
+new TscTCoolBarStyleHook and TscToolBarStyleHook (you must add scControls unit to the project).
+
+
+
+ 
+
+
+
+
+
