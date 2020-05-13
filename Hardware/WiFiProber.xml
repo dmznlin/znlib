@@ -31,17 +31,17 @@
     <localport>80</localport>
     <hostkeep>60</hostkeep>
     <hostbuffer>20</hostbuffer>
-    <hostlist block="n" flag="hi">38</hostlist>
+    <hostlist block="n" flag="hi">38:78</hostlist>
   </config>
   <probers>
     <prober id="00f3f146">
       <enable>Y</enable>
       <ip>192.168.0.220</ip>
       <port>8080</port>
-      <hostkeep>0</hostkeep>
+      <hostkeep>3</hostkeep>
       <position>in</position>
       <tunnel>FH001</tunnel>
-      <keeponce keeppeer="Y">5000</keeponce>
+      <keeponce keeppeer="Y">200</keeponce>
       <virtual reader="001,002" type="900" interval="100">N</virtual>
       <options>key1=value;key2=value</options>
     </prober>

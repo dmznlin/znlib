@@ -386,7 +386,7 @@ begin
       Break;
     end;
 
-    if (nHost.FValid) and
+    if (not nHost.FValid) or
        (GetTickCountDiff(nHost.FLastActive) >= nHost.FProber.FHostKeep) then
     begin
       if Assigned(nOffline) then

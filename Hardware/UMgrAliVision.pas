@@ -76,12 +76,16 @@ type
   private
     FOwner: TTruckManager;
     //拥有者
+    FActivePound: PPoundItem;
+    //当前磅站
     FWaiter: TWaitObject;
     //等待对象
   protected
     procedure Execute; override;
     procedure DoExecute;
     //执行业务
+    procedure DoOwnerEvent;
+    //执行事件
   public
     constructor Create(AOwner: TTruckManager);
     destructor Destroy; override;
@@ -90,6 +94,9 @@ type
     procedure StopMe;
     //启停通道
   end;
+
+  TTruckEventMode = (emThread, emMain);
+  //事件模式: 线程;主进程
 
   TOnTruckStatusProc = procedure (const nPound: PPoundItem);
   TOnTruckStatusEvent = procedure (const nPound: PPoundItem) of Object;
@@ -107,6 +114,7 @@ type
     //UDP服务
     FSyncLock: TCriticalSection;
     //同步锁定
+    FEventMode: TTruckEventMode;
     FOnStatusProc: TOnTruckStatusProc;
     FOnStatusEvent: TOnTruckStatusEvent;
     ///事件相关
@@ -132,6 +140,7 @@ type
       const nResetTruck: Boolean = False);
     //获取数据
     property UDPPort: Word read FUDPPort write FUDPPort;
+    property EventMode: TTruckEventMode read FEventMode write FEventMode;
     property OnStatusChange: TOnTruckStatusProc read FOnStatusProc write FOnStatusProc;
     property OnStatusChangeEvent: TOnTruckStatusEvent read FOnStatusEvent write FOnStatusEvent;
     //属性相关
@@ -197,8 +206,9 @@ constructor TTruckManager.Create;
 begin
   FMonitor := nil;
   FUDPServer := nil;
-  FStatusUpdateInerval := 2 * 1000;
+  FEventMode := emThread;
 
+  FStatusUpdateInerval := 2 * 1000;
   SetLength(FPounds, 0);
   FSyncLock := TCriticalSection.Create;
 end;
@@ -652,15 +662,17 @@ end;
 procedure TTruckMonitor.DoExecute;
 var nIdx: Integer;
 
-    //触发事件
     procedure DoEvent;
     begin
-      if Assigned(FOwner.FOnStatusProc) then
-        FOwner.FOnStatusProc(@FOwner.FPounds[nIdx]);
+      FActivePound := @FOwner.FPounds[nIdx];
+      //xxxxx
+      
+      if FOwner.FEventMode = emThread then
+        DoOwnerEvent;
       //xxxxx
 
-      if Assigned(FOwner.FOnStatusEvent) then
-        FOwner.FOnStatusEvent(@FOwner.FPounds[nIdx]);
+      if FOwner.FEventMode = emMain then
+        Synchronize(DoOwnerEvent);
       //xxxxx
     end;
 begin
@@ -702,6 +714,17 @@ begin
       //xxxxx
     end;
   end;
+end;
+
+procedure TTruckMonitor.DoOwnerEvent;
+begin
+  if Assigned(FOwner.FOnStatusProc) then
+    FOwner.FOnStatusProc(FActivePound);
+  //xxxxx
+
+  if Assigned(FOwner.FOnStatusEvent) then
+    FOwner.FOnStatusEvent(FActivePound);
+  //xxxxx
 end;
 
 initialization
