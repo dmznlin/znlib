@@ -1,0 +1,30 @@
+1．首先创建一个.Rc的纯文本文件。格式如下：
+   资源标识符  关键字  资源文件名
+   格式说明：
+   ① 资源标识符：程序中调用资源时的特定标号；
+   ② 关键字：标识资源文件类型；例如：
+      Wave  ： 资源文件是声音文件；
+      RCDATA： JPEG文件；
+      AVI   ： AVI动画；
+      ICON  ： 图标文件；
+      BITMAP： 位图文件；
+      CURSOR： 光标文件；
+      RMI   ： RMI音乐文件；
+      MIDI  ： MIDI音乐文件
+   ③ 资源文件名：加入的资源文件名(要带扩展名，可以带路径名构成全文件名)；
+   ④ 举例：
+      MyWav WAVE "FileName.Wav"
+      MyMID MIDI "C:/My Documents/my music/canyon.MID"
+      MyAVI AVI  "SpeedIs.AVI"
+	  
+2．使用Borland资源编译器（BRCC32.EXE）转化.Rc文件成.Res文件.
+   Brcc32 Sample.Rc
+   注意转换前需要把Sample.RC文件中指定的未带全路径名的文件Copy进当前目录C:/Program Files/Borland/Delphi7/Bin中来,才可保证转成.RES文件不出错。如果转换过程没有报错，则成功。
+	
+3．引用资源文件
+   {$R Sample.RES}	
+   新加入的编译资源文件的指令
+	
+4．调用资源文件
+   Image1.Picture.Bitmap.Handle :=LoadBitmap(hInstance,'资源标识符');
+   Screen.Cursors[1] :=LoadCursor(hInstance,'资源标识符');	
