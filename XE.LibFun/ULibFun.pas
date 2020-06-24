@@ -85,6 +85,12 @@ type
       end;
       TDictionaryItems = array of TDictionaryItem;       //字典列表
 
+  public
+    class function CopyLeft(const nStr: string; nSize: Word): string; static;
+    class function CopyRight(const nStr: string; nSize: Word): string; static;
+    class function CopyNoLeft(const nStr: string; nSize: Word): string; static;
+    class function CopyNoRight(const nStr: string; nSize: Word): string; static;
+    //复制两端字符串
     class function MI(const nMacro,nValue: string): TMacroItem; static;
     class function MacroValue(const nData: string;
       const nMacro: TDynamicMacroArray): string; static;
@@ -657,6 +663,54 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+//Date: 2020-06-24
+//Parm: 字符串;待复制大小
+//Desc: 复制nStr左侧nSize字符
+class function TStringHelper.CopyLeft(const nStr: string; nSize: Word): string;
+var nLen: Integer;
+begin
+  nLen := Length(nStr);
+  if nSize > nLen then
+    nSize := nLen;
+  Result := Copy(nStr, cFI, nSize);
+end;
+
+//Date: 2020-06-24
+//Parm: 字符串;复制时去除
+//Desc: 复制nStr左侧去除nSize字符
+class function TStringHelper.CopyNoLeft(const nStr: string; nSize: Word): string;
+var nLen: Integer;
+begin
+  nLen := Length(nStr);
+  if nSize > nLen then
+    nSize := nLen;
+  Result := Copy(nStr, nSize + cFI, nLen - nSize);
+end;
+
+//Date: 2020-06-24
+//Parm: 字符串;待复制大小
+//Desc: 复制nStr右侧nSize字符
+class function TStringHelper.CopyRight(const nStr: string; nSize: Word): string;
+var nLen: Integer;
+begin
+  nLen := Length(nStr);
+  if nSize > nLen then
+    nSize := nLen;
+  Result := Copy(nStr, nLen - nSize + cFI, nSize);
+end;
+
+//Date: 2020-06-24
+//Parm: 字符串;复制时去除
+//Desc: 复制nStr右侧去除nSize字符
+class function TStringHelper.CopyNoRight(const nStr: string; nSize: Word): string;
+var nLen: Integer;
+begin
+  nLen := Length(nStr);
+  if nSize > nLen then
+    nSize := nLen;
+  Result := Copy(nStr, cFI, nLen - nSize);
+end;
+
 //Desc: 宏定义项
 class function TStringHelper.MI(const nMacro,nValue: string): TMacroItem;
 begin
@@ -753,7 +807,7 @@ begin
 end;
 
 //Date: 2017-03-17
-//Parm: 字符串列表;分隔符; 
+//Parm: 字符串列表;分隔符;
 //Desc: 使用nFlag将nList合并为字符串
 class function TStringHelper.Combine(const nList: TStrings; nFlag: string;
   const nFlagEnd: Boolean): string;

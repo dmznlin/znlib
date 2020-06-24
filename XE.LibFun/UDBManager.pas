@@ -47,6 +47,7 @@ uses
 const
   //任意表标识
   sDBTables  = '$TB.*';
+  sDBIndex   = '$IDX';
 
   //小数字段
   sField_Access_Decimal          = 'Float';
@@ -321,7 +322,8 @@ begin
   with FIndexes[nInt] do
   begin
     FName := nName;
-    FData := nIndex;
+    with TStringHelper do
+      FData := MacroValue(nIndex, [MI(sDBIndex, nName)]);
     FFitDB := nDBType;
 
     FParmI := Pos(sDBTables, nIndex);
