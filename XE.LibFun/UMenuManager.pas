@@ -549,7 +549,7 @@ begin
     begin
       nEntity := nMenus[nIdx];
       //entity item
-      WriteLog('创建实体: ' + nEntity.FProgID + '.' + nEntity.FEntity);
+      WriteLog('创建实体: ' + nEntity.FProgID + '.' + nEntity.FEntity, nMemo);
 
       for i := Low(FMultiLang) to High(FMultiLang) do //multi language
       begin
