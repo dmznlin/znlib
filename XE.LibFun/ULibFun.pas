@@ -14,7 +14,7 @@ uses
   {$IFDEF HasFMX}FMX.Forms, FMX.Controls,{$ENDIF}
   {$IFDEF EnableThirdANSI}UByteString,{$ENDIF}
   System.Classes, System.UITypes, System.SysUtils, System.NetEncoding,
-  System.Rtti, System.Hash, System.Variants, System.IniFiles;
+  System.Rtti, System.Hash, System.Variants, System.IniFiles, System.Math;
 
 type
   TApplicationHelper = class
@@ -227,6 +227,14 @@ type
 
   TEncodeHelper = class
   public
+    const
+      cBase32ValidChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+      //Base32 table
+
+  public
+    class function EncodeBase32(nData: UTF8String): string; static;
+    class function DecodeBase32(const nData: string): string; static;
+    //base32
     class function EncodeBase64(const nData: string;
       const nLineBreak: Boolean = False): string; static;
     class function DecodeBase64(const nData: string): string; static;
@@ -1892,6 +1900,90 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+//Date: 2020-10-14
+//Parm: 待编码数据
+//Desc: 对nData执行Base32编码
+class function TEncodeHelper.EncodeBase32(nData: UTF8String): string;
+var nInt: Int64;
+    i,j,nLen: Integer;
+begin
+  Result := '';
+  //每5个字符一组进行编码
+  //5个字符x8=40位，5位*8字符=40位，BASE32每个字符用5位表示
+
+  nLen := Length(nData);
+  while nLen > 0 do
+  begin
+    if nLen >= 5 then
+      nLen := 5;
+    //将这5个字符的ASCII码按顺序存放到Int64（共8个字节）整数中
+
+    nInt := 0;
+    for i := 1 to nLen do
+      nInt := nInt shl 8 + Ord(nData[i]);
+    //存放一个字符，左移一个字节（8位）
+
+    nInt := nInt shl ((8 - nLen) * 8);
+    //最后再左移3个字节（3*8）
+    j := System.Math.Ceil(nLen * 8 / 5);
+    //编码，每5位表示一个字符，8个字符刚好是40位
+
+    for i := 1 to 8 do
+    begin
+      if i <= j then
+      begin
+        Result := Result + cBase32ValidChars[nInt shr 59 + 1];
+        //右移7*8位+3位，从BASE32表中取字符
+        nInt := nInt shl 5;
+        //每次左移5位
+      end else
+      begin
+        Result := Result + '=';
+        //fill invalid
+      end;
+    end;
+
+    System.Delete(nData, 1, nLen);
+    //去掉已处理的字符
+    nLen := Length(nData);
+  end;
+end;
+
+//Date: 2020-10-14
+//Parm: 待解码数据
+//Desc: 对nData知行Base32解码
+class function TEncodeHelper.DecodeBase32(const nData: string): string;
+var nStr: String;
+    nIdx,nLen,nPos,n,j: Integer;
+begin
+  Result := '';
+  nStr := UpperCase(nData);
+
+  n := 0;
+  j := 0;
+  nLen := Length(nData);
+
+  for nIdx := 1 to nLen do
+  begin
+    n := n shl 5;
+    // Move buffer left by 5 to make room
+
+    nPos := Pos(nStr[nIdx], cBase32ValidChars);
+    if nPos >= 0 then
+      n := n + (nPos - 1);
+    // Add value into buffer
+
+		j := j + 5;
+    // Keep track of number of bits in buffer
+
+    if (j >= 8) then
+    begin
+      j := j - 8;
+      Result := Result + Chr((n and ($FF shl j)) shr j);
+    end;
+  end;
+end;
+
 //Date: 2017-03-17
 //Parm: 待编码数据;是否换行
 //Desc: 对nData执行base64编码
