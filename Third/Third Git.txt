@@ -1,6 +1,5 @@
 *.NativeXML: xml解析包
-https://github.com/kattunga/NativeXml.git/trunk
-
+https://github.com/kattunga/NativeXml.git
 
 *.SuperObject: jason解析包
 https://github.com/hgourvest/superobject.git
@@ -31,3 +30,6 @@ https://github.com/coassoftwaresystems/delphi-modbus.git
 
 *.DEB: An Event Bus framework事件总线框架
 https://github.com/spinettaro/delphi-event-bus.git
+
+*.TimeCode: 基于Google Authenticator的动态密码算法
+https://github.com/nikosdion/timecode.git
