@@ -12,7 +12,7 @@ interface
 
 uses
   System.Classes, System.SysUtils, System.DateUtils, System.Math,
-  IdGlobal, IdHMACSHA1, SZCodeBaseX, UManagerGroup;
+  IdGlobal, IdHMACSHA1, SZCodeBaseX, UManagerGroup, ULibFun;
 
 type
   TGoogleOTP = record
@@ -22,9 +22,18 @@ type
       // How many digits are there in a TOTP. Google Authenticator uses 6 digits.
       KeyRegeneration = 30;
       // Time step for TOTP generation. Google Authenticator uses 30 seconds.
+    type
+      TAuthority = (totp, hotp);
+      //Time-based One-Time Password,HMAC-based One-Time Password
   public
     class procedure InitOPT; static;
     //init environment
+    class function EncodeBase32(const nSecret: string): string; static;
+    class function DecodeBase32(const nSecret: string): string; static;
+    //base32 coding
+    class function MakeSecret(nLen: Integer = OTPLength;
+      const nEncode: Boolean = True): string; static;
+    //make secret for calculate
     class function Calculate(const nSecret: string; const nCounter: Integer = -1;
       const nAcceptTime: PInteger = nil): Integer; static;
     class function CalAsString(const nSecret: string;
@@ -35,6 +44,10 @@ type
     //Checks if the provided TOTP (Token) is valid
     class function TimeRemain(const nAcceptTime: Integer): Integer; static;
     //the remaining validity time in seconds of the created password
+    class function MakeURI(const nAccount,nSecret:string;
+      const nParams: string = '';
+      const nAuthority: TAuthority = totp): string; static;
+    //QR-Code URI
   end;
 
 implementation
@@ -82,6 +95,55 @@ begin
       Result := TIdHMACSHA1.Create;
     end);
   //xxxxxx
+end;
+
+//Date: 2020-10-22
+//Parm: 长度;是否编码
+//Desc: 随机生成长度为nLen的secret key
+class function TGoogleOTP.MakeSecret(nLen: Integer;
+  const nEncode: Boolean): string;
+const
+  cValidChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ23456789';
+  cValidLenth = Length(cValidChars);
+
+var nIdx: Integer;
+begin
+  if nLen < 1 then nLen := 1
+  else
+  if nLen > 32 then nLen := 32;
+
+  SetLength(Result, nLen);
+  while nLen > 0 do
+  begin
+    nIdx := Random(cValidLenth + 1);
+    if nIdx < 1 then nIdx := 1
+    else
+    if nIdx > cValidLenth then nIdx := cValidLenth;
+
+    Result[nLen] := cValidChars[nIdx];
+    //fill char
+    Dec(nLen);
+  end;
+
+  if nEncode then
+    Result := SZEncodeBase32(Result);
+  //xxxxx
+end;
+
+//Date: 2020-10-22
+//Parm: 待编码key
+//Desc: 编码nSecret
+class function TGoogleOTP.EncodeBase32(const nSecret: string): string;
+begin
+  Result := SZEncodeBase32(nSecret);
+end;
+
+//Date: 2020-10-22
+//Parm: 待解码key
+//Desc: 解码nSecret
+class function TGoogleOTP.DecodeBase32(const nSecret: string): string;
+begin
+  Result := SZDecodeBase32(nSecret);
 end;
 
 {
@@ -170,6 +232,33 @@ begin
   if nTime = nAcceptTime then
        Result := KeyRegeneration - nUnix mod KeyRegeneration
   else Result := 0;
+end;
+
+//Date: 2020-10-25
+//Parm: 账户名称;密钥;附加参数;算法类型
+//Desc: 生成Google Authenticator能识别的二维码内容
+class function TGoogleOTP.MakeURI(const nAccount, nSecret, nParams: string;
+  const nAuthority: TAuthority): string;
+begin
+  Result := 'otpauth://$auth/$account?secret=$secret';
+  with TStringHelper do
+  begin
+    if nAuthority = hotp then
+         Result := MacroValue(Result, [MI('$auth', 'hotp')])
+    else Result := MacroValue(Result, [MI('$auth', 'totp')]);
+
+    if nAccount = '' then
+         Result := MacroValue(Result, [MI('$account', 'user@here')])
+    else Result := MacroValue(Result, [MI('$account', nAccount)]);
+
+    if nSecret = '' then
+         Result := MacroValue(Result, [MI('$secret', MakeSecret())])
+    else Result := MacroValue(Result, [MI('$secret', nSecret)]);
+
+    if nParams <> '' then
+      Result := Result + '&' + nParams;
+    //xxxxx
+  end;
 end;
 
 end.
