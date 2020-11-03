@@ -70,7 +70,8 @@ type
     //是否注册
     function NewClass(const nClass: TClass; const nNew: TObjectNewOne;
       const nFree: TObjectFreeOne = nil;
-      const nReset: TObjectResetOne = nil): Integer;
+      const nReset: TObjectResetOne = nil;
+      const nOnlyOnce: Boolean = True): Integer;
     procedure NewNormalClass;
     //注册类型
     function Lock(const nClass: TClass; nNew: TObjectNewOne = nil;
@@ -216,11 +217,11 @@ begin
 end;
 
 //Date: 2017-03-23
-//Parm: 类型;创建方法;释放方法;重置方法
+//Parm: 类型;创建方法;释放方法;重置方法;若存在,是否覆盖
 //Desc: 注册nClass类到对象池
 function TObjectPoolManager.NewClass(const nClass: TClass;
   const nNew: TObjectNewOne; const nFree: TObjectFreeOne;
-  const nReset: TObjectResetOne): Integer;
+  const nReset: TObjectResetOne; const nOnlyOnce: Boolean): Integer;
 begin
   SyncEnter;
   try
@@ -230,6 +231,12 @@ begin
       Result := Length(FPool);
       SetLength(FPool, Result + 1);
       FillChar(FPool[Result], SizeOf(TObjectPoolClass), #0);
+    end else
+
+    if nOnlyOnce then
+    begin
+      Exit;
+      //若类型已注册,默认不覆盖
     end;
 
     with FPool[Result] do

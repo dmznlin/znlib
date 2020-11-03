@@ -15,7 +15,7 @@ uses
   IdGlobal, IdHMACSHA1, SZCodeBaseX, UManagerGroup, ULibFun;
 
 type
-  TGoogleOTP = record
+  TGoogleOTP = class
   public
     const
       OTPLength = 6;
@@ -26,8 +26,6 @@ type
       TAuthority = (totp, hotp);
       //Time-based One-Time Password,HMAC-based One-Time Password
   public
-    class procedure InitOPT; static;
-    //init environment
     class function EncodeBase32(const nSecret: string): string; static;
     class function DecodeBase32(const nSecret: string): string; static;
     //base32 coding
@@ -52,12 +50,29 @@ type
 
 implementation
 
+var
+  gInitOTP: Boolean = False;
+  //初始化标记
+
 //Date: 2020-10-17
 //Parm: 密钥;数据
 //Desc: 使用nKey编码nData
 function HMACSHA1(const nKey: TIdBytes; const nData: TIdBytes): TIdBytes;
 var nSHA: TIdHMACSHA1;
 begin
+  if not gInitOTP then
+  begin
+    gInitOTP := True;
+    //set flag
+
+    gMG.FObjectPool.NewClass(TIdHMACSHA1,
+      function(var nData: Pointer): TObject
+      begin
+        Result := TIdHMACSHA1.Create;
+      end);
+    //xxxxxx
+  end;
+
   nSHA := nil;
   try
     nSHA := gMG.FObjectPool.Lock(TIdHMACSHA1) as TIdHMACSHA1;
@@ -85,16 +100,6 @@ begin
   for nIdx := Low(nBuf) to nHigh do
     Result[nHigh - nIdx] := nBuf[nIdx];
   //Reverses TIdBytes (from low->high to high->low)
-end;
-
-class procedure TGoogleOTP.InitOPT;
-begin
-  gMG.FObjectPool.NewClass(TIdHMACSHA1,
-    function(var nData: Pointer): TObject
-    begin
-      Result := TIdHMACSHA1.Create;
-    end);
-  //xxxxxx
 end;
 
 //Date: 2020-10-22
