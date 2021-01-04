@@ -249,7 +249,23 @@ var
 implementation
 
 uses
-  UManagerGroup, ULibFun;
+  UManagerGroup, UMgrLog, ULibFun;
+
+var
+  gSimpleLogger: TSimpleLogger = nil;
+  //日志记录器
+
+procedure WriteLog(const nEvent: string);
+var nWriter: TLogWriter;
+begin
+  with nWriter do
+  begin
+    FDesc := '线程管理器';
+    FOjbect := TThreadPoolManager;
+  end;
+
+  gSimpleLogger.WriteLog(nWriter, nEvent);
+end;
 
 constructor TThreadPoolManager.Create;
 begin
@@ -264,6 +280,9 @@ begin
   FStatus.FWorkIdleInit := TDateTimeHelper.GetTickCount();
   FStatus.FRunErrorIndex := Low(FStatus.FRunErrors);
 
+  gSimpleLogger := TSimpleLogger.Create(TApplicationHelper.gLogPath, '_TM.log');
+  //enable logger
+
   FWorkers := TList.Create;
   FMonitor := TThreadMonitor.Create(Self);
 end;
@@ -276,6 +295,7 @@ begin
 
   ClearWorkers(True);
   FRunners.Free;
+  FreeAndNil(gSimpleLogger);
   inherited;
 end;
 
@@ -1021,6 +1041,10 @@ begin
       if FOwner.FStatus.FNumRunners > FOwner.FStatus.FNumRunnerMax then
         FOwner.FStatus.FNumRunnerMax := FOwner.FStatus.FNumRunners;
       //xxxxx
+
+      if FOwner.FStatus.FNumRunners >= FOwner.FRunnerMax then
+        WriteLog(Format('Threads Number Max(%d)', [FOwner.FStatus.FNumRunners]));
+      //xxxxx
     end;
   end else //del
   begin
@@ -1051,6 +1075,10 @@ begin
       Dec(nInt);
       if nInt <= 0 then Break;
     end;
+
+    if FOwner.FStatus.FNumRunners <=  FOwner.FRunnerMin then
+      WriteLog(Format('Threads Number Min(%d)', [FOwner.FStatus.FNumRunners]));
+    //xxxxx
   end;
 end;
 
@@ -1086,6 +1114,7 @@ begin
       begin
         AdjustRunner(False, 1);
         //每分钟有30秒空闲
+        WriteLog(Format('Threads Idle %d Sec,Dec %d Thread', [nVal, 1]));
       end else
       begin
         FWorkIdleInit := TDateTimeHelper.GetTickCount();
@@ -1103,8 +1132,11 @@ begin
       nVal := TDateTimeHelper.GetTickCountDiff(nWorker.FStartCall);
       if (nWorker.FWorker.FCallMaxTake > 0) and
          (nWorker.FWorker.FCallMaxTake <= nVal) then
+      begin
         FOwner.IncErrorCounter(nWorker.FWorker.FWorkerName, False, '长时间挂起');
-      //Worker长时间挂起,视为异常
+        //Worker长时间挂起,视为异常
+        WriteLog(Format('[ %s ]Worker Run Timeout %d MS', [nWorker.FWorker.FWorkerName, nVal]));
+      end;
     end;
 
     if (nWorker.FStartDelete > 0) and (nWorker.FStartCall < 1) then
@@ -1125,7 +1157,11 @@ begin
       nVal := Trunc(FRunDelayNow / 2000);
 
       if nVal < 1 then 
-        nVal := 1;      
+        nVal := 1;
+      //xxxxx
+
+      WriteLog(Format('Run Delay %d MS,Inc %d Thread(s)', [FRunDelayNow, nVal]));
+      //log event
       AdjustRunner(True, nVal);
       //运行延迟过大,增加线程
     end;
@@ -1220,7 +1256,7 @@ var nIdx: Integer;
           //历史最大延迟
         end;
       end;
-         
+
       FActiveWorker := nWorker;
       Break;
     end;
@@ -1373,17 +1409,25 @@ end;
 
 procedure TThreadRunner.DoRun;
 begin
-  if Assigned(FActiveWorker.FWorker.FProcedure) then
-    FActiveWorker.FWorker.FProcedure(@FActiveWorker.FWorker, Self);
-  //xxxxx
+  try
+    if Assigned(FActiveWorker.FWorker.FProcedure) then
+      FActiveWorker.FWorker.FProcedure(@FActiveWorker.FWorker, Self);
+    //xxxxx
 
-  if Assigned(FActiveWorker.FWorker.FProcEvent) then
-    FActiveWorker.FWorker.FProcEvent(@FActiveWorker.FWorker, Self);
-  //xxxxx
+    if Assigned(FActiveWorker.FWorker.FProcEvent) then
+      FActiveWorker.FWorker.FProcEvent(@FActiveWorker.FWorker, Self);
+    //xxxxx
 
-  if Assigned(FActiveWorker.FWorker.FProcRefer) then
-    FActiveWorker.FWorker.FProcRefer(@FActiveWorker.FWorker, Self);
-  //xxxxx
+    if Assigned(FActiveWorker.FWorker.FProcRefer) then
+      FActiveWorker.FWorker.FProcRefer(@FActiveWorker.FWorker, Self);
+    //xxxxx
+  except
+    on nErr: Exception do
+    begin
+      WriteLog(Format('[ %s ]%s', [FActiveWorker.FWorker.FWorkerName, nErr.Message]));
+      //log to file
+    end;
+  end;
 end;
 
 end.

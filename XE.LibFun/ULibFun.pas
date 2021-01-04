@@ -34,6 +34,8 @@ type
     //窗体配置文件
     gDBConfig: string;
     //数据库配置文件
+    gLogPath: string;
+    //日志所在目录
 
   public
     class function GetCPUIDStr: string; static;
@@ -2193,4 +2195,29 @@ begin
   end;
 end;
 
+//Date: 2021-01-04
+//Desc: 初始化库
+procedure InitLibrary;
+var nSymbol: string;
+begin
+  with TApplicationHelper do
+  begin
+    gPath := ExtractFilePath(ParamStr(0));
+    nSymbol := TStringHelper.CopyRight(gPath, 1);
+    if (nSymbol <> '\') and (nSymbol <> '/') then
+    begin
+      nSymbol := '\';
+      gPath := gPath + nSymbol;
+    end;
+
+    gFormConfig := gPath + 'FormInfo.Ini';
+    gDBConfig := gPath + 'DBConn.Ini';
+    gLogPath := gPath + 'Logs' + nSymbol;
+  end;
+end;
+
+initialization
+  InitLibrary();
+finalization
+  //nothing
 end.

@@ -29,6 +29,23 @@ type
     FEvent   : string;             //日志内容
   end;
 
+  TSimpleLogger = class(TObject)
+  private
+    FFileExt: string;
+    FLogField: string;
+    {*日志特征*}
+    FWritePath: string;
+    FWriteLock: TCrossProcWaitObject;
+    {*同步锁定*}
+  public
+    constructor Create(const nPath: string; const nExt: string = '';
+      const nField: string = ''; const nSyncLock: Boolean = False);
+    destructor Destroy; override;
+    {*创建释放*}
+    procedure WriteLog(const nWriter: TLogWriter; const nEvent: string);
+    {*记录日志*}
+  end;
+
   //****************************************************************************
   TLogManager = class;
   TLogManagerStatus = record
@@ -106,7 +123,7 @@ type
     procedure AddLog(const nObj: TClass; const nDesc,nEvent: string;
      const nType: TLogType = ltNull); overload;
     {*新日志*}
-    procedure StartService(const nPath: string; const nSyncLock: string = '');
+    procedure StartService(const nPath: string = ''; const nSyncLock: string = '');
     procedure StopService();
     {*启停服务*}
     class function Type2Str(const nType: TLogType;
@@ -136,6 +153,69 @@ implementation
 uses
   UManagerGroup, ULibFun;
 
+constructor TSimpleLogger.Create(const nPath,nExt,nField: string;
+  const nSyncLock: Boolean);
+begin
+  FFileExt := Trim(nExt);
+  if FFileExt = '' then
+    FFileExt := '.log';
+  //xxxxx
+
+  FLogField := Trim(nField);
+  if FLogField = '' then
+    FLogField := #9;
+  //xxxxx
+
+  if not DirectoryExists(nPath) then
+    ForceDirectories(nPath);
+  FWritePath := nPath;
+
+  if nSyncLock then
+       FWriteLock := TCrossProcWaitObject.Create()
+  else FWriteLock := nil; //for thread or process sync
+end;
+
+destructor TSimpleLogger.Destroy;
+begin
+  FWriteLock.Free;
+  inherited;
+end;
+
+//Date: 2021-01-04
+//Parm: 日志对象;事件
+//Desc: 向日志文件中写入nWriter.nEvent事件
+procedure TSimpleLogger.WriteLog(const nWriter: TLogWriter; const nEvent: string);
+var nStr: string;
+    nFile: TextFile;
+begin
+  if Assigned(FWriteLock) then
+    FWriteLock.SyncLockEnter(True);
+  //xxxxx
+  try
+    nStr := FWritePath +  TDateTimeHelper.Date2Str(Now) + FFileExt;
+    AssignFile(nFile, nStr);
+
+    if FileExists(nStr) then
+         Append(nFile)
+    else Rewrite(nFile);
+
+    nStr := FormatDateTime('hh:nn:ss.zzz', Time()) + FLogField +
+            Copy(nWriter.FOjbect.ClassName, 1, 32) + FLogField;
+    //时间,类名
+
+    if nWriter.FDesc <> '' then
+      nStr := nStr + nWriter.FDesc + FLogField;            //描述
+    nStr := nStr + nEvent;                                 //事件
+
+    WriteLn(nFile, nStr);
+  finally
+    if Assigned(FWriteLock) then
+      FWriteLock.SyncLockLeave(True);
+    CloseFile(nFile);
+  end;
+end;
+
+//------------------------------------------------------------------------------
 constructor TLogManager.Create;
 begin
   inherited;
@@ -318,16 +398,14 @@ begin
   StopService();
   //stop first
 
-  if nPath = '' then
-  begin
-    FWritePath := '';
-    gMG.FThreadPool.WorkerStart(Self);
-    Exit;
-  end;
+  FWritePath := Trim(nPath);
+  if FWritePath = '' then
+    FWritePath := TApplicationHelper.gLogPath;
+  //xxxxx
 
-  if not DirectoryExists(nPath) then
-    ForceDirectories(nPath);
-  FWritePath := nPath;
+  if not DirectoryExists(FWritePath) then
+    ForceDirectories(FWritePath);
+  //xxxxx
 
   if not Assigned(FWriteLock) then
     FWriteLock := TCrossProcWaitObject.Create(nSyncLock);
