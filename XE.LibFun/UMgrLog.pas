@@ -4,6 +4,7 @@
 *******************************************************************************}
 unit UMgrLog;
 
+{$I LibFun.Inc}
 interface
 
 uses
@@ -244,15 +245,21 @@ begin
   begin
     if not Assigned(gMG.FManagers[nIdx].FManager) then
       gMG.FManagers[nIdx].FManager := TLogManager.Create;
+    {$IFDEF EnableLogManager}
     gMG.FLogManager := gMG.FManagers[nIdx].FManager as TLogManager;
+    {$ENDIF}
   end else
   begin
+    {$IFDEF EnableLogManager}
     gMG.FLogManager := nil;
+    {$ENDIF}
     FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
 
+  {$IFDEF EnableLogManager}
   gLogManager := gMG.FLogManager;
   //启用全局变量
+  {$ENDIF}
 end;
 
 procedure TLogManager.RunAfterRegistAllManager;
