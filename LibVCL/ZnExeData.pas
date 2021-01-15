@@ -197,7 +197,7 @@ begin
     FSyncLock.Enter;
     try
       nBuf := TCopyDataStruct((Pointer(nMsg.LParam))^);
-      FData := StrPas(nBuf.lpData);
+      FData := StrPas(PChar(nBuf.lpData));
       SetLength(FData, nBuf.cbData);
 
       if Assigned(FOnData) then FOnData(FData);

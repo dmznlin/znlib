@@ -179,11 +179,11 @@ begin
   begin
     FTaskbarCreated := RegisterWindowMessage('TaskbarCreated');
     //hook taskbar
-    FillChar(FData, SizeOf(TNotifyIconData), 0);
-    
+    FillChar(FData, System.SizeOf(TNotifyIconData), 0);
+
     with FData do
     begin
-      cbSize := SizeOf(TNotifyIconData);
+      cbSize := System.SizeOf(TNotifyIconData);
       Wnd    := Classes.AllocateHWnd(DoMessage);
       uID    := UINT(Self);
       hIcon  := FIcon.Handle;

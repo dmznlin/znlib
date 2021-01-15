@@ -68,6 +68,15 @@ type
     const nThread: TThread);
   {*线程内运行函数*}
 
+  TThreadWorkerStatus = (twsNormal, twsSleep);
+  {*****************************************************************************
+    工作对象状态: 正常,休眠
+    休眠状态是指: Worker的业务暂时不正常,可以降低到忽略的程序.
+    例如: 1.TCP通讯时网络异常,引起Worker代码执行时间超长.
+          2.磁盘空间不足,引起Worker写操作异常.
+    休眠状态的Worker过多,会拖慢线程池的执行效率,因此需要特殊处理.
+  *****************************************************************************}
+
   TThreadWorkerConfig = record
   private
   const
@@ -89,6 +98,7 @@ type
     FProcEvent    : TThreadProcEvent;            //待执行事件
     FProcRefer    : TThreadProcRefer;            //待执行匿名
     FCoInitialize : Boolean;                     //执行COM初始化
+    FWorkStatus   : TThreadWorkerStatus;         //工作状态
   end;
 
   PThreadWorker = ^TThreadWorker;
@@ -214,6 +224,7 @@ type
     constructor Create;
     destructor Destroy; override;
     {*创建释放*}
+    procedure RunBeforUnregistAllManager; override;
     class procedure RegistMe(const nReg: Boolean); override;
     {*注册对象*}
     procedure GetStatus(const nList: TStrings;
@@ -289,12 +300,16 @@ end;
 
 destructor TThreadPoolManager.Destroy;
 begin
-  FMonitor.StopMe;
-  FMonitor := nil;
+  if Assigned(FMonitor) then
+  begin
+    FMonitor.StopMe;
+    FMonitor := nil;
+  end;
+  
   StopRunners;
-
   ClearWorkers(True);
   FRunners.Free;
+
   FreeAndNil(gSimpleLogger);
   inherited;
 end;
@@ -302,6 +317,11 @@ end;
 procedure TThreadPoolManager.StopRunners;
 var nIdx: Integer;
 begin
+  for nIdx := FRunners.Count - 1 downto 0 do
+   if Assigned(FRunners[nIdx]) then
+    TThreadRunner(FRunners[nIdx]).Terminate;
+  //set stop flag
+
   for nIdx := FRunners.Count - 1 downto 0 do
   if Assigned(FRunners[nIdx]) then
   begin
@@ -356,6 +376,13 @@ begin
   //启用全局变量
 end;
 
+procedure TThreadPoolManager.RunBeforUnregistAllManager;
+begin
+  FMonitor.StopMe;
+  FMonitor := nil;
+  StopRunners(); 
+end;
+
 procedure TThreadPoolManager.SetRunnerMax(const nValue: Word);
 begin
   if (nValue <> FRunnerMax) and (nValue <= cThreadMax) then
@@ -399,6 +426,8 @@ begin
     //最大运行耗时
     FCoInitialize := False;
     //默认不执行COM初始化
+    FWorkStatus := twsNormal;
+    //正常运行
   end;
 end;
 
@@ -432,6 +461,9 @@ begin
     nPWorker.FRunner := -1;
     nPWorker.FWorker := nWorker^;
     nPWorker.FWorkerID := gMG.FSerialIDManager.GetID;
+
+    nPWorker.FLastCall := TDateTimeHelper.GetTickCount - nWorker.FCallInterval;
+    //确保立刻执行,并计算出FStatus.FRunDelayNow,延迟过大时增加线程
 
     Inc(FStatus.FNumWorkers);
     if FStatus.FNumWorkers > FStatus.FNumWorkerMax then
@@ -545,11 +577,12 @@ begin
     for nIdx := FWorkers.Count-1 downto 0 do
     begin
       nWorker := FWorkers[nIdx];
-      if nWorker.FWorker.FParentObj = nParent then
-      begin
-        nWorker.FWorker.FCallTimes := nTimes;
-        nWorker.FLastCall := 0;
-      end;
+      with nWorker.FWorker do
+       if FParentObj = nParent then
+       begin
+         FCallTimes := nTimes;
+         nWorker.FLastCall := TDateTimeHelper.GetTickCount - FCallInterval;
+       end;
     end;
 
     ValidWorkerNumber(False);
@@ -574,11 +607,12 @@ begin
     begin
       nWorker := FWorkers[nIdx];
       if nWorker.FWorkerID = nWorkerID then
-      begin
-        nWorker.FWorker.FCallTimes := nTimes;
-        nWorker.FLastCall := 0;
-        Break;
-      end;
+       with nWorker.FWorker do
+       begin
+         FCallTimes := nTimes;
+         nWorker.FLastCall := TDateTimeHelper.GetTickCount - FCallInterval;
+         Break;
+       end;
     end;
 
     ValidWorkerNumber(False);
@@ -1027,7 +1061,11 @@ begin
 
   if nInc then //add
   begin
-    nIdx := FOwner.FStatus.FNumRunners + nNum - FOwner.FRunnerMax;
+    if FOwner.FRunnerMax < FOwner.FStatus.FNumWorkerValid  then
+         nIdx := FOwner.FRunnerMax
+    else nIdx := FOwner.FStatus.FNumWorkerValid;
+
+    nIdx := FOwner.FStatus.FNumRunners + nNum - Word(nIdx);
     if nIdx > 0 then
          nInt := nNum - nIdx
     else nInt := nNum;
