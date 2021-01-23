@@ -40,6 +40,24 @@
       WorkerAdd(@nWorker);
       //3.投递工作对象
     end;
+    ----------------------------------------------------------------------------
+  *.Worker的休眠状态: 如果工作对象是如TCPClient之类阻塞对象业务,在网络异常时
+    会执行时间超长,当多个超时业务同时存在,会拖慢线程池的执行效率.而在网络异常时
+    高频率的网络通讯已经没有意义.
+
+    设置Worker休眠有两种方式:
+      1.TThreadWorkerConfig.FAutoStatus = True: 自动切换休眠状态
+        当执行时长超过 TThreadWorkerConfig.FCallMaxTake 视为Worker已休眠.
+      2.在Worker的线程函数中设置,如:
+        procedure Do(const nConfig: PThreadWorkerConfig; const nThread: TThread);
+        begin
+          nConfig.FWorkStatus := twsSleep;
+          //FAutoStatus = False时有效
+        end;
+
+    当Worker被设置为休眠(twsSleep)时,空闲(twsNormal未到执行时间)的线程会执行
+    休眠Worker的业务,且线程数不超过 TThreadPoolManager.NumRunSleep,确保有足够的
+    线程执行正常业务.
 *******************************************************************************}
 unit UThreadPool;
 
@@ -68,7 +86,8 @@ type
     const nThread: TThread);
   {*线程内运行函数*}
 
-  TThreadWorkerStatus = (twsNormal, twsSleep);
+  TThreadWorkerStatus = (twsNormal, twsSleep, twsNull);
+  TThreadWorkerStatuses = set of TThreadWorkerStatus;
   {*****************************************************************************
     工作对象状态: 正常,休眠
     休眠状态是指: Worker的业务暂时不正常,可以降低到忽略的程序.
@@ -97,8 +116,10 @@ type
     FProcedure    : TThreadProcedure;            //待执行函数
     FProcEvent    : TThreadProcEvent;            //待执行事件
     FProcRefer    : TThreadProcRefer;            //待执行匿名
+
     FCoInitialize : Boolean;                     //执行COM初始化
-    FWorkStatus   : TThreadWorkerStatus;         //工作状态
+    FAutoStatus   : Boolean;                     //自动切换状态
+    FWorkStatus   : TThreadWorkerStatus;         //当前工作状态
   end;
 
   PThreadWorker = ^TThreadWorker;
@@ -121,8 +142,10 @@ type
   TThreadManagerStatus = record
     FNumWorkers      : Cardinal;                 //工作对象
     FNumWorkerValid  : Cardinal;                 //有效对象
+    FNumWorkerSleep  : Cardinal;                 //休眠对象
     FNumRunners      : Cardinal;                 //运行对象
     FNumRunning      : Cardinal;                 //运行中
+    FNumRunSleep     : Cardinal;                 //处理休眠线程
     FNumWorkerRun    : UInt64;                   //调用次数
     FNumWorkerMax    : Cardinal;                 //最多工作对象
     FNumRunnerMax    : Cardinal;                 //最多运行对象
@@ -204,6 +227,9 @@ type
     FRunnerMin: Word;
     FRunnerMax: Word;
     {*运行对象*}
+    FMaxRunSleep: Word;
+    FWorkerIndexSleep: Integer;
+    {*休眠对象*}
   protected
     procedure StopRunners;
     procedure DeleteWorker(const nIdx: Integer);
@@ -220,6 +246,8 @@ type
     {*扫描间隔*}
     function ValidWorkerNumber(const nLock: Boolean = False): Cardinal;
     {*有效对象*}
+    function SleepWorkerNumber(const nLock: Boolean = False): Cardinal;
+    {*休眠对象*}
   public
     constructor Create;
     destructor Destroy; override;
@@ -251,6 +279,8 @@ type
     {*唤醒对象*}
     property ThreadMin: Word read FRunnerMin write SetRunnerMin;
     property ThreadMax: Word read FRunnerMax write SetRunnerMax;
+    property NumRunSleep: Word read FMaxRunSleep write FMaxRunSleep;
+    {*属性相关*}
   end;
 
 var
@@ -285,7 +315,8 @@ begin
   FRunnerMax := cThreadMax;
 
   FWorkerIndex := 0;
-  FRunners := TList.Create;
+  FWorkerIndexSleep := 0;
+  FMaxRunSleep := 1;
 
   FillChar(FStatus, SizeOf(FStatus), #0);
   FStatus.FWorkIdleInit := TDateTimeHelper.GetTickCount();
@@ -294,6 +325,7 @@ begin
   gSimpleLogger := TSimpleLogger.Create(TApplicationHelper.gLogPath, '_TM.log');
   //enable logger
 
+  FRunners := TList.Create;
   FWorkers := TList.Create;
   FMonitor := TThreadMonitor.Create(Self);
 end;
@@ -305,7 +337,7 @@ begin
     FMonitor.StopMe;
     FMonitor := nil;
   end;
-  
+
   StopRunners;
   ClearWorkers(True);
   FRunners.Free;
@@ -376,11 +408,17 @@ begin
   //启用全局变量
 end;
 
+//Date: 2021-01-15
+//Desc: 停止线程池
 procedure TThreadPoolManager.RunBeforUnregistAllManager;
 begin
-  FMonitor.StopMe;
-  FMonitor := nil;
-  StopRunners(); 
+  if Assigned(FMonitor) then
+  begin
+    FMonitor.StopMe;
+    FMonitor := nil;
+  end;
+
+  StopRunners();
 end;
 
 procedure TThreadPoolManager.SetRunnerMax(const nValue: Word);
@@ -426,8 +464,10 @@ begin
     //最大运行耗时
     FCoInitialize := False;
     //默认不执行COM初始化
+    FAutoStatus := False;
+    //不自动切换工作状态
     FWorkStatus := twsNormal;
-    //正常运行
+    //默认状态: 正常运行
   end;
 end;
 
@@ -464,6 +504,10 @@ begin
 
     nPWorker.FLastCall := TDateTimeHelper.GetTickCount - nWorker.FCallInterval;
     //确保立刻执行,并计算出FStatus.FRunDelayNow,延迟过大时增加线程
+
+    if nWorker.FWorkStatus = twsSleep then
+      SleepWorkerNumber(False);
+    //xxxxx
 
     Inc(FStatus.FNumWorkers);
     if FStatus.FNumWorkers > FStatus.FNumWorkerMax then
@@ -508,6 +552,9 @@ begin
   for nIdx := Low(nWorkers) to High(nWorkers) do
     WorkerDelete(nWorkers[nIdx], False);
   ValidWorkerNumber(True);
+
+  SleepWorkerNumber(True);
+  //recount sleep worker
 end;
 
 //Date: 2019-01-10
@@ -535,8 +582,10 @@ begin
           //删除标记
 
           if nUpdateValid then
+          begin
             ValidWorkerNumber(False);
-          //xxxxx
+            SleepWorkerNumber(False);
+          end;
         end;
 
         {删除时需要等待调用结束:
@@ -789,12 +838,35 @@ begin
     for nIdx := FWorkers.Count-1 downto 0 do
     begin
       nWorker := FWorkers[nIdx];
-      if (nWorker.FStartDelete = 0) and (nWorker.FWorker.FCallTimes > 0) then
+      if (nWorker.FStartDelete < 1) and (nWorker.FWorker.FCallTimes > 0) then
         Inc(Result);
       //valid worker
     end;
 
     FStatus.FNumWorkerValid := Result;
+  finally
+    if nLock then SyncLeave;
+  end;
+end;
+
+//Date: 2021-01-21
+//Desc: 获取已休眠的工作对象个数
+function TThreadPoolManager.SleepWorkerNumber(const nLock: Boolean): Cardinal;
+var nIdx: Integer;
+    nWorker: PThreadWorker;
+begin
+  if nLock then SyncEnter;
+  try
+    Result := 0;
+    for nIdx := FWorkers.Count - 1 downto 0 do
+    begin
+      nWorker := FWorkers[nIdx];
+      if (nWorker.FStartDelete < 1) and (nWorker.FWorker.FWorkStatus = twsSleep) then
+        Inc(Result);
+      //no delete, sleep worker
+    end;
+
+    FStatus.FNumWorkerSleep := Result;
   finally
     if nLock then SyncLeave;
   end;
@@ -855,9 +927,11 @@ begin
       nList.Add('NumWorkerMax=' + FNumWorkerMax.ToString);
       nList.Add('NumWorker=' + FNumWorkers.ToString);
       nList.Add('NumWorkerValid=' + FNumWorkerValid.ToString);
+      nList.Add('NumWorkerSleep=' + FNumWorkerSleep.ToString);
       nList.Add('NumThreadMax=' + FNumRunnerMax.ToString);
       nList.Add('NumThread=' + FNumRunners.ToString);
       nList.Add('NumRunning=' + FNumRunning.ToString);
+      nList.Add('NumRunSleep=' + FNumRunSleep.ToString);
 
       nList.Add('NumWorkerRun=' + FNumWorkerRun.ToString);
       nList.Add('NowRunDelay=' + FRunDelayNow.ToString);
@@ -872,22 +946,24 @@ begin
       Exit;
     end;
 
-    nList.Add(FixData('NumWorkerMax:', FStatus.FNumWorkerMax));
-    nList.Add(FixData('NumWorker:', FStatus.FNumWorkers));
+    nList.Add(FixData('NumWorkerMax:', FNumWorkerMax));
+    nList.Add(FixData('NumWorker:', FNumWorkers));
     nList.Add(FixData('NumWorkerValid:', FNumWorkerValid));
-    nList.Add(FixData('NumThreadMax:', FStatus.FNumRunnerMax));
-    nList.Add(FixData('NumThread:', FStatus.FNumRunners));
-    nList.Add(FixData('NumRunning:', FStatus.FNumRunning));
+    nList.Add(FixData('NumWorkerSleep:', FNumWorkerSleep));
+    nList.Add(FixData('NumThreadMax:', FNumRunnerMax));
+    nList.Add(FixData('NumThread:', FNumRunners));
+    nList.Add(FixData('NumRunning:', FNumRunning));
+    nList.Add(FixData('NumRunSleep:', Format('%d/%d', [FNumRunSleep, FMaxRunSleep])));
 
     nList.Add(FixData('NowWorkInterval:', nInt));
-    nList.Add(FixData('MaxWorkInterval:', FStatus.FMaxWorkInterval));
+    nList.Add(FixData('MaxWorkInterval:', FMaxWorkInterval));
     nList.Add(FixData('NowWorkIdleLong:', nVal));
-    nList.Add(FixData('MaxWorkIdleLong:', FStatus.FMaxWorkIdleLong));
-    nList.Add(FixData('WorkIdleCounter:', FStatus.FWorkIdleCounter));
+    nList.Add(FixData('MaxWorkIdleLong:', FMaxWorkIdleLong));
+    nList.Add(FixData('WorkIdleCounter:', FWorkIdleCounter));
 
-    nList.Add(FixData('NowRunDelay:', FStatus.FRunDelayNow));
-    nList.Add(FixData('MaxRunDelay:', FStatus.FRunDelayMax));
-    nList.Add(FixData('NumWorkerRun:', FStatus.FNumWorkerRun));
+    nList.Add(FixData('NowRunDelay:', FRunDelayNow));
+    nList.Add(FixData('MaxRunDelay:', FRunDelayMax));
+    nList.Add(FixData('NumWorkerRun:', FNumWorkerRun));
 
     with FStatus.FRunMostFast do
      nList.Add(FixData('WorkerRunMostFast:', FValue.ToString + '(' + FName + ')'));
@@ -1239,32 +1315,38 @@ var nIdx: Integer;
     nLoop: Boolean;
     nInit,nVal: Cardinal;
     nWorker: PThreadWorker;
+    nWorkStatus: TThreadWorkerStatuses;
 
-  //Desc: 扫描可用工作对象
-  procedure ScanActiveWorker;
+  //Parm: 索引变量;Worker状态
+  //Desc: 使用nWorkerIndex扫描状态为nStatus的工作对象
+  procedure ScanActiveWorker(var nWorkerIndex: Integer;
+    const nStatus: TThreadWorkerStatuses);
   begin
     nLoop := False;
-    if FOwner.FWorkerIndex >= FOwner.FWorkers.Count then
-      FOwner.FWorkerIndex := 0;
-    nIdx := FOwner.FWorkerIndex;
+    if nWorkerIndex >= FOwner.FWorkers.Count then
+      nWorkerIndex := 0;
+    nIdx := nWorkerIndex;
 
-    while FOwner.FWorkerIndex < FOwner.FWorkers.Count do
+    while nWorkerIndex < FOwner.FWorkers.Count do
     begin
       if nLoop and (FOwner.FWorkerIndex = nIdx) then Break;
       //新一轮到开始位置,扫描结束
-      nWorker := FOwner.FWorkers[FOwner.FWorkerIndex];
-      Inc(FOwner.FWorkerIndex);
+      nWorker := FOwner.FWorkers[nWorkerIndex];
+      Inc(nWorkerIndex);
 
-      if FOwner.FWorkerIndex >= FOwner.FWorkers.Count then
+      if nWorkerIndex >= FOwner.FWorkers.Count then
       begin
         nLoop := True;
-        FOwner.FWorkerIndex := 0;
+        nWorkerIndex := 0;
       end; //开始新一轮扫描
+
+      if not (nWorker.FWorker.FWorkStatus in nStatus) then Continue;
+      //工作状态不匹配
 
       if (nWorker.FStartCall > 0) or (nWorker.FStartDelete > 0) or
          (nWorker.FWorker.FCallTimes < 1) then Continue;
       //调用中;删除中;执行完毕
-       
+
       if (nWorker.FWorker.FCallInterval > 0) and (nWorker.FLastCall > 0) then
       begin
         if nWorker.FWakeupCall > 0 then
@@ -1280,7 +1362,8 @@ var nIdx: Integer;
            (nWorker.FWakeupCall < 1) then Continue;
         //未到执行时间或未唤醒
 
-        if nVal > nWorker.FWorker.FCallInterval then
+        if (nVal > nWorker.FWorker.FCallInterval) and     //调用超时
+           (nWorker.FWorker.FWorkStatus <> twsSleep) then //休眠时延迟无意义
         begin
           nVal := nVal - nWorker.FWorker.FCallInterval;
           //两次调用间隔超过需要的间隔
@@ -1295,6 +1378,7 @@ var nIdx: Integer;
         end;
       end;
 
+      nWorkStatus := [nWorker.FWorker.FWorkStatus]; //原始工作状态
       FActiveWorker := nWorker;
       Break;
     end;
@@ -1343,6 +1427,7 @@ var nIdx: Integer;
 
   //Desc: 运行后清理
   procedure DoAfterRun();
+  var nNewWS: TThreadWorkerStatus;
   begin
     FActiveWorker.FRunner := -1;
     FActiveWorker.FStartCall := 0;
@@ -1364,6 +1449,21 @@ var nIdx: Integer;
 
     if nInit > 0 then
     begin
+      with FActiveWorker.FWorker do
+      if FAutoStatus and (FCallMaxTake > 0) then //自动状态,超时时长
+      begin
+        if nInit >= FCallMaxTake then //执行超时
+             nNewWS := twsSleep
+        else nNewWS := twsNormal;
+
+        if not (nNewWS in nWorkStatus) then
+        begin
+          FWorkStatus := nNewWS;
+          FOwner.SleepWorkerNumber(False);
+          //status changed,recount
+        end;
+      end;
+
       with FOwner.FStatus.FRunMostFast do
       begin
         if (nInit < FValue) or (FValue < 1) then //最快纪录
@@ -1387,11 +1487,42 @@ begin
   while not Terminated do
   try
     nInit := 0;
+    nWorkStatus := [];
+    //init default
+
     FActiveWorker := nil;
     try
       FOwner.SyncEnter;
       try
-        ScanActiveWorker();
+        if (FOwner.FStatus.FNumRunSleep > 0) or  //已有线程处理休眠业务
+           (FOwner.FStatus.FNumRunners < 2) then //当前线程池只有一个线程
+        begin
+          ScanActiveWorker(FOwner.FWorkerIndex, [twsNormal]);
+          //①.优先扫描正常工作对象
+
+          if not Assigned(FActiveWorker) then
+            nWorkStatus := [twsNull];
+          //未扫描到工作对象
+        end;
+
+        if (FOwner.FStatus.FNumRunSleep < FOwner.FMaxRunSleep) and //未达上限
+           (FOwner.FStatus.FNumWorkerSleep > 0) and                //有休眠对象
+           (not Assigned(FActiveWorker)) then                      //①未成功
+        begin
+          ScanActiveWorker(FOwner.FWorkerIndexSleep, [twsSleep]);
+          //②.处理休眠Worker的线程,优先扫描休眠Worker
+
+          if Assigned(FActiveWorker) then
+          begin
+            Inc(FOwner.FStatus.FNumRunSleep);
+            //增加计数,限制处理休眠Worker的线程个数
+            nWorkStatus := [twsSleep];
+          end;
+        end;
+
+        if nWorkStatus = [] then //①未执行,②未成功
+          ScanActiveWorker(FOwner.FWorkerIndex, [twsNormal]);
+        //扫描正常工作对象
       finally
         FOwner.SyncLeave;
       end;
@@ -1415,16 +1546,15 @@ begin
       {$ENDIF}
 
       DoRun();
-      if Terminated then Exit;
+      //运行业务
       nInit := TDateTimeHelper.GetTickCountDiff(FActiveWorker.FStartCall);
-
-      if nInit < FWorkInterval then
-        Sleep(FWorkInterval - nInit);
-      //wait seconds
+      //运行计时
     finally
       if Assigned(FActiveWorker) then
       try
         FOwner.SyncEnter;
+        if (twsSleep in nWorkStatus) then
+          Dec(FOwner.FStatus.FNumRunSleep);
         DoAfterRun();
       finally
         FOwner.SyncLeave;

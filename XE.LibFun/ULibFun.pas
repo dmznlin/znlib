@@ -2206,7 +2206,7 @@ begin
     nSymbol := TStringHelper.CopyRight(gPath, 1);
     if (nSymbol <> '\') and (nSymbol <> '/') then
     begin
-      nSymbol := '\';
+      nSymbol := PathDelim;
       gPath := gPath + nSymbol;
     end;
 
