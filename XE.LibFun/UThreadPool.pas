@@ -58,6 +58,7 @@
     当Worker被设置为休眠(twsSleep)时,空闲(twsNormal未到执行时间)的线程会执行
     休眠Worker的业务,且线程数不超过 TThreadPoolManager.NumRunSleep,确保有足够的
     线程执行正常业务.
+    注意:若TThreadPoolManager.NumRunSleep = 0,则休眠的Worker不会执行.
 *******************************************************************************}
 unit UThreadPool;
 
@@ -86,6 +87,15 @@ type
     const nThread: TThread);
   {*线程内运行函数*}
 
+  TThreadWorkerEvent = record
+    WorkProc  : TThreadProcedure;                //标准函数
+    WorkEvent : TThreadProcEvent;                //对象事件
+    WorkRefer : TThreadProcRefer;                //匿名函数
+  end;
+
+  TThreadWorkerEventName = (twnInit, twnWork, twnStop, twnFree);
+  //工作对象事件名称: 初始化,运行中,运行完毕,释放对象
+
   TThreadWorkerStatus = (twsNormal, twsSleep, twsNull);
   TThreadWorkerStatuses = set of TThreadWorkerStatus;
   {*****************************************************************************
@@ -105,17 +115,20 @@ type
     FWorkerName   : string;                      //对象名称
     FParentObj    : TObject;                     //线程调用方
     FParentDesc   : string;                      //调用方描述
-    FDataString   : array[0..cDim] of string;    //字符串
-    FDataInteger  : array[0..cDim] of Integer;   //整型值
-    FDataFloat    : array[0..cDim] of Double;    //浮点数
-    FDataPointer  : array[0..cDim] of Pointer;   //数据指针
+    FDataStr      : array[0..cDim] of string;    //字符串
+    FDataInt      : array[0..cDim] of Integer;   //整型值
+    FDataFlt      : array[0..cDim] of Double;    //浮点数
+    FDataPtr      : array[0..cDim] of Pointer;   //数据指针
+    FDataObj      : array[0..cDim] of TObject;   //对象变量
 
     FCallTimes    : Cardinal;                    //执行次数
     FCallInterval : Cardinal;                    //执行间隔(毫秒)
     FCallMaxTake  : Cardinal;                    //运行耗时(毫秒)
-    FProcedure    : TThreadProcedure;            //待执行函数
-    FProcEvent    : TThreadProcEvent;            //待执行事件
-    FProcRefer    : TThreadProcRefer;            //待执行匿名
+    FFirstInit    : Boolean;                     //执行初始化
+    FOnInit       : TThreadWorkerEvent;          //初始化(首次运行)
+    FOnWork       : TThreadWorkerEvent;          //业务
+    FOnStop       : TThreadWorkerEvent;          //停止
+    FOnFree       : TThreadWorkerEvent;          //释放
 
     FCoInitialize : Boolean;                     //执行COM初始化
     FAutoStatus   : Boolean;                     //自动切换状态
@@ -177,7 +190,6 @@ type
     FCoInitialize: Boolean;
     {*COM初始化*}
   protected
-    procedure DoRun;
     procedure Execute; override;
     {*执行业务*}
   public
@@ -235,6 +247,10 @@ type
     procedure DeleteWorker(const nIdx: Integer);
     procedure ClearWorkers(const nFree: Boolean);
     {*清理资源*}
+    function RunWorkerEvent(const nWorker: PThreadWorker;
+      const nEventName: TThreadWorkerEventName;
+      const nThread: TThread = nil): Boolean; inline;
+    {*执行业务*}
     procedure IncErrorCounter(const nName: string; const nLock: Boolean = True;
       const nMemo: string = '');
     {*错误计数*}
@@ -277,11 +293,18 @@ type
     procedure WorkerWakeup(const nWorkerID: Cardinal); overload;
     procedure WorkerWakeup(const nParent: TObject); overload;
     {*唤醒对象*}
+    procedure WriteLog(const nEvent: string);
+    {*记录日志*}
     property ThreadMin: Word read FRunnerMin write SetRunnerMin;
     property ThreadMax: Word read FRunnerMax write SetRunnerMax;
     property NumRunSleep: Word read FMaxRunSleep write FMaxRunSleep;
     {*属性相关*}
   end;
+
+const
+  cThreadWorkerEventNames: array[TThreadWorkerEventName] of string = ('OnInit',
+    'OnWork', 'OnStop', 'OnFree');
+  //工作对象事件名称描述
 
 var
   gThreadPoolManager: TThreadPoolManager = nil;
@@ -296,7 +319,7 @@ var
   gSimpleLogger: TSimpleLogger = nil;
   //日志记录器
 
-procedure WriteLog(const nEvent: string);
+procedure TThreadPoolManager.WriteLog(const nEvent: string);
 var nWriter: TLogWriter;
 begin
   with nWriter do
@@ -366,6 +389,7 @@ end;
 
 procedure TThreadPoolManager.DeleteWorker(const nIdx: Integer);
 begin
+  RunWorkerEvent(FWorkers[nIdx], twnFree);
   Dispose(PThreadWorker(FWorkers[nIdx]));
   FWorkers.Delete(nIdx);
 
@@ -421,6 +445,43 @@ begin
   StopRunners();
 end;
 
+//Date: 2021-01-26
+//Parm: 工作对象;事件名称;执行线程
+//Desc: 在nThread中执行nWorker的nEvent事件
+function TThreadPoolManager.RunWorkerEvent(const nWorker: PThreadWorker;
+  const nEventName: TThreadWorkerEventName; const nThread: TThread): Boolean;
+var nEvent: TThreadWorkerEvent;
+begin
+  Result := True;
+  try
+    case nEventName of
+     twnInit: nEvent := nWorker.FWorker.FOnInit;
+     twnWork: nEvent := nWorker.FWorker.FOnWork;
+     twnStop: nEvent := nWorker.FWorker.FOnStop;
+     twnFree: nEvent := nWorker.FWorker.FOnFree;
+    end;
+
+    if Assigned(nEvent.WorkProc) then
+      nEvent.WorkProc(@nWorker.FWorker, nThread);
+    //xxxxx
+
+    if Assigned(nEvent.WorkEvent) then
+      nEvent.WorkEvent(@nWorker.FWorker, nThread);
+    //xxxxx
+
+    if Assigned(nEvent.WorkRefer) then
+      nEvent.WorkRefer(@nWorker.FWorker, nThread);
+    //xxxxx
+  except
+    on nErr: Exception do
+    begin
+      WriteLog(Format('[ %s.%s ]%s', [nWorker.FWorker.FWorkerName,
+        cThreadWorkerEventNames[nEventName], nErr.Message]));
+      Result := False;
+    end;
+  end;
+end;
+
 procedure TThreadPoolManager.SetRunnerMax(const nValue: Word);
 begin
   if (nValue <> FRunnerMax) and (nValue <= cThreadMax) then
@@ -462,6 +523,8 @@ begin
     //不限次数
     FCallMaxTake := cThreadMaxRunTake;
     //最大运行耗时
+    FFirstInit := True;
+    //首次运行时初始化
     FCoInitialize := False;
     //默认不执行COM初始化
     FAutoStatus := False;
@@ -739,9 +802,13 @@ begin
           1.若停止操作由主线程发起,则主线程处于锁定状态.
           2.若Worker在线程中执行时,使用Synchronize同步VCL操作.
           3.则以上两步操作会死锁,所以主线程调用时不等待.}
-        if (nWorker.FStartCall = 0) or
-           (TThread.Current.ThreadID = MainThreadID) then Exit;
-        //未被调用或主线程调用
+        if (nWorker.FStartCall = 0) or                     //未被调用
+           (TThread.Current.ThreadID = MainThreadID) then  //主线程调用
+        begin
+          if nWorker.FStartCall = 0 then
+            RunWorkerEvent(nWorker, twnStop);
+          Exit;
+        end;
 
         nExists := True;
         Break;
@@ -1157,7 +1224,7 @@ begin
       //xxxxx
 
       if FOwner.FStatus.FNumRunners >= FOwner.FRunnerMax then
-        WriteLog(Format('Threads Number Max(%d)', [FOwner.FStatus.FNumRunners]));
+        FOwner.WriteLog(Format('Threads Number Max(%d)', [FOwner.FStatus.FNumRunners]));
       //xxxxx
     end;
   end else //del
@@ -1191,7 +1258,7 @@ begin
     end;
 
     if FOwner.FStatus.FNumRunners <=  FOwner.FRunnerMin then
-      WriteLog(Format('Threads Number Min(%d)', [FOwner.FStatus.FNumRunners]));
+      FOwner.WriteLog(Format('Threads Number Min(%d)', [FOwner.FStatus.FNumRunners]));
     //xxxxx
   end;
 end;
@@ -1228,7 +1295,7 @@ begin
       begin
         AdjustRunner(False, 1);
         //每分钟有30秒空闲
-        WriteLog(Format('Threads Idle %d Sec,Dec %d Thread', [nVal, 1]));
+        FOwner.WriteLog(Format('Threads Idle %d Sec,Dec %d Thread', [nVal, 1]));
       end else
       begin
         FWorkIdleInit := TDateTimeHelper.GetTickCount();
@@ -1249,7 +1316,7 @@ begin
       begin
         FOwner.IncErrorCounter(nWorker.FWorker.FWorkerName, False, '长时间挂起');
         //Worker长时间挂起,视为异常
-        WriteLog(Format('[ %s ]Worker Run Timeout %d MS', [nWorker.FWorker.FWorkerName, nVal]));
+        FOwner.WriteLog(Format('[ %s ]Worker Run Timeout %d MS', [nWorker.FWorker.FWorkerName, nVal]));
       end;
     end;
 
@@ -1274,7 +1341,7 @@ begin
         nVal := 1;
       //xxxxx
 
-      WriteLog(Format('Run Delay %d MS,Inc %d Thread(s)', [FRunDelayNow, nVal]));
+      FOwner.WriteLog(Format('Run Delay %d MS,Inc %d Thread(s)', [FRunDelayNow, nVal]));
       //log event
       AdjustRunner(True, nVal);
       //运行延迟过大,增加线程
@@ -1433,7 +1500,8 @@ var nIdx: Integer;
     FActiveWorker.FStartCall := 0;
     FActiveWorker.FLastCall := TDateTimeHelper.GetTickCount;
 
-    Dec(FOwner.FStatus.FNumRunning);
+    if FOwner.FStatus.FNumRunning > 0 then
+      Dec(FOwner.FStatus.FNumRunning);
     Inc(FOwner.FStatus.FNumWorkerRun);
     //counter
 
@@ -1446,6 +1514,10 @@ var nIdx: Integer;
         FOwner.ValidWorkerNumber(False)
       //update valid
     end;
+
+    if FActiveWorker.FWorker.FCallTimes < 1 then
+      FOwner.RunWorkerEvent(FActiveWorker, twnStop, Self);
+    //worker stop
 
     if nInit > 0 then
     begin
@@ -1545,7 +1617,14 @@ begin
       end;
       {$ENDIF}
 
-      DoRun();
+      if FActiveWorker.FWorker.FFirstInit then //执行初始化
+      begin
+        if not FOwner.RunWorkerEvent(FActiveWorker, twnInit, Self) then
+          Continue;
+        FActiveWorker.FWorker.FFirstInit := False;
+      end;
+
+      FOwner.RunWorkerEvent(FActiveWorker, twnWork, Self);
       //运行业务
       nInit := TDateTimeHelper.GetTickCountDiff(FActiveWorker.FStartCall);
       //运行计时
@@ -1573,29 +1652,6 @@ begin
     CoUninitialize();
   //xxxxx
   {$ENDIF}
-end;
-
-procedure TThreadRunner.DoRun;
-begin
-  try
-    if Assigned(FActiveWorker.FWorker.FProcedure) then
-      FActiveWorker.FWorker.FProcedure(@FActiveWorker.FWorker, Self);
-    //xxxxx
-
-    if Assigned(FActiveWorker.FWorker.FProcEvent) then
-      FActiveWorker.FWorker.FProcEvent(@FActiveWorker.FWorker, Self);
-    //xxxxx
-
-    if Assigned(FActiveWorker.FWorker.FProcRefer) then
-      FActiveWorker.FWorker.FProcRefer(@FActiveWorker.FWorker, Self);
-    //xxxxx
-  except
-    on nErr: Exception do
-    begin
-      WriteLog(Format('[ %s ]%s', [FActiveWorker.FWorker.FWorkerName, nErr.Message]));
-      //log to file
-    end;
-  end;
 end;
 
 end.

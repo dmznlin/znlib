@@ -292,7 +292,7 @@ begin
     FParentDesc   := '日志管理器';
     FCallTimes    := 0; //暂停
     FCallInterval := 500;
-    FProcEvent    := DoThreadWrite;
+    FOnWork.WorkEvent := DoThreadWrite;
   end;
 
   gMG.FThreadPool.WorkerAdd(@FWriter);
@@ -479,13 +479,13 @@ begin
     SyncLeave;
   end;
 
-  if nConfig.FDataInteger[0] > 1 then
+  if nConfig.FDataInt[0] > 1 then
   begin
     SyncEnter;
     FStatus.FNumLost := FStatus.FNumLost + FWriterBuffer.Count;
     SyncLeave;
 
-    nConfig.FDataInteger[0] := 0;
+    nConfig.FDataInt[0] := 0;
     ClearList(FWriterBuffer);
     Exit;//连续写入错误,则清空
   end;
@@ -529,12 +529,12 @@ begin
     FStatus.FNumAll := FStatus.FNumAll + FWriterBuffer.Count;
     SyncLeave; //count all
 
-    nConfig.FDataInteger[0] := 0;
+    nConfig.FDataInt[0] := 0;
     ClearList(FWriterBuffer);
   except
-    if nConfig.FDataInteger[0] = 0 then
+    if nConfig.FDataInt[0] = 0 then
       WriteErrorLog(FWriterBuffer);
-    Inc(nConfig.FDataInteger[0]);
+    Inc(nConfig.FDataInt[0]);
 
     SyncEnter;
     Inc(FStatus.FNumError);

@@ -424,7 +424,7 @@ begin
     FParentDesc   := 'MQTT-Client';
     FCallTimes    := 0; //ÔÝÍ£
     FCallInterval := 100;
-    FProcEvent    := DoThreadWork;
+    FOnWork.WorkEvent := DoThreadWork;
   end;
 
   gMG.FThreadPool.WorkerAdd(@nWorker);

@@ -143,7 +143,7 @@ begin
     FParentObj    := Self;
     FParentDesc   := '任务监控服务';
     FCallInterval := 100;
-    FProcEvent    := DoThreadMonitor;
+    FOnWork.WorkRefer := DoThreadMonitor;
   end;
 
   gMG.FThreadPool.WorkerAdd(@FMonitor);
