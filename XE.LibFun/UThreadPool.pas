@@ -40,7 +40,7 @@
       WorkerAdd(@nWorker);
       //3.投递工作对象
     end;
-    ----------------------------------------------------------------------------
+  ------------------------------------------------------------------------------
   *.Worker的休眠状态: 如果工作对象是如TCPClient之类阻塞对象业务,在网络异常时
     会执行时间超长,当多个超时业务同时存在,会拖慢线程池的执行效率.而在网络异常时
     高频率的网络通讯已经没有意义.
@@ -59,6 +59,29 @@
     休眠Worker的业务,且线程数不超过 TThreadPoolManager.NumRunSleep,确保有足够的
     线程执行正常业务.
     注意:若TThreadPoolManager.NumRunSleep = 0,则休眠的Worker不会执行.
+  ------------------------------------------------------------------------------
+  *.TThreadPoolManager属性说明:
+    #.NumRunSleep: 处理休眠Worker的线程个数,默认为1.
+      线程执行休眠Worker的业务很慢,所以线程不宜过多;若想加快对休眠Worker的
+      检测速度,可适当增多.
+    #.DelayAllowed: 允许的执行延迟,默认1000ms.
+      线程池采用轮询机制,若Worker.FCallInterval=100,轮询到该Worker时不会
+      正好100ms,会有稍微的延迟.允许的延迟越小,需要越多的线程.
+    #.DelayIncPeer: 执行延迟时,单次增加的线程数,默认3.
+      当延迟超过DelayAllowed时,线程池会增加线程,最小1个,最大DelayIncPeer.
+
+  *.TThreadWorkerConfig属性说明:
+    #.FCallTimes    : 执行次数,每执行一次减1,为0时停止.
+    #.FCallInterval : 执行间隔,每隔多少毫秒执行一次.
+    #.FCallMaxTake  : 执行最大耗时,用于检测Worker是否休眠.
+    #.FFirstInit    : 是否执行 FOnInit 初始化
+    #.FOnInit       : 当 FFirstInit=True 时执行
+    #.FOnWork       : 在线程中运行的业务
+    #.FOnStop       : 当 FCallTimes=0 时执行
+    #.FOnFree       : 当Worker释放时执行
+    #.FCoInitialize : 是否执行COM初始化
+    #.FAutoStatus   : 是否自动切换工作状态,执行FOnWork耗时>=FCallMaxTake休眠
+    #.FWorkStatus   : 当前工作状态
 *******************************************************************************}
 unit UThreadPool;
 
@@ -144,6 +167,7 @@ type
     FStartCall    : Cardinal;                    //开始调用
     FStartDelete  : Cardinal;                    //开始删除
     FWakeupCall   : Cardinal;                    //唤醒计数
+    FCountThisDelay: Boolean;                    //计算延迟
   end;
 
   TThreadNV = record
@@ -242,6 +266,9 @@ type
     FMaxRunSleep: Word;
     FWorkerIndexSleep: Integer;
     {*休眠对象*}
+    FDelayAllowed: Word;
+    FDelayIncPeer: Word;
+    {*运行延迟*}
   protected
     procedure StopRunners;
     procedure DeleteWorker(const nIdx: Integer);
@@ -298,6 +325,8 @@ type
     property ThreadMin: Word read FRunnerMin write SetRunnerMin;
     property ThreadMax: Word read FRunnerMax write SetRunnerMax;
     property NumRunSleep: Word read FMaxRunSleep write FMaxRunSleep;
+    property DelayAllowed: Word read FDelayAllowed write FDelayAllowed;
+    property DelayIncPeer: Word read FDelayIncPeer write FDelayIncPeer;
     {*属性相关*}
   end;
 
@@ -337,9 +366,12 @@ begin
   FRunnerMin := cThreadMin;
   FRunnerMax := cThreadMax;
 
-  FWorkerIndex := 0;
+  FWorkerIndex      := 0;
   FWorkerIndexSleep := 0;
-  FMaxRunSleep := 1;
+  FMaxRunSleep      := 1;
+
+  FDelayIncPeer     := 3;
+  FDelayAllowed     := 1000;
 
   FillChar(FStatus, SizeOf(FStatus), #0);
   FStatus.FWorkIdleInit := TDateTimeHelper.GetTickCount();
@@ -565,6 +597,7 @@ begin
     nPWorker.FWorker := nWorker^;
     nPWorker.FWorkerID := gMG.FSerialIDManager.GetID;
 
+    nPWorker.FCountThisDelay := True;
     nPWorker.FLastCall := TDateTimeHelper.GetTickCount - nWorker.FCallInterval;
     //确保立刻执行,并计算出FStatus.FRunDelayNow,延迟过大时增加线程
 
@@ -1329,7 +1362,8 @@ begin
 
   with FOwner.FStatus do
   begin
-    if (FRunDelayNow >= 1000) and (FNumRunners < FNumWorkerValid) and (
+    if (FRunDelayNow >= FOwner.FDelayAllowed) and  //已执行延迟
+       (FNumRunners < FNumWorkerValid) and (       //未达到每个Worker一线程
        (FRunDelayNow <> FLastRunDelayVal) or (TDateTimeHelper.
         GetTickCountDiff(FLastRunDelayInc) >= FRunDelayNow)) then
     begin
@@ -1337,14 +1371,27 @@ begin
       FLastRunDelayInc := TDateTimeHelper.GetTickCount();
       nVal := Trunc(FRunDelayNow / 2000);
 
-      if nVal < 1 then 
-        nVal := 1;
-      //xxxxx
+      if nVal < 1 then nVal := 1
+      else
+      if nVal > FOwner.FDelayIncPeer then
+        nVal := FOwner.FDelayIncPeer;
+      //限制增量
 
       FOwner.WriteLog(Format('Run Delay %d MS,Inc %d Thread(s)', [FRunDelayNow, nVal]));
       //log event
       AdjustRunner(True, nVal);
       //运行延迟过大,增加线程
+
+      for nIdx := FOwner.FWorkers.Count-1 downto 0 do
+      begin
+        nWorker := FOwner.FWorkers[nIdx];
+        nWorker.FCountThisDelay := False;
+        {***********************************************************************
+         当某一个Worker执行超时,线程会被阻塞,引起其它Worker执行延后.
+         增加新的Runner线程后,所有Worker的延迟计数都需要清零,这样可以准确计算
+         在当前Runner个数下的延迟.
+        ***********************************************************************}
+      end;
     end;
   end;
 end;
@@ -1429,19 +1476,26 @@ var nIdx: Integer;
            (nWorker.FWakeupCall < 1) then Continue;
         //未到执行时间或未唤醒
 
-        if (nVal > nWorker.FWorker.FCallInterval) and     //调用超时
-           (nWorker.FWorker.FWorkStatus <> twsSleep) then //休眠时延迟无意义
+        if nWorker.FCountThisDelay then //计算本次延迟
         begin
-          nVal := nVal - nWorker.FWorker.FCallInterval;
-          //两次调用间隔超过需要的间隔
+          if (nVal > nWorker.FWorker.FCallInterval) and     //调用超时
+             (nWorker.FWorker.FWorkStatus <> twsSleep) then //休眠时延迟无意义
+          begin
+            nVal := nVal - nWorker.FWorker.FCallInterval;
+            //两次调用间隔超过需要的间隔
 
-          if nVal > FOwner.FStatus.FRunDelayNow then
-            FOwner.FStatus.FRunDelayNow := nVal;
-          //当前最大延迟
+            if nVal > FOwner.FStatus.FRunDelayNow then
+              FOwner.FStatus.FRunDelayNow := nVal;
+            //当前最大延迟
 
-          if nVal > FOwner.FStatus.FRunDelayMax then
-            FOwner.FStatus.FRunDelayMax := nVal;
-          //历史最大延迟
+            if nVal > FOwner.FStatus.FRunDelayMax then
+              FOwner.FStatus.FRunDelayMax := nVal;
+            //历史最大延迟
+          end;
+        end else
+        begin
+          nWorker.FCountThisDelay := True;
+          //默认计算延迟
         end;
       end;
 
