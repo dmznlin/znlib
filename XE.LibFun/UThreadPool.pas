@@ -19,7 +19,7 @@
         FCallInterval := 100;
 
         //4.工作对象支持3种线程函数,以FProc开头,运行在线程中
-        FProcRefer := procedure (const nConfig: PThreadWorkerConfig;
+        FOnWork.WorkRefer := procedure (const nConfig: PThreadWorkerConfig;
          const nThread: TThread)
         begin
           TWaitTimer.StartHighResolutionTimer;
@@ -1443,7 +1443,7 @@ var nIdx: Integer;
 
     while nWorkerIndex < FOwner.FWorkers.Count do
     begin
-      if nLoop and (FOwner.FWorkerIndex = nIdx) then Break;
+      if nLoop and (nWorkerIndex = nIdx) then Break;
       //新一轮到开始位置,扫描结束
       nWorker := FOwner.FWorkers[nWorkerIndex];
       Inc(nWorkerIndex);
