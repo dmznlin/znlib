@@ -1,0 +1,60 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{1D98C37C-B287-4F2D-B87E-308EC8B51151}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="DBPool\DBPool.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="HighResolutionTimer\HighTimer.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="ThreadPool\ThreadPool.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="DBPool">
+        <MSBuild Projects="DBPool\DBPool.dproj"/>
+    </Target>
+    <Target Name="DBPool:Clean">
+        <MSBuild Projects="DBPool\DBPool.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="DBPool:Make">
+        <MSBuild Projects="DBPool\DBPool.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="HighTimer">
+        <MSBuild Projects="HighResolutionTimer\HighTimer.dproj"/>
+    </Target>
+    <Target Name="HighTimer:Clean">
+        <MSBuild Projects="HighResolutionTimer\HighTimer.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="HighTimer:Make">
+        <MSBuild Projects="HighResolutionTimer\HighTimer.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="ThreadPool">
+        <MSBuild Projects="ThreadPool\ThreadPool.dproj"/>
+    </Target>
+    <Target Name="ThreadPool:Clean">
+        <MSBuild Projects="ThreadPool\ThreadPool.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="ThreadPool:Make">
+        <MSBuild Projects="ThreadPool\ThreadPool.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="DBPool;HighTimer;ThreadPool"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="DBPool:Clean;HighTimer:Clean;ThreadPool:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="DBPool:Make;HighTimer:Make;ThreadPool:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>
