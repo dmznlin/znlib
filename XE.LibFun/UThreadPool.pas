@@ -168,6 +168,7 @@ type
     FStartDelete  : Cardinal;                    //开始删除
     FWakeupCall   : Cardinal;                    //唤醒计数
     FCountThisDelay: Boolean;                    //计算延迟
+    FForMinInterval: Boolean;                    //最小间隔
   end;
 
   TThreadNV = record
@@ -598,6 +599,7 @@ begin
     nPWorker.FWorkerID := gMG.FSerialIDManager.GetID;
 
     nPWorker.FCountThisDelay := True;
+    nPWorker.FForMinInterval := True;
     nPWorker.FLastCall := TDateTimeHelper.GetTickCount - nWorker.FCallInterval;
     //确保立刻执行,并计算出FStatus.FRunDelayNow,延迟过大时增加线程
 
@@ -1428,7 +1430,8 @@ procedure TThreadRunner.Execute;
 var nIdx: Integer;
     nLoop: Boolean;
     nInit,nVal: Cardinal;
-    nWorker: PThreadWorker;
+    nWorker,nNearest: PThreadWorker;
+    nNewWS: TThreadWorkerStatus;
     nWorkStatus: TThreadWorkerStatuses;
 
   //Parm: 索引变量;Worker状态
@@ -1472,9 +1475,26 @@ var nIdx: Integer;
         end;
 
         nVal := TDateTimeHelper.GetTickCountDiff(nWorker.FLastCall);
-        if (nVal < nWorker.FWorker.FCallInterval) and
-           (nWorker.FWakeupCall < 1) then Continue;
-        //未到执行时间或未唤醒
+        if nVal < nWorker.FWorker.FCallInterval then //未到执行时间
+        begin
+          if nWorker.FForMinInterval then //参与最小间隔计算
+          begin
+            if not Assigned(nNearest) then
+              nNearest := nWorker;
+            //xxxxx
+
+            if (nWorker <> nNearest) and (
+               (nWorker.FLastCall + nWorker.FWorker.FCallInterval) <
+               (nNearest.FLastCall + nNearest.FWorker.FCallInterval)) then
+            begin
+              nNearest := nWorker;
+              //最先需要执行的Worker
+            end;
+          end;
+
+          if nWorker.FWakeupCall < 1 then Continue;
+           //未唤醒
+        end;
 
         if nWorker.FCountThisDelay then //计算本次延迟
         begin
@@ -1503,7 +1523,43 @@ var nIdx: Integer;
       FActiveWorker := nWorker;
       Break;
     end;
+  end;
 
+  //----------------------------------------------------------------------------
+  //Desc: 锁定工作对象
+  procedure LockActiveWorker();
+  begin
+    if (FOwner.FStatus.FNumRunSleep > 0) or  //已有线程处理休眠业务
+       (FOwner.FStatus.FNumRunners < 2) then //当前线程池只有一个线程
+    begin
+      ScanActiveWorker(FOwner.FWorkerIndex, [twsNormal]);
+      //①.优先扫描正常工作对象
+
+      if not Assigned(FActiveWorker) then
+        nWorkStatus := [twsNull];
+      //未扫描到工作对象
+    end;
+
+    if (FOwner.FStatus.FNumRunSleep < FOwner.FMaxRunSleep) and //未达上限
+       (FOwner.FStatus.FNumWorkerSleep > 0) and                //有休眠对象
+       (not Assigned(FActiveWorker)) then                      //①未成功
+    begin
+      ScanActiveWorker(FOwner.FWorkerIndexSleep, [twsSleep]);
+      //②.处理休眠Worker的线程,优先扫描休眠Worker
+
+      if Assigned(FActiveWorker) then
+      begin
+        Inc(FOwner.FStatus.FNumRunSleep);
+        //增加计数,限制处理休眠Worker的线程个数
+        nWorkStatus := [twsSleep];
+      end;
+    end;
+
+    if nWorkStatus = [] then //①未执行,②未成功
+      ScanActiveWorker(FOwner.FWorkerIndex, [twsNormal]);
+    //扫描正常工作对象
+
+    //----------------------------------------------------------------------
     if Assigned(FActiveWorker) then
     begin
       FWorkInterval := 1;
@@ -1521,7 +1577,7 @@ var nIdx: Integer;
         //开始空闲计时
       end else
 
-      if FOwner.FStatus.FNumWorkerValid > 0 then      
+      if FOwner.FStatus.FNumWorkerValid > 0 then
       begin
         nVal := TDateTimeHelper.GetTickCountDiff(FWorkIdleStart);
         if nVal > FOwner.FStatus.FMaxWorkIdleLong then
@@ -1533,9 +1589,25 @@ var nIdx: Integer;
         FWorkIdleLast := nVal;
       end;
 
+      if Assigned(nNearest) then
+      begin
+        nVal := TDateTimeHelper.GetTickCountDiff(nNearest.FLastCall);
+        if nVal < nNearest.FWorker.FCallInterval then //未到执行时间
+        begin
+          nVal := nNearest.FWorker.FCallInterval - nVal; //距离下次执行间隔
+          if nVal < FWorkInterval then
+          begin
+            FWorkInterval := nVal;
+            //启用最小间隔
+            nNearest.FForMinInterval := False;
+          end;
+        end;
+      end;
+
       if FWorkInterval < cThreadMaxWorkInterval then
       begin
-        Inc(FWorkInterval);
+        if (not Assigned(nNearest)) or nNearest.FForMinInterval then
+          Inc(FWorkInterval);
         //空闲时增加等待
 
         if (FWorkInterval > FOwner.FStatus.FMaxWorkInterval) and
@@ -1546,13 +1618,30 @@ var nIdx: Integer;
     end;
   end;
 
+  //----------------------------------------------------------------------------
   //Desc: 运行后清理
   procedure DoAfterRun();
-  var nNewWS: TThreadWorkerStatus;
   begin
     FActiveWorker.FRunner := -1;
     FActiveWorker.FStartCall := 0;
     FActiveWorker.FLastCall := TDateTimeHelper.GetTickCount;
+
+    FActiveWorker.FForMinInterval := True;
+    {***************************************************************************
+     1.若ScanActiveWorker未获取到FActiveWorker,为避免线程空循环,需执行
+       Sleep(TM)休眠CPU,TM最小为 1ms
+     2.若ScanActiveWorker未获取到FActiveWorker,TM会增加1ms,最大不超过
+       cThreadMaxWorkInterval
+     3.若TM = cThreadMaxWorkInterval,当Worker需在1ms后执行,则由于Sleep不能被
+       中止,导致Worker延迟cThreadMaxWorkInterval执行
+     4.为避免延迟,ScanActiveWorker会计算出最近需要执行的Worker(变量nNearest),当
+       FActiveWorker = nil时,设TM = nNearest.FCallInterval - (Now - FLastCall),
+       这样当Sleep结束时,nNearest刚好计时结束.
+     5.若多个线程都将 TM 设为最近的Worker(nNearest),则一个线程执行nNearest完毕
+       后,其它线程会处于空循环.
+     6.解决方法是: 设一个线程的TM=nNearest,同时设nNearest.FForMinInterval=False,
+       这样其它线程会使用 余下最近(第二个需执行) 的Worker设置TM.
+    ***************************************************************************}
 
     if FOwner.FStatus.FNumRunning > 0 then
       Dec(FOwner.FStatus.FNumRunning);
@@ -1613,42 +1702,14 @@ begin
   while not Terminated do
   try
     nInit := 0;
-    nWorkStatus := [];
-    //init default
+    nNearest := nil;
+    nWorkStatus := []; //init default
 
     FActiveWorker := nil;
     try
       FOwner.SyncEnter;
       try
-        if (FOwner.FStatus.FNumRunSleep > 0) or  //已有线程处理休眠业务
-           (FOwner.FStatus.FNumRunners < 2) then //当前线程池只有一个线程
-        begin
-          ScanActiveWorker(FOwner.FWorkerIndex, [twsNormal]);
-          //①.优先扫描正常工作对象
-
-          if not Assigned(FActiveWorker) then
-            nWorkStatus := [twsNull];
-          //未扫描到工作对象
-        end;
-
-        if (FOwner.FStatus.FNumRunSleep < FOwner.FMaxRunSleep) and //未达上限
-           (FOwner.FStatus.FNumWorkerSleep > 0) and                //有休眠对象
-           (not Assigned(FActiveWorker)) then                      //①未成功
-        begin
-          ScanActiveWorker(FOwner.FWorkerIndexSleep, [twsSleep]);
-          //②.处理休眠Worker的线程,优先扫描休眠Worker
-
-          if Assigned(FActiveWorker) then
-          begin
-            Inc(FOwner.FStatus.FNumRunSleep);
-            //增加计数,限制处理休眠Worker的线程个数
-            nWorkStatus := [twsSleep];
-          end;
-        end;
-
-        if nWorkStatus = [] then //①未执行,②未成功
-          ScanActiveWorker(FOwner.FWorkerIndex, [twsNormal]);
-        //扫描正常工作对象
+        LockActiveWorker();
       finally
         FOwner.SyncLeave;
       end;
