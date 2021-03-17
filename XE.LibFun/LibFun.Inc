@@ -75,6 +75,15 @@
   //启用日志管理器
   {$DEFINE EnableDBManager}
   //启用数据库管理器
+
+  {$IFDEF WinADO}
+	  {$DEFINE EnableADODriver}
+	  //启用ADO驱动
+  {$ENDIF}
+  {$IFDEF FireDAC}
+	  {$DEFINE EnableFireDriver}
+	  //启用FireDAC驱动
+  {$ENDIF}
 {$ENDIF}
 
 {$IFDEF MenuManager}

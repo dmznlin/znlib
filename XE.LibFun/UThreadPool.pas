@@ -80,6 +80,7 @@
     #.FOnStop       : 当 FCallTimes=0 时执行
     #.FOnFree       : 当Worker释放时执行
     #.FCoInitialize : 是否执行COM初始化
+    #.FAutoDelete   : 当 FCallTimes=0 时执行删除
     #.FAutoStatus   : 是否自动切换工作状态,执行FOnWork耗时>=FCallMaxTake休眠
     #.FWorkStatus   : 当前工作状态
 *******************************************************************************}
@@ -154,6 +155,7 @@ type
     FOnFree       : TThreadWorkerEvent;          //释放
 
     FCoInitialize : Boolean;                     //执行COM初始化
+    FAutoDelete   : Boolean;                     //执行完毕后删除
     FAutoStatus   : Boolean;                     //自动切换状态
     FWorkStatus   : TThreadWorkerStatus;         //当前工作状态
   end;
@@ -288,10 +290,8 @@ type
     function MaxWorkInterval(const nIleTime: PCardinal = nil;
       const nLock: Boolean = False): Cardinal;
     {*扫描间隔*}
-    function ValidWorkerNumber(const nLock: Boolean = False): Cardinal;
-    {*有效对象*}
-    function SleepWorkerNumber(const nLock: Boolean = False): Cardinal;
-    {*休眠对象*}
+    procedure UpdateWorkerNumber(const nLock: Boolean = False);
+    {*更新数量*}
   public
     constructor Create;
     destructor Destroy; override;
@@ -560,6 +560,8 @@ begin
     //首次运行时初始化
     FCoInitialize := False;
     //默认不执行COM初始化
+    FAutoDelete := False;
+    //默认不自动删除
     FAutoStatus := False;
     //不自动切换工作状态
     FWorkStatus := twsNormal;
@@ -603,14 +605,10 @@ begin
     nPWorker.FLastCall := TDateTimeHelper.GetTickCount - nWorker.FCallInterval;
     //确保立刻执行,并计算出FStatus.FRunDelayNow,延迟过大时增加线程
 
-    if nWorker.FWorkStatus = twsSleep then
-      SleepWorkerNumber(False);
-    //xxxxx
-
     Inc(FStatus.FNumWorkers);
     if FStatus.FNumWorkers > FStatus.FNumWorkerMax then
       FStatus.FNumWorkerMax := FStatus.FNumWorkers;
-    ValidWorkerNumber(False);
+    UpdateWorkerNumber(False);
   finally
     SyncLeave;
   end;
@@ -649,10 +647,7 @@ begin
 
   for nIdx := Low(nWorkers) to High(nWorkers) do
     WorkerDelete(nWorkers[nIdx], False);
-  ValidWorkerNumber(True);
-
-  SleepWorkerNumber(True);
-  //recount sleep worker
+  UpdateWorkerNumber(True);
 end;
 
 //Date: 2019-01-10
@@ -680,10 +675,8 @@ begin
           //删除标记
 
           if nUpdateValid then
-          begin
-            ValidWorkerNumber(False);
-            SleepWorkerNumber(False);
-          end;
+            UpdateWorkerNumber(False);
+          //xxxxx
         end;
 
         {删除时需要等待调用结束:
@@ -732,7 +725,7 @@ begin
        end;
     end;
 
-    ValidWorkerNumber(False);
+    UpdateWorkerNumber(False);
   finally
     SyncLeave;
   end;
@@ -762,7 +755,7 @@ begin
        end;
     end;
 
-    ValidWorkerNumber(False);
+    UpdateWorkerNumber(False);
   finally
     SyncLeave;
   end;
@@ -789,6 +782,9 @@ begin
       begin
         nWorker.FWorker.FCallTimes := 0;
         //停止标记
+        if nWorker.FWorker.FAutoDelete then
+          nWorker.FStartDelete := TDateTimeHelper.GetTickCount;
+        //删除标记
 
         nLen := Length(nWorkers);
         SetLength(nWorkers, nLen + 1);
@@ -801,7 +797,7 @@ begin
 
   for nIdx := Low(nWorkers) to High(nWorkers) do
     WorkerStop(nWorkers[nIdx], False);
-  ValidWorkerNumber(True);
+  UpdateWorkerNumber(True);
 end;
 
 //Date: 2019-01-10
@@ -827,9 +823,12 @@ begin
         begin
           nWorker.FWorker.FCallTimes := 0;
           //停止标记
+          if nWorker.FWorker.FAutoDelete then
+            nWorker.FStartDelete := TDateTimeHelper.GetTickCount;
+          //删除标记
 
           if nUpdateValid then
-            ValidWorkerNumber(False);
+            UpdateWorkerNumber(False);
           //xxxxx
         end;
 
@@ -929,46 +928,33 @@ begin
 end;
 
 //Date: 2019-01-11
-//Desc: 获取有效的工作对象个数
-function TThreadPoolManager.ValidWorkerNumber(const nLock: Boolean): Cardinal;
+//Desc: 计算有效的对象个数
+procedure TThreadPoolManager.UpdateWorkerNumber(const nLock: Boolean);
 var nIdx: Integer;
     nWorker: PThreadWorker;
+    nValid,nSleep: Cardinal;
 begin
   if nLock then SyncEnter;
   try
-    Result := 0;
+    nValid := 0;
+    nSleep := 0; //init
+
     for nIdx := FWorkers.Count-1 downto 0 do
     begin
       nWorker := FWorkers[nIdx];
-      if (nWorker.FStartDelete < 1) and (nWorker.FWorker.FCallTimes > 0) then
-        Inc(Result);
+      if nWorker.FStartDelete > 0 then Continue; //deleted
+
+      if nWorker.FWorker.FCallTimes > 0 then
+        Inc(nValid);
       //valid worker
+
+      if nWorker.FWorker.FWorkStatus = twsSleep then
+        Inc(nSleep);
+      //sleep worker
     end;
 
-    FStatus.FNumWorkerValid := Result;
-  finally
-    if nLock then SyncLeave;
-  end;
-end;
-
-//Date: 2021-01-21
-//Desc: 获取已休眠的工作对象个数
-function TThreadPoolManager.SleepWorkerNumber(const nLock: Boolean): Cardinal;
-var nIdx: Integer;
-    nWorker: PThreadWorker;
-begin
-  if nLock then SyncEnter;
-  try
-    Result := 0;
-    for nIdx := FWorkers.Count - 1 downto 0 do
-    begin
-      nWorker := FWorkers[nIdx];
-      if (nWorker.FStartDelete < 1) and (nWorker.FWorker.FWorkStatus = twsSleep) then
-        Inc(Result);
-      //no delete, sleep worker
-    end;
-
-    FStatus.FNumWorkerSleep := Result;
+    FStatus.FNumWorkerValid := nValid;
+    FStatus.FNumWorkerSleep := nSleep;
   finally
     if nLock then SyncLeave;
   end;
@@ -1653,9 +1639,16 @@ var nIdx: Integer;
     begin
       Dec(FActiveWorker.FWorker.FCallTimes);
       //call times
+
       if FActiveWorker.FWorker.FCallTimes < 1 then
-        FOwner.ValidWorkerNumber(False)
-      //update valid
+      begin
+        if FActiveWorker.FWorker.FAutoDelete then
+          FActiveWorker.FStartDelete := TDateTimeHelper.GetTickCount;
+        //delete tag
+
+        FOwner.UpdateWorkerNumber(False)
+        //update valid
+      end;
     end;
 
     if FActiveWorker.FWorker.FCallTimes < 1 then
@@ -1674,7 +1667,7 @@ var nIdx: Integer;
         if not (nNewWS in nWorkStatus) then
         begin
           FWorkStatus := nNewWS;
-          FOwner.SleepWorkerNumber(False);
+          FOwner.UpdateWorkerNumber(False);
           //status changed,recount
         end;
       end;

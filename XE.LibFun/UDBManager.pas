@@ -18,13 +18,13 @@
         //field
         Copy('Sys_Dict2').
         //table
-        AddI('idx_prog', 'CREATE INDEX idx_prog ON $TB.*(D_ID ASC)').
+        AddI('idx_prog', 'CREATE INDEX $IDX ON $TBS(D_ID ASC)').
         //index
-        AddT('tr_bi', 'CREATE TRIGGER tr_bi $TB.* AFTER INSERT AS BEGIN END').
+        AddT('tr_bi', 'CREATE TRIGGER $TRG $TBS AFTER INSERT AS BEGIN END').
         //trigger
         AddP('pro_do', '....').
         //procedure
-        AddR('init', 'INSERT INTO $TB.* Values(...)')
+        AddR('init', 'INSERT INTO $TBS Values(...)')
         //初始化数据,建表时运行一次
       end;
     2.将描述函数加入管理器:
@@ -38,16 +38,18 @@
 *******************************************************************************}
 unit UDBManager;
 
+{$I LibFun.Inc}
 interface
 
 uses
-  System.Classes, System.SysUtils, System.Generics.Collections, Data.Win.ADODB,
-  Data.DB, UBaseObject;
+  System.Classes, System.SysUtils, System.Generics.Collections, Data.DB,
+  UBaseObject;
 
 const
   //任意表标识
-  sDBTables  = '$TB.*';
+  sDBTables  = '$TBS';
   sDBIndex   = '$IDX';
+  sDBTrigger = '$TRG';
 
   //小数字段
   sField_Access_Decimal          = 'Float';
@@ -79,9 +81,6 @@ type
     dtPostgre);
   //all support database type
 
-  TDBConnType = (ctMain, ctWork);
-  //connection: main system; work database
-
   PDBConnConfig = ^TDBConnConfig;
   TDBConnConfig = record
     FID    : string;                            //连接标识
@@ -90,12 +89,19 @@ type
     FFitDB : TDBType;                           //适配数据库
   end;
 
+  TDBConnTransStatus = (tsNull, tsBegin, tsCommit, tsRollback);
+  //事务状态: 空,开启,提交,回滚
+  TDBConnTransStatuses = set of TDBConnTransStatus;
+
   PDBConnData = ^TDBConnData;
   TDBConnData = record
-    FConnID    : string;                        //连接标识
-    FConnected : Boolean;                       //连接状态
-    FConneLast : Int64;                         //上次活动
-    FInThread  : Cardinal;                      //所在线程
+    FConnID         : string;                   //连接标识
+    FConnected      : Boolean;                  //连接状态
+    FConneLast      : Int64;                    //上次活动
+    FInThread       : Cardinal;                 //所在线程
+
+    FTransBeginNum  : Word;                     //事务开启次数
+    FTransStatus    : TDBConnTransStatuses;     //事务开启状态
   end;
 
   PDBData = ^TDBData;
@@ -146,10 +152,62 @@ type
     {*复制表结构*}
   end;
 
+  TDBDriverInfo = record
+    DrvName     : string;                       //驱动名称
+    DrvAuthor   : string;                       //驱动作者
+    DrvVersion  : string;                       //驱动版本
+  end;
+
+  TDBDriver = class(TObject)
+  protected
+    FOwner: TDBManager;
+    {*拥有者*}
+  protected
+    function LockDBConn(nDB: string = ''): TObject; virtual;
+    procedure ReleaseDBConn(const nConn: TObject); virtual;
+    function CheckDBConn(const nDB: string = ''): string; virtual;
+    {*数据库链路*}
+    function LockDBQuery(const nDB: string = ''): TDataSet; virtual;
+    procedure ReleaseDBQuery(const nQuery: TDataSet;
+      const nResetConn: Boolean = False); virtual;
+    {*数据库对象*}
+    function DBQuery(const nSQL: string;
+      const nQuery: TObject;
+      const nDB: string = '';
+      const nLockBookmark: Boolean = False): TDataSet; virtual;
+    function DBExecute(const nSQL: string;
+      const nCmd: TObject = nil;
+      const nDB: string = ''): Integer; overload; virtual;
+    function DBExecute(const nList: TStrings;
+      const nCmd: TObject = nil;
+      const nDB: string = ''): Integer; overload; virtual;
+    {*数据库操作*}
+    procedure BeginTrans(const nConn: TObject); virtual;
+    procedure CommitTrans(const nConn: TObject); virtual;
+    procedure RollbackTrans(const nConn: TObject); virtual;
+    {*事务操作*}
+  public
+    class function DriverInfo: TDBDriverInfo; virtual;
+    {*驱动信息*}
+    constructor Create(AOwner: TDBManager); virtual;
+    destructor Destroy; override;
+    {*创建释放*}
+  end;
+
+  TDBDriverClass = class of TDBDriver;
+  //driver class define
+
   TDBTableBuilder = procedure (const nList: TList);
   //for external-system fill database.table info
 
   TDBManager = class(TManagerBase)
+  public
+    class var Drivers: array of TDBDriverClass;
+    {*驱动列表*}
+    class procedure RegistDriver(const nDriver: TDBDriverClass);
+    {*注册驱动*}
+    class procedure WriteLog(const nEvent: string; const nMemo: TStrings = nil);
+    {*记录日志*}
   private
     FDefaultFit: TDBType;
     {*默认适配类型*}
@@ -157,13 +215,13 @@ type
     {*默认数据库标识*}
     FAutoReconnect: Boolean;
     {*数据库自动重连*}
+    FActiveDriver: TDBDriver;
+    {*当前驱动*}
     FTableBuilders: array of TDBTableBuilder;
     {*数据表配置信息*}
     FDBConfig: TDictionary<string, TDBConnConfig>;
     {*数据库配置字典*}
   protected
-    procedure RegObjectPoolTypes;
-    {*注册对象*}
     function FindTable(const nTable: string; const nList: TList): PDBTable;
     {*检索数据*}
     function InitAccess(const nDB: string; const nTables: TList;
@@ -177,6 +235,7 @@ type
     constructor Create;
     destructor Destroy; override;
     {*创建释放*}
+    procedure RunAfterRegistAllManager; override;
     class procedure RegistMe(const nReg: Boolean); override;
     {*注册对象*}
     function InitDB(const nDB: string; const nMemo: TStrings = nil): Boolean;
@@ -191,26 +250,33 @@ type
     {*获取表信息*}
     function GetDB(const nID: string; var nConfig: TDBConnConfig): Boolean;
     {*获取数据库*}
-    function LockDBConn(nDB: string = ''): TADOConnection;
-    procedure ReleaseDBConn(const nConn: TADOConnection);
-    function CheckDBConn(nDB: string = ''): string;
+    procedure ActiveDriver(const nDriverName: string);
+    {*激活特定驱动*}
+    function LockDBConn(const nDB: string = ''): TObject;
+    procedure ReleaseDBConn(const nConn: TObject);
+    function CheckDBConn(const nDB: string = ''): string;
     {*数据库链路*}
-    function LockDBQuery(const nDB: string = ''): TADOQuery;
-    procedure ReleaseDBQuery(const nQuery: TADOQuery;
+    function LockDBQuery(const nDB: string = ''): TDataSet;
+    procedure ReleaseDBQuery(const nQuery: TDataSet;
       const nResetConn: Boolean = False);
     {*数据库对象*}
-    function DBQuery(const nSQL: string; const nQuery: TADOQuery;
+    function DBQuery(const nSQL: string; const nQuery: TObject;
       const nDB: string = ''; const nLockBookmark: Boolean = False): TDataSet;
-    function DBExecute(const nSQL: string; const nCmd: TADOQuery = nil;
+    function DBExecute(const nSQL: string; const nCmd: TObject = nil;
       const nDB: string = ''): Integer; overload;
-    function DBExecute(const nList: TStrings; const nCmd: TADOQuery = nil;
+    function DBExecute(const nList: TStrings; const nCmd: TObject = nil;
       const nDB: string = ''): Integer; overload;
     {*数据库操作*}
+    procedure BeginTrans(const nConn: TObject);
+    procedure CommitTrans(const nConn: TObject);
+    procedure RollbackTrans(const nConn: TObject);
+    {*事务操作*}
     procedure GetStatus(const nList: TStrings;
       const nFriendly: Boolean = True); override;
     {*获取状态*}
     property DefaultDB: string read FDefaultDB write FDefaultDB;
     property DefaultFit: TDBType read FDefaultFit write FDefaultFit;
+    property Driver: TDBDriver read FActiveDriver;
     property AutoReconnect: Boolean read FAutoReconnect write FAutoReconnect;
     {*属性相关*}
   end;
@@ -222,13 +288,132 @@ var
 implementation
 
 uses
+  {$IFDEF EnableADODriver}UDBDriverADO,{$ENDIF}
   ULibFun, UManagerGroup;
 
-procedure WriteLog(const nEvent: string; const nMemo: TStrings = nil);
+class procedure TDBManager.WriteLog(const nEvent: string; const nMemo: TStrings);
 begin
   if Assigned(nMemo) then
     nMemo.Add(TDateTimeHelper.Time2Str(Now(), True, True) + #9 + nEvent);
-  gMG.FLogManager.AddLog(TDBManager, '数据库链路', nEvent);
+  gMG.FLogManager.AddLog(TDBManager, '数据管理器', nEvent);
+end;
+
+//------------------------------------------------------------------------------
+constructor TDBDriver.Create(AOwner: TDBManager);
+begin
+  FOwner := AOwner;
+end;
+
+destructor TDBDriver.Destroy;
+begin
+
+  inherited;
+end;
+
+//Desc: 驱动信息
+class function TDBDriver.DriverInfo: TDBDriverInfo;
+begin
+  with Result do
+  begin
+    DrvName    := 'DBDriver.Name';
+    DrvAuthor  := 'dmzn@163.com';
+    DrvVersion := '0.0.1';
+  end;
+end;
+
+//Date: 2020-04-17
+//Parm: 数据库标识
+//Desc: 锁定nDB数据库的连接对象
+function TDBDriver.LockDBConn(nDB: string): TObject;
+begin
+  Result := nil;
+end;
+
+//Date: 2020-04-17
+//Parm: 连接对象
+//Desc: 释放nConn到连接池
+procedure TDBDriver.ReleaseDBConn(const nConn: TObject);
+begin
+  if Assigned(nConn) then
+  begin
+    gMG.FObjectPool.Release(nConn);
+  end;
+end;
+
+//Date: 2020-04-17
+//Parm: 数据库标识
+//Desc: 检测nConn是否正常
+function TDBDriver.CheckDBConn(const nDB: string): string;
+begin
+  Result := '';
+end;
+
+//Date: 2020-04-17
+//Parm: 数据库标识
+//Desc: 锁定nDB数据库的查询对象
+function TDBDriver.LockDBQuery(const nDB: string): TDataSet;
+begin
+  Result := nil;
+end;
+
+//Date: 2020-04-17
+//Parm: 查询对象;重置连接状态
+//Desc: 释放nQuery到连接池
+procedure TDBDriver.ReleaseDBQuery(const nQuery: TDataSet;
+  const nResetConn: Boolean);
+begin
+  //null
+end;
+
+//Date: 2020-04-17
+//Parm: SQL;对象;数据库标识
+//Desc: 在nDB上执行写入操作
+function TDBDriver.DBExecute(const nSQL: string; const nCmd: TObject;
+  const nDB: string): Integer;
+begin
+  Result := -1;
+end;
+
+//Date: 2020-04-17
+//Parm: 列表;对象;数据库标识
+//Desc: 在nDB上批量执行nList写操作
+function TDBDriver.DBExecute(const nList: TStrings; const nCmd: TObject;
+  const nDB: string): Integer;
+begin
+  Result := -1;
+end;
+
+//Date: 2020-04-17
+//Parm: SQL;查询对象;锁定书签
+//Desc: 在nQuery上执行查询
+function TDBDriver.DBQuery(const nSQL: string; const nQuery: TObject;
+  const nDB: string; const nLockBookmark: Boolean): TDataSet;
+begin
+  Result := nil;
+end;
+
+//Date: 2021-03-14
+//Parm: 连接对象 or 查询对象
+//Desc: 在nConn上开启事务
+procedure TDBDriver.BeginTrans(const nConn: TObject);
+begin
+  //null
+end;
+
+//Date: 2021-03-14
+//Parm: 连接对象 or 查询对象
+//Desc: 提交nConn上的事务
+procedure TDBDriver.CommitTrans(const nConn: TObject);
+begin
+  //null
+end;
+
+//Date: 2021-03-14
+//Parm: 连接对象 or 查询对象
+//Desc: 回滚nConn上的事务
+procedure TDBDriver.RollbackTrans(const nConn: TObject);
+begin
+  //null
 end;
 
 //------------------------------------------------------------------------------
@@ -361,7 +546,8 @@ begin
   with FTriggers[nInt] do
   begin
     FName := nName;
-    FData := nTrigger;
+    with TStringHelper do
+      FData := MacroValue(nTrigger, [MI(sDBTrigger, nName)]);
     FFitDB := nDBType;
 
     FParmI := Pos(sDBTables, nTrigger);
@@ -467,19 +653,18 @@ end;
 //------------------------------------------------------------------------------
 constructor TDBManager.Create;
 begin
-  FDefaultDB := 'main';
+  FDefaultDB := 'MAIN';
   FDefaultFit := dtMSSQL;
+  FActiveDriver := nil;
 
   FAutoReconnect := True;
   SetLength(FTableBuilders, 0);
   FDBConfig := TDictionary<string, TDBConnConfig>.Create();
-
-  RegObjectPoolTypes;
-  //register pool
 end;
 
 destructor TDBManager.Destroy;
 begin
+  FActiveDriver.Free;
   FDBConfig.Free;
   inherited;
 end;
@@ -503,41 +688,6 @@ begin
 
   gDBManager := gMG.FDBManager;
   //启用全局变量
-end;
-
-//Date: 2020-04-17
-//Desc: 注册对象池
-procedure TDBManager.RegObjectPoolTypes;
-var nCD: PDBConnData;
-begin
-  with gMG.FObjectPool do
-  begin
-    NewClass(TADOConnection,
-      function(var nData: Pointer): TObject
-      begin
-        Result := TADOConnection.Create(nil); //new connction
-        New(nCD);
-        nData := nCD;
-
-        nCD.FConnID := '';
-        nCD.FInThread := 0;
-        //init value
-      end,
-
-      procedure(const nObj: TObject; const nData: Pointer)
-      begin
-        nObj.Free;
-        Dispose(PDBConnData(nData));
-      end);
-    //ado conn
-
-    NewClass(TADOQuery,
-      function(var nData: Pointer): TObject
-      begin
-        Result := TADOQuery.Create(nil);
-      end);
-    //ado query
-  end;
 end;
 
 //Date: 2020-04-16
@@ -670,11 +820,13 @@ begin
       nList.Add('DefaultDB=' + FDefaultDB);
       nList.Add('DefaultFit=' + TStringHelper.Enum2Str<TDBType>(FDefaultFit));
       nList.Add('AutoReconnect=' + BoolToStr(FAutoReconnect, True));
+      nList.Add('ActiveDriver=' + FActiveDriver.DriverInfo.DrvName);
       Exit;
     end;
 
     nList.Add(FixData('DefaultDB:', FDefaultDB));
     nList.Add(FixData('DefaultFit:', TStringHelper.Enum2Str<TDBType>(FDefaultFit)));
+    nList.Add(FixData('ActiveDriver:', FActiveDriver.DriverInfo.DrvName));
     nList.Add(FixData('AutoReconnect:', BoolToStr(FAutoReconnect, True)));
 
     nIdx := 1;
@@ -739,7 +891,7 @@ function TDBManager.InitMSSQL(const nDB: string; const nTables: TList;
 var nStr: string;
     i,j,k,nIdx,nInt: Integer;
     nTable: PDBTable;
-    nQuery: TADOQuery;
+    nQuery: TDataSet;
     nListA,nListB,nListC: TStrings;
 begin
   Result := True;
@@ -1127,367 +1279,142 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+//Date: 2021-03-14
+//Parm: 驱动类名
+//Desc: 注册nDriver到驱动列表
+class procedure TDBManager.RegistDriver(const nDriver: TDBDriverClass);
+var nIdx: Integer;
+begin
+  for nIdx := Low(Drivers) to High(Drivers) do
+   with Drivers[nIdx].DriverInfo do
+    if DrvName = nDriver.DriverInfo.DrvName then
+     raise Exception.Create('TDBManager: Driver "' + DrvName + '" Has Exists.');
+  //xxxxx
+
+  nIdx := Length(Drivers);
+  SetLength(Drivers, nIdx + 1);
+  Drivers[nIdx] := nDriver;
+end;
+
+//Desc: 激活默认驱动
+procedure TDBManager.RunAfterRegistAllManager;
+begin
+  if Length(Drivers) < 1 then
+    raise Exception.Create('TDBManager: Database Driver List Is Empty!');
+  ActiveDriver(Drivers[0].DriverInfo.DrvName);
+end;
+
+//Date: 2021-03-14
+//Parm: 驱动名称
+//Desc: 激活nDriverName驱动
+procedure TDBManager.ActiveDriver(const nDriverName: string);
+var nIdx: Integer;
+begin
+  if Assigned(FActiveDriver) and
+     (FActiveDriver.DriverInfo.DrvName = nDriverName) then Exit;
+  //has active
+
+  for nIdx := Low(Drivers) to High(Drivers) do
+  if Drivers[nIdx].DriverInfo.DrvName = nDriverName then
+  begin
+    FreeAndNil(FActiveDriver);
+    FActiveDriver := Drivers[nIdx].Create(Self);
+    Exit;
+  end;
+
+  raise Exception.Create('TDBManager: Driver "' + nDriverName + '" Is Invalid.');
+end;
+
 //Date: 2020-04-17
 //Parm: 数据库标识
 //Desc: 获取nDB的连接对象
-function TDBManager.LockDBConn(nDB: string): TADOConnection;
-var nStr: string;
-    nInThread: Cardinal;
-    nCD: PDBConnData;
-    nCfg: TDBConnConfig;
+function TDBManager.LockDBConn(const nDB: string): TObject;
 begin
-  if nDB = '' then
-    nDB := FDefaultDB;
-  //set default
-
-  if not GetDB(nDB, nCfg) then
-  begin
-    nStr := Format('数据库[ %s ]不存在,请先配置.', [nDB]);
-    raise Exception.Create(nStr);
-  end;
-
-  nInThread := TThread.Current.ThreadID;
-  //调用者所在线程
-
-  Result := gMG.FObjectPool.Lock(TADOConnection, nil, @nCD,
-    function(const nObj: TObject; const nData: Pointer; var nTimes: Integer;
-      const nUsed: Boolean): Boolean
-    var nConn: PDBConnData;
-    begin
-      nConn := nData;
-      //conn config
-
-      if nTimes = 1 then
-      begin
-        Result := nUsed and Assigned(nConn) and (nConn.FInThread = nInThread);
-        //同线程同连接
-      end else
-
-      if nTimes = 2 then
-      begin
-        Result := (not nUsed) and (not Assigned(nConn)) or (nConn.FConnID = nDB);
-        //同库连接
-      end else
-      begin
-        Result := (not nUsed) and ((not Assigned(nConn)) or
-          (TDateTimeHelper.GetTickCountDiff(nConn.FConneLast) > 60 * 1000) or
-          (not TADOConnection(nObj).Connected));
-        //空闲连接
-      end;
-
-      if nTimes = 1 then
-        nTimes := 3;
-      //三轮扫描
-    end, True) as TADOConnection;
-  //xxxxx
-
-  with Result do
-  begin
-    if nCD.FInThread <> nInThread then
-      nCD.FInThread := nInThread;
-    //bind thread
-
-    nCD.FConneLast := TDateTimeHelper.GetTickCount();
-    nCD.FConnected := Connected;
-    //conn status
-
-    if nCD.FConnID <> nDB then
-    begin
-      nCD.FConnID := nDB;
-      //id
-
-      Connected := False;
-      ConnectionString := nCfg.FConn;
-      LoginPrompt := False;
-    end;
-  end;
+  Result := FActiveDriver.LockDBConn(nDB);
 end;
 
 //Date: 2020-04-17
 //Parm: 连接对象
 //Desc: 释放链路
-procedure TDBManager.ReleaseDBConn(const nConn: TADOConnection);
+procedure TDBManager.ReleaseDBConn(const nConn: TObject);
 begin
-  if Assigned(nConn) then
-  begin
-    gMG.FObjectPool.Release(nConn);
-  end;
+  FActiveDriver.ReleaseDBConn(nConn);
 end;
 
 //Date: 2020-04-17
 //Parm: 数据库标识
 //Desc: 检测nConn是否正常
-function TDBManager.CheckDBConn(nDB: string = ''): string;
-var nQuery: TADOQuery;
+function TDBManager.CheckDBConn(const nDB: string = ''): string;
 begin
-  nQuery := nil;
-  try
-    Result := '';
-    nQuery := LockDBQuery(nDB);
-
-    with nQuery do
-    try
-      Close;
-      SQL.Text := 'select 1';
-      Open;
-    except
-      on nErr: Exception do
-      begin
-        Result := nErr.Message;
-        WriteLog(Result);
-      end;
-    end;
-  finally
-    ReleaseDBQuery(nQuery);
-  end;
+  Result := FActiveDriver.CheckDBConn(nDB);
 end;
 
 //Date: 2020-04-17
 //Parm: 数据库标识
 //Desc: 获取nDB数据的Query对象
-function TDBManager.LockDBQuery(const nDB: string): TADOQuery;
+function TDBManager.LockDBQuery(const nDB: string): TDataSet;
 begin
-  Result := gMG.FObjectPool.Lock(TADOQuery) as TADOQuery;
-  with Result do
-  begin
-    Close;
-    ParamCheck := False;
-    Connection := LockDBConn(nDB);
-  end;
+  Result := FActiveDriver.LockDBQuery(nDB);
 end;
 
 //Date: 2020-04-17
 //Parm: 对象;重置
 //Desc: 释放nQuery对象
-procedure TDBManager.ReleaseDBQuery(const nQuery: TADOQuery;
+procedure TDBManager.ReleaseDBQuery(const nQuery: TDataSet;
   const nResetConn: Boolean);
-var nCD: PDBConnData;
 begin
-  if Assigned(nQuery) then
-  begin
-    try
-      if nQuery.Active then
-        nQuery.Close;
-      //xxxxx
-
-      if nResetConn then
-      begin
-        nCD := gMG.FObjectPool.GetData(TADOConnection, nQuery.Connection);
-        if not nCD.FConnected then
-          nQuery.Connection.Connected := False;
-        //restore old status
-      end;
-    except
-      //ignor any error
-    end;
-
-    ReleaseDBConn(nQuery.Connection);
-    gMG.FObjectPool.Release(nQuery);
-  end;
+  FActiveDriver.ReleaseDBQuery(nQuery, nResetConn);
 end;
 
 //Date: 2020-04-17
 //Parm: SQL;查询对象;锁定书签
 //Desc: 在nQuery上执行查询
-function TDBManager.DBQuery(const nSQL: string; const nQuery: TADOQuery;
+function TDBManager.DBQuery(const nSQL: string; const nQuery: TObject;
   const nDB: string; const nLockBookmark: Boolean): TDataSet;
-var nStep: Integer;
-    nException: string;
-    nBookMark: TBookmark;
 begin
-  Result := nil;
-  nException := '';
-  nStep := 0;
-
-  while nStep <= 2 do
-  try
-    if nStep = 1 then
-    begin
-      if CheckDBConn(nDB) = '' then
-           Break  //connection is ok
-      else raise Exception.Create('verify connection failure');
-    end else
-
-    if nStep = 2 then
-    begin
-      nQuery.Connection.Close;
-      nQuery.Connection.Open;
-    end; //reconnnect
-
-    if not nQuery.Connection.Connected then
-      nQuery.Connection.Connected := True;
-    //xxxxx
-
-    if nLockBookmark then
-    begin
-      nQuery.DisableControls;
-      nBookMark := nQuery.GetBookmark;
-    end; //lock bookmark first
-
-    try
-      nQuery.Close;
-      nQuery.SQL.Text := nSQL;
-      nQuery.Open;
-
-      Result := nQuery;
-      nException := '';
-
-      if nLockBookmark then
-      begin
-        if nQuery.BookmarkValid(nBookMark) then
-          nQuery.GotoBookmark(nBookMark);
-        //restore booktmark
-      end;
-
-      Break;
-    finally
-      if nLockBookmark then
-      begin
-        nQuery.FreeBookmark(nBookMark);
-        nQuery.EnableControls;
-      end;
-    end;
-  except
-    on nErr: Exception do
-    begin
-      Inc(nStep);
-      nException := nErr.Message;
-
-      if nException = '' then
-        nException := 'Unknow Error(Null).';
-      WriteLog(nException);
-
-      if (not FAutoReconnect) or (nStep > 2) then
-      begin
-        nQuery.Connection.Connected := False;
-        Break;
-      end;
-    end;
-  end;
-
-  if nException <> '' then
-    raise Exception.Create(nException);
-  //xxxxx
+  Result := FActiveDriver.DBQuery(nSQL, nQuery, nDB, nLockBookmark);
 end;
 
 //Date: 2020-04-17
 //Parm: SQL;对象;数据库标识
 //Desc: 在nDB上执行写入操作
-function TDBManager.DBExecute(const nSQL: string; const nCmd: TADOQuery;
+function TDBManager.DBExecute(const nSQL: string; const nCmd: TObject;
   const nDB: string): Integer;
-var nC: TADOQuery;
-    nStep: Integer;
-    nException: string;
 begin
-  nC := nil;
-  try
-    if Assigned(nCmd) then
-         nC := nCmd
-    else nC := LockDBQuery(nDB);
-
-    Result := -1;
-    nException := '';
-    nStep := 0;
-
-    while nStep <= 2 do
-    try
-      if nStep = 1 then
-      begin
-        if CheckDBConn(nDB) = '' then
-             Break  //connection is ok
-        else raise Exception.Create('verify connection failure');
-      end else
-
-      if nStep = 2 then
-      begin
-        nC.Connection.Close;
-        nC.Connection.Open;
-      end; //reconnnect
-
-      if not nC.Connection.Connected then
-        nC.Connection.Connected := True;
-      //xxxxx
-
-      nC.Close;
-      nC.SQL.Text := nSQL;
-      Result := nC.ExecSQL;
-
-      nException := '';
-      Break;
-    except
-      on nErr: Exception do
-      begin
-        Inc(nStep);
-        nException := nErr.Message;
-
-        if nException = '' then
-          nException := 'Unknow Error(Null).';
-        WriteLog(nException);
-
-        if (not FAutoReconnect) or (nStep > 2) then
-        begin
-          nC.Connection.Connected := False;
-          Break;
-        end;
-      end;
-    end;
-  finally
-    if not Assigned(nCmd) then
-      ReleaseDBQuery(nC);
-    //xxxxx
-  end;
-
-  if nException <> '' then
-    raise Exception.Create(nException);
-  //xxxxx
+  Result := FActiveDriver.DBExecute(nSQL, nCmd, nDB);
 end;
 
 //Date: 2020-04-17
 //Parm: 列表;对象;数据库标识
 //Desc: 在nDB上批量执行nList写操作
-function TDBManager.DBExecute(const nList: TStrings; const nCmd: TADOQuery;
+function TDBManager.DBExecute(const nList: TStrings; const nCmd: TObject;
   const nDB: string): Integer;
-var nIdx: Integer;
-    nC: TADOQuery;
 begin
-  nC := nil;
-  try
-    if Assigned(nCmd) then
-         nC := nCmd
-    else nC := LockDBQuery(nDB);
+  Result := FActiveDriver.DBExecute(nList, nCmd, nDB);
+end;
 
-    if not nC.Connection.Connected then
-      nC.Connection.Connected := True;
-    //xxxxx
+//Date: 2021-03-14
+//Parm: 连接对象 or 查询对象
+//Desc: 在nConn上开启事务
+procedure TDBManager.BeginTrans(const nConn: TObject);
+begin
+  FActiveDriver.BeginTrans(nConn);
+end;
 
-    Result := 0;
-    try
-      nC.Connection.BeginTrans;
-      //trans start
+//Date: 2021-03-14
+//Parm: 连接对象 or 查询对象
+//Desc: 提交nConn上的事务
+procedure TDBManager.CommitTrans(const nConn: TObject);
+begin
+  FActiveDriver.CommitTrans(nConn);
+end;
 
-      for nIdx := 0 to nList.Count-1 do
-      with nC do
-      begin
-        Close;
-        SQL.Text := nList[nIdx];
-        Result := Result + ExecSQL;
-      end;
-
-      nC.Connection.CommitTrans;
-      //commit
-    except
-      on nErr: Exception do
-      begin
-        nC.Connection.RollbackTrans;
-        nC.Connection.Connected := False;
-        raise;
-      end;
-    end;
-  finally
-    if not Assigned(nCmd) then
-      ReleaseDBQuery(nC);
-    //xxxxx
-  end;
+//Date: 2021-03-14
+//Parm: 连接对象 or 查询对象
+//Desc: 回滚nConn上的事务
+procedure TDBManager.RollbackTrans(const nConn: TObject);
+begin
+  FActiveDriver.RollbackTrans(nConn);
 end;
 
 end.

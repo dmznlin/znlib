@@ -17,6 +17,8 @@
 
 {$DEFINE DBManager}
 //启用数据库管理器
+{$DEFINE WinADO}
+//启用ADO驱动
 
 {.$DEFINE MenuManager}
 //启用数据库管理器

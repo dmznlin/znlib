@@ -109,6 +109,7 @@ begin
         nInt2 := TWaitTimer.GetHighResolutionTimerResult;
         nInt3 := TWaitTimer.GetHighResolutionTimerResult;
 
+        if not (csFixups in Self.ComponentState) then
         TThread.Synchronize(nThread, procedure
         begin
           case nConfig.FDataInt[0] of

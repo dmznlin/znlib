@@ -27,7 +27,7 @@ type
     FObject: TObject;             //对象
     FData: Pointer;               //附加
     FUsed: Boolean;               //使用中
-    FCounter: Cardinal;           //使用计数
+    FUsedNum: Cardinal;           //使用计数
   end;
 
   PObjectPoolClass = ^TObjectPoolClass;
@@ -339,12 +339,12 @@ begin
             Result := nItem.FObject;
             if nItem.FUsed then
             begin
-              Inc(nItem.FCounter);
+              Inc(nItem.FUsedNum);
               //更新计数
             end else
             begin
               nItem.FUsed := True;
-              nItem.FCounter := 1;
+              nItem.FUsedNum := 1;
             end;
 
             if Assigned(nData) then
@@ -370,7 +370,7 @@ begin
         nItem.FObject := nNew(nItem.FData);
         Result := nItem.FObject;
         nItem.FUsed := True;
-        nItem.FCounter := 1;
+        nItem.FUsedNum := 1;
 
         if Assigned(nData) then
           nData^ := nItem.FData;
@@ -426,11 +426,11 @@ begin
             Dec(FPool[nIdx].FNumLocked);
             Dec(Self.FNumLocked);
 
-            if nItem.FCounter > 0 then
-              Dec(nItem.FCounter);
+            if nItem.FUsedNum > 0 then
+              Dec(nItem.FUsedNum);
             //dec counter
 
-            if nItem.FCounter < 1 then
+            if nItem.FUsedNum < 1 then
             begin
               nItem.FUsed := False;
               if nReset and Assigned(FResetOne) then

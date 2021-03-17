@@ -58,8 +58,6 @@ object fFormMain: TfFormMain
     Lines.Strings = (
       'Memo1')
     TabOrder = 4
-    ExplicitWidth = 582
-    ExplicitHeight = 394
   end
   object BtnAdd: TButton
     Left = 199

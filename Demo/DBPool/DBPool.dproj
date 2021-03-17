@@ -134,7 +134,7 @@
                 </Excluded_Packages>
             </Delphi.Personality>
             <Deployment Version="3">
-                <DeployFile LocalName="Win32\Debug\DBPool.exe" Configuration="Debug" Class="ProjectOutput">
+                <DeployFile LocalName="..\Bin\DBPool.exe" Configuration="Debug" Class="ProjectOutput">
                     <Platform Name="Win32">
                         <RemoteName>DBPool.exe</RemoteName>
                         <Overwrite>true</Overwrite>
