@@ -442,7 +442,7 @@ end;
 function TLogManager.SimpleLog(const nItem: PLogItem): string;
 begin
   Result := Copy(nItem.FWriter.FOjbect.ClassName, 1, 15);
-  Result := TDateTimeHelper.DateTime2Str(nItem.FTime) + ' ' +
+  Result := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now()) + ' ' +
             TLogManager.Type2Str(nItem.FType, False) + FLogField +
             Result + FLogField;
   //时间,类名

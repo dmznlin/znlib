@@ -33,3 +33,6 @@ https://github.com/spinettaro/delphi-event-bus.git
 
 *.TimeCode: 基于Google Authenticator的动态密码算法
 https://github.com/nikosdion/timecode.git
+
+*.DEC: Delphi Encryption Compendium,编码加密算法库
+https://github.com/MHumm/DelphiEncryptionCompendium

@@ -162,7 +162,9 @@ type
   protected
     FOwner: TDBManager;
     {*拥有者*}
-  protected
+    procedure WriteMultiThreadLog(const nCallName: string;
+      const nEvent: string = '');
+    {*记录日志*}
     function LockDBConn(nDB: string = ''): TObject; virtual;
     procedure ReleaseDBConn(const nConn: TObject); virtual;
     function CheckDBConn(const nDB: string = ''): string; virtual;
@@ -182,6 +184,9 @@ type
       const nCmd: TObject = nil;
       const nDB: string = ''): Integer; overload; virtual;
     {*数据库操作*}
+    procedure InitTrans(const nCD: PDBConnData); overload; virtual;
+    procedure InitTrans(const nConn: TObject); overload; virtual;
+    {*初始化事务*}
     procedure BeginTrans(const nConn: TObject); virtual;
     procedure CommitTrans(const nConn: TObject); virtual;
     procedure RollbackTrans(const nConn: TObject); virtual;
@@ -267,6 +272,7 @@ type
     function DBExecute(const nList: TStrings; const nCmd: TObject = nil;
       const nDB: string = ''): Integer; overload;
     {*数据库操作*}
+    procedure InitTrans(const nConn: TObject);
     procedure BeginTrans(const nConn: TObject);
     procedure CommitTrans(const nConn: TObject);
     procedure RollbackTrans(const nConn: TObject);
@@ -319,6 +325,16 @@ begin
     DrvAuthor  := 'dmzn@163.com';
     DrvVersion := '0.0.1';
   end;
+end;
+
+//Date: 2021-03-19
+//Parm: 函数名;事件内容
+//Desc: 打印多线程执行日志
+procedure TDBDriver.WriteMultiThreadLog(const nCallName, nEvent: string);
+begin
+  FOwner.WriteLog(Format('%-18s: %d(t)/%d(m) %s', [nCallName,
+    TThread.Current.ThreadID, MainThreadID, nEvent]));
+  //xxxxx
 end;
 
 //Date: 2020-04-17
@@ -390,6 +406,23 @@ function TDBDriver.DBQuery(const nSQL: string; const nQuery: TObject;
   const nDB: string; const nLockBookmark: Boolean): TDataSet;
 begin
   Result := nil;
+end;
+
+//Date: 2021-03-17
+//Parm: 连接数据
+//Desc: 重置nConnData事务计数
+procedure TDBDriver.InitTrans(const nCD: PDBConnData);
+begin
+  nCD.FTransBeginNum := 0;
+  nCD.FTransStatus := [];
+end;
+
+//Date: 2021-03-21
+//Parm: 连接对象 or 查询对象
+//Desc: 重置nConn对象的事务计数
+procedure TDBDriver.InitTrans(const nConn: TObject);
+begin
+  //null
 end;
 
 //Date: 2021-03-14
@@ -1391,6 +1424,14 @@ function TDBManager.DBExecute(const nList: TStrings; const nCmd: TObject;
   const nDB: string): Integer;
 begin
   Result := FActiveDriver.DBExecute(nList, nCmd, nDB);
+end;
+
+//Date: 2021-03-21
+//Parm: 连接对象 or 查询对象
+//Desc: 重置nConn对象的事务计数
+procedure TDBManager.InitTrans(const nConn: TObject);
+begin
+  FActiveDriver.InitTrans(nConn);
 end;
 
 //Date: 2021-03-14

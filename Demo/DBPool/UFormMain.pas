@@ -149,7 +149,7 @@ begin
       FParentObj    := Self;
       FParentDesc   := self.ClassName;
 
-      FCallInterval := 1000;
+      FCallInterval := nIdx * 500;
       FCallTimes    := 1;
       FAutoDelete   := True;
       FCoInitialize := True;
@@ -162,9 +162,17 @@ begin
         nQB := nil;
         with gMG.FDBManager do
         try
+          WriteLog('');
           nQA := LockDBQuery();
           nQB := LockDBQuery();
 
+          with DBQuery('select * From TableA', nQA) do
+          if RecordCount > 0 then
+          begin
+            Writelog(Fields[0].AsString);
+          end;
+
+          InitTrans(nQA);         //重置事务计数
           BeginTrans(nQA);        //A.事务开始:开启事务,增加计数
           try
             BeginTrans(nQB);      //B.事务开始:同线程再次开启事务时,只增加计数
@@ -174,9 +182,9 @@ begin
               RollbackTrans(nQB); //B.事务回滚:同线程事务回滚
             end;
 
-            //WriteDB_InTransA;     //事务内嵌套调用,同属于一个事务
+            WriteDB_InTransA;     //事务内嵌套调用,同属于一个事务
             CommitTrans(nQA);     //A.事务提交:计数为1时提交事务
-            //WriteDB_InTransA;     //事务外嵌套调用,单独事务
+            WriteDB_InTransB;     //事务外嵌套调用,单独事务
           except
             RollbackTrans(nQA);   //A.事务回滚,若已回滚则忽略
           end;

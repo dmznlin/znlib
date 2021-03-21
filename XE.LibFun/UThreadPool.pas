@@ -168,7 +168,7 @@ type
     FLastCall     : Cardinal;                    //上次调用
     FStartCall    : Cardinal;                    //开始调用
     FStartDelete  : Cardinal;                    //开始删除
-    FWakeupCall   : Cardinal;                    //唤醒计数
+    FWakeupCall   : Boolean;                     //唤醒标记
     FCountThisDelay: Boolean;                    //计算延迟
     FForMinInterval: Boolean;                    //最小间隔
   end;
@@ -508,7 +508,8 @@ begin
   except
     on nErr: Exception do
     begin
-      WriteLog(Format('[ %s.%s ]%s', [nWorker.FWorker.FWorkerName,
+      WriteLog(Format('[ %dt/%dm %s.%s ]%s', [TThread.Current.ThreadID,
+        MainThreadID, nWorker.FWorker.FWorkerName,
         cThreadWorkerEventNames[nEventName], nErr.Message]));
       Result := False;
     end;
@@ -600,9 +601,12 @@ begin
     nPWorker.FWorker := nWorker^;
     nPWorker.FWorkerID := gMG.FSerialIDManager.GetID;
 
+    nPWorker.FWakeupCall := False;
+    //唤醒时,即使未到时间也会被执行
+
     nPWorker.FCountThisDelay := True;
     nPWorker.FForMinInterval := True;
-    nPWorker.FLastCall := TDateTimeHelper.GetTickCount - nWorker.FCallInterval;
+    nPWorker.FLastCall := TDateTimeHelper.GetTickCountDiff(nWorker.FCallInterval);
     //确保立刻执行,并计算出FStatus.FRunDelayNow,延迟过大时增加线程
 
     Inc(FStatus.FNumWorkers);
@@ -721,7 +725,7 @@ begin
        if FParentObj = nParent then
        begin
          FCallTimes := nTimes;
-         nWorker.FLastCall := TDateTimeHelper.GetTickCount - FCallInterval;
+         nWorker.FLastCall := TDateTimeHelper.GetTickCountDiff(FCallInterval);
        end;
     end;
 
@@ -750,7 +754,7 @@ begin
        with nWorker.FWorker do
        begin
          FCallTimes := nTimes;
-         nWorker.FLastCall := TDateTimeHelper.GetTickCount - FCallInterval;
+         nWorker.FLastCall := TDateTimeHelper.GetTickCountDiff(FCallInterval);
          Break;
        end;
     end;
@@ -871,7 +875,7 @@ begin
       nWorker := FWorkers[nIdx];
       if nWorker.FWorker.FParentObj = nParent then
       begin
-        nWorker.FWakeupCall := TDateTimeHelper.GetTickCount();
+        nWorker.FWakeupCall := True;
         //唤醒
       end;
     end;
@@ -894,7 +898,7 @@ begin
       nWorker := FWorkers[nIdx];
       if nWorker.FWorkerID = nWorkerID then
       begin
-        nWorker.FWakeupCall := TDateTimeHelper.GetTickCount(); //唤醒
+        nWorker.FWakeupCall := True; //唤醒
         Break;
       end;
     end;
@@ -1452,14 +1456,6 @@ var nIdx: Integer;
 
       if (nWorker.FWorker.FCallInterval > 0) and (nWorker.FLastCall > 0) then
       begin
-        if nWorker.FWakeupCall > 0 then
-        begin
-          nVal := TDateTimeHelper.GetTickCountDiff(nWorker.FWakeupCall);
-          if nVal > 1000 then
-            nWorker.FWakeupCall := 0;
-          //被唤醒1秒内可重复执行
-        end;
-
         nVal := TDateTimeHelper.GetTickCountDiff(nWorker.FLastCall);
         if nVal < nWorker.FWorker.FCallInterval then //未到执行时间
         begin
@@ -1478,8 +1474,10 @@ var nIdx: Integer;
             end;
           end;
 
-          if nWorker.FWakeupCall < 1 then Continue;
-           //未唤醒
+          if nWorker.FWakeupCall then
+               nWorker.FWakeupCall := False
+          else Continue;
+          //唤醒时忽略执行间隔,唤醒标记一次有效(唤醒后失效)
         end;
 
         if nWorker.FCountThisDelay then //计算本次延迟

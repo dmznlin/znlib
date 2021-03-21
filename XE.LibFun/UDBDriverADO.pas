@@ -4,11 +4,12 @@
 *******************************************************************************}
 unit UDBDriverADO;
 
+{$I LibFun.Inc}
 interface
 
 uses
   System.Classes, System.SysUtils, System.Generics.Collections, Data.Win.ADODB,
-  Data.DB, UBaseObject, UDBManager;
+  Data.DB, UDBManager;
 
 type
   TDBDriverADO = class(TDBDriver)
@@ -32,6 +33,7 @@ type
       const nCmd: TObject = nil;
       const nDB: string = ''): Integer; overload; override;
     {*数据库操作*}
+    procedure InitTrans(const nConn: TObject); override;
     procedure BeginTrans(const nConn: TObject); override;
     procedure CommitTrans(const nConn: TObject); override;
     procedure RollbackTrans(const nConn: TObject); override;
@@ -51,21 +53,13 @@ uses
 //Desc: 驱动信息
 class function TDBDriverADO.DriverInfo: TDBDriverInfo;
 begin
+  inherited;
   with Result do
   begin
     DrvName    := 'DBDriver.ADO';
     DrvAuthor  := 'dmzn@163.com';
     DrvVersion := '0.0.1';
   end;
-end;
-
-//Date: 2021-03-17
-//Parm: 连接数据
-//Desc: 重置nConnData事务计数
-procedure ResetTrans(const nCD: PDBConnData);
-begin
-  nCD.FTransBeginNum := 0;
-  nCD.FTransStatus := [];
 end;
 
 constructor TDBDriverADO.Create(AOwner: TDBManager);
@@ -86,8 +80,12 @@ begin
         nCD.FInThread := 0;
         //init value
 
-        ResetTrans(nCD);
+        InitTrans(nCD);
         //init trans
+
+        {$IFDEF debuglog}
+        WriteMultiThreadLog('ADO.LockDBConn', 'TADOConnection.Create');
+        {$ENDIF}
       end,
 
       procedure(const nObj: TObject; const nData: Pointer)
@@ -115,6 +113,10 @@ var nStr: string;
     nCD: PDBConnData;
     nCfg: TDBConnConfig;
 begin
+  {$IFDEF debuglog}
+  WriteMultiThreadLog('ADO.LockDBConn');
+  {$ENDIF}
+
   if nDB = '' then
     nDB := FOwner.DefaultDB;
   //set default
@@ -144,7 +146,7 @@ begin
 
       if nTimes = 2 then
       begin
-        Result := (not nUsed) and (not Assigned(nConn)) or (nConn.FConnID = nDB);
+        Result := (not nUsed) and ((not Assigned(nConn)) or (nConn.FConnID = nDB));
         //同库连接
       end else
       begin
@@ -154,12 +156,17 @@ begin
         //空闲连接
       end;
 
+      {$IFDEF debuglog}
+      if Result then
+        WriteMultiThreadLog('ADO.LockDBConn', 'Lock Mode ' + nTimes.ToString);
+      {$ENDIF}
+
       if nTimes = 1 then
         nTimes := 3;
       //三轮扫描
 
       if Result and (not nUsed) then
-        ResetTrans(nConn);
+        InitTrans(nConn);
       //连接首次使用时重置事务计数
     end, True);
   //xxxxx
@@ -191,6 +198,10 @@ end;
 //Desc: 释放链路
 procedure TDBDriverADO.ReleaseDBConn(const nConn: TObject);
 begin
+  {$IFDEF debuglog}
+  WriteMultiThreadLog('ADO.ReleaseDBConn');
+  {$ENDIF}
+
   if Assigned(nConn) then
   begin
     gMG.FObjectPool.Release(nConn);
@@ -203,6 +214,10 @@ end;
 function TDBDriverADO.CheckDBConn(const nDB: string): string;
 var nQuery: TADOQuery;
 begin
+  {$IFDEF debuglog}
+  WriteMultiThreadLog('ADO.CheckDBConn');
+  {$ENDIF}
+
   nQuery := nil;
   try
     Result := '';
@@ -230,6 +245,10 @@ end;
 //Desc: 获取nDB数据的Query对象
 function TDBDriverADO.LockDBQuery(const nDB: string): TDataSet;
 begin
+  {$IFDEF debuglog}
+  WriteMultiThreadLog('ADO.LockDBQuery');
+  {$ENDIF}
+
   Result := gMG.FObjectPool.Lock(TADOQuery) as TADOQuery;
   with Result as TADOQuery do
   begin
@@ -247,6 +266,10 @@ procedure TDBDriverADO.ReleaseDBQuery(const nQuery: TDataSet;
 var nQry: TADOQuery;
     nCD: PDBConnData;
 begin
+  {$IFDEF debuglog}
+  WriteMultiThreadLog('ADO.ReleaseDBQuery');
+  {$ENDIF}
+
   if Assigned(nQuery) then
   begin
     nQry := nQuery as TADOQuery;
@@ -281,6 +304,10 @@ var nStep: Integer;
     nException: string;
     nBookMark: TBookmark;
 begin
+  {$IFDEF debuglog}
+  WriteMultiThreadLog('ADO.DBQuery');
+  {$ENDIF}
+
   Result := nil;
   nQry := nQuery as TADOQuery;
   nException := '';
@@ -366,6 +393,10 @@ var nC: TADOQuery;
     nStep: Integer;
     nException: string;
 begin
+  {$IFDEF debuglog}
+  WriteMultiThreadLog('ADO.DBExecute');
+  {$ENDIF}
+
   nC := nil;
   try
     if Assigned(nCmd) then
@@ -437,6 +468,10 @@ function TDBDriverADO.DBExecute(const nList: TStrings; const nCmd: TObject;
 var nIdx: Integer;
     nC: TADOQuery;
 begin
+  {$IFDEF debuglog}
+  WriteMultiThreadLog('ADO.DBExecute');
+  {$ENDIF}
+
   nC := nil;
   try
     if Assigned(nCmd) then
@@ -472,6 +507,33 @@ begin
   end;
 end;
 
+//Date: 2021-03-21
+//Parm: 连接对象 or 查询对象
+//Desc: 重置nConn对象的事务计数
+procedure TDBDriverADO.InitTrans(const nConn: TObject);
+var nStr: string;
+    nCoN: TADOConnection;
+    nCoD: PDBConnData;
+begin
+  {$IFDEF debuglog}
+  WriteMultiThreadLog('ADO.InitTrans');
+  {$ENDIF}
+
+  if nConn is TADOQuery then
+       nCoN := (nConn as TADOQuery).Connection
+  else nCoN := nConn as TADOConnection;
+
+  nCoD := gMG.FObjectPool.GetData(TADOConnection, nCoN);
+  if not Assigned(nCoD) then
+  begin
+    nStr := 'InitTrans: Cann''t Get TADOConnection.PDBConnData.';
+    FOwner.WriteLog(nStr);
+    raise Exception.Create(nStr);
+  end;
+
+  InitTrans(nCoN);
+end;
+
 //Date: 2021-03-17
 //Parm: 连接对象 or 查询对象
 //Desc: 在nConn上开启事务
@@ -480,6 +542,10 @@ var nStr: string;
     nCoN: TADOConnection;
     nCoD: PDBConnData;
 begin
+  {$IFDEF debuglog}
+  WriteMultiThreadLog('ADO.BeginTrans');
+  {$ENDIF}
+
   if nConn is TADOQuery then
        nCoN := (nConn as TADOQuery).Connection
   else nCoN := nConn as TADOConnection;
@@ -522,6 +588,10 @@ var nStr: string;
     nCoN: TADOConnection;
     nCoD: PDBConnData;
 begin
+  {$IFDEF debuglog}
+  WriteMultiThreadLog('ADO.CommitTrans');
+  {$ENDIF}
+
   if nConn is TADOQuery then
        nCoN := (nConn as TADOQuery).Connection
   else nCoN := nConn as TADOConnection;
@@ -536,7 +606,7 @@ begin
 
   if nCoD.FTransStatus = [] then //事务未开启 或 已结束
   begin
-    ResetTrans(nCoD);
+    InitTrans(nCoD);
     Exit;
   end;
 
@@ -555,7 +625,7 @@ begin
   end;
 
   nCoN.CommitTrans;
-  ResetTrans(nCoD); //提交后结束事务
+  InitTrans(nCoD); //提交后结束事务
 end;
 
 //Date: 2021-03-17
@@ -566,6 +636,10 @@ var nStr: string;
     nCoN: TADOConnection;
     nCoD: PDBConnData;
 begin
+  {$IFDEF debuglog}
+  WriteMultiThreadLog('ADO.RollbackTrans');
+  {$ENDIF}
+
   if nConn is TADOQuery then
        nCoN := (nConn as TADOQuery).Connection
   else nCoN := nConn as TADOConnection;
@@ -580,7 +654,7 @@ begin
 
   if nCoD.FTransStatus = [] then //事务未开启 或 已结束
   begin
-    ResetTrans(nCoD);
+    InitTrans(nCoD);
     Exit;
   end;
 
@@ -592,7 +666,7 @@ begin
   end;
 
   nCoN.RollbackTrans;
-  ResetTrans(nCoD); //回滚后结束事务
+  InitTrans(nCoD); //回滚后结束事务
 end;
 
 initialization
