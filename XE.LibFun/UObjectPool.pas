@@ -24,22 +24,22 @@ type
 
   PObjectPoolItem = ^TObjectPoolItem;
   TObjectPoolItem = record
-    FObject: TObject;             //对象
-    FData: Pointer;               //附加
-    FUsed: Boolean;               //使用中
-    FUsedNum: Cardinal;           //使用计数
+    FObject  : TObject;                 //对象
+    FData    : Pointer;                 //附加
+    FUsed    : Boolean;                 //使用中
+    FUsedNum : Cardinal;                //使用计数
   end;
 
   PObjectPoolClass = ^TObjectPoolClass;
-  TObjectPoolClass = record 
-    FClass: TClass;               //类名
-    FNewOne: TObjectNewOne;       //生成
-    FFreeOne: TObjectFreeOne;     //释放
-    FResetOne: TObjectResetOne;   //重置
-      
-    FNumLocked: Integer;          //已锁定
-    FNumLockAll: Int64;           //请求次数
-    FItems: TList;                //对象列表
+  TObjectPoolClass = record
+    FClass      : TClass;               //类名
+    FNewOne     : TObjectNewOne;        //生成
+    FFreeOne    : TObjectFreeOne;       //释放
+    FResetOne   : TObjectResetOne;      //重置
+
+    FNumLocked  : Integer;              //已锁定
+    FNumLockAll : Int64;                //请求次数
+    FItems      : TList;                //对象列表
   end;
 
   TObjectLockFilter = reference to function(const nObject: TObject;

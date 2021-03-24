@@ -93,6 +93,7 @@ type
   //事务状态: 空,开启,提交,回滚
   TDBConnTransStatuses = set of TDBConnTransStatus;
 
+  PPDBConnData = ^PDBConnData;
   PDBConnData = ^TDBConnData;
   TDBConnData = record
     FConnID         : string;                   //连接标识
@@ -100,8 +101,26 @@ type
     FConneLast      : Int64;                    //上次活动
     FInThread       : Cardinal;                 //所在线程
 
-    FTransBeginNum  : Word;                     //事务开启次数
-    FTransStatus    : TDBConnTransStatuses;     //事务开启状态
+    FTransLevel     : Cardinal;                 //事务嵌套层级
+    FTransStatus    : TDBConnTransStatuses;     //事务执行状态
+  end;
+
+  PDBTransContext = ^TDBTransContext;
+  TDBTransContext = record
+  private
+    FOwner : TDBManager;
+    {*拥有者*}
+    FConnection : TObject;
+    {*连接对象*}
+    FTransStatus : TDBConnTransStatuses;
+    {*事务状态*}
+  public
+    constructor Create(AOwner: TDBManager; AConn: TObject);
+    {*创建释放*}
+    procedure CommitTrans;
+    {*提交事务*}
+    procedure RollbackTrans;
+    {*回滚事务*}
   end;
 
   PDBData = ^TDBData;
@@ -184,12 +203,10 @@ type
       const nCmd: TObject = nil;
       const nDB: string = ''): Integer; overload; virtual;
     {*数据库操作*}
-    procedure InitTrans(const nCD: PDBConnData); overload; virtual;
-    procedure InitTrans(const nConn: TObject); overload; virtual;
-    {*初始化事务*}
     procedure BeginTrans(const nConn: TObject); virtual;
     procedure CommitTrans(const nConn: TObject); virtual;
     procedure RollbackTrans(const nConn: TObject); virtual;
+    procedure ResetTransData(const nCD: PDBConnData); virtual;
     {*事务操作*}
   public
     class function DriverInfo: TDBDriverInfo; virtual;
@@ -272,10 +289,7 @@ type
     function DBExecute(const nList: TStrings; const nCmd: TObject = nil;
       const nDB: string = ''): Integer; overload;
     {*数据库操作*}
-    procedure InitTrans(const nConn: TObject);
-    procedure BeginTrans(const nConn: TObject);
-    procedure CommitTrans(const nConn: TObject);
-    procedure RollbackTrans(const nConn: TObject);
+    function BeginTrans(const nConn: TObject): TDBTransContext;
     {*事务操作*}
     procedure GetStatus(const nList: TStrings;
       const nFriendly: Boolean = True); override;
@@ -302,6 +316,51 @@ begin
   if Assigned(nMemo) then
     nMemo.Add(TDateTimeHelper.Time2Str(Now(), True, True) + #9 + nEvent);
   gMG.FLogManager.AddLog(TDBManager, '数据管理器', nEvent);
+end;
+
+{*******************************************************************************
+  事务上下文(TDBTransContext): 在嵌套事务中,需保证每一组函数(BeginTrans,
+  CommitTrans,RollbackTrans)只调用一次. 例如:
+
+  BeginTrans;      //a.事务开始
+  try
+    CommitTrans;   //b.事务提交
+    raise Exception.Create('Error Message');
+  except
+    RollbackTrans; //c.事务回滚
+  end;
+
+  上述例子中,事务提交(b)后发生异常,会触发事务回滚(c),这在嵌套事务中会影响
+  事务计数.
+*******************************************************************************}
+constructor TDBTransContext.Create(AOwner: TDBManager; AConn: TObject);
+begin
+  FOwner := AOwner;
+  FConnection := AConn;
+  FTransStatus := [tsBegin];
+
+  FOwner.FActiveDriver.BeginTrans(FConnection);
+  //开启事务
+end;
+
+procedure TDBTransContext.CommitTrans;
+begin
+  if not ((tsCommit in FTransStatus) or (tsRollback in FTransStatus)) then
+  begin
+    FTransStatus := FTransStatus + [tsCommit];
+    FOwner.FActiveDriver.CommitTrans(FConnection);
+    //提交事务
+  end;
+end;
+
+procedure TDBTransContext.RollbackTrans;
+begin
+  if not ((tsCommit in FTransStatus) or (tsRollback in FTransStatus)) then
+  begin
+    FTransStatus := FTransStatus + [tsRollback];
+    FOwner.FActiveDriver.RollbackTrans(FConnection);
+    //回滚事务
+  end;
 end;
 
 //------------------------------------------------------------------------------
@@ -411,18 +470,10 @@ end;
 //Date: 2021-03-17
 //Parm: 连接数据
 //Desc: 重置nConnData事务计数
-procedure TDBDriver.InitTrans(const nCD: PDBConnData);
+procedure TDBDriver.ResetTransData(const nCD: PDBConnData);
 begin
-  nCD.FTransBeginNum := 0;
+  nCD.FTransLevel := 0;
   nCD.FTransStatus := [];
-end;
-
-//Date: 2021-03-21
-//Parm: 连接对象 or 查询对象
-//Desc: 重置nConn对象的事务计数
-procedure TDBDriver.InitTrans(const nConn: TObject);
-begin
-  //null
 end;
 
 //Date: 2021-03-14
@@ -1426,36 +1477,12 @@ begin
   Result := FActiveDriver.DBExecute(nList, nCmd, nDB);
 end;
 
-//Date: 2021-03-21
-//Parm: 连接对象 or 查询对象
-//Desc: 重置nConn对象的事务计数
-procedure TDBManager.InitTrans(const nConn: TObject);
-begin
-  FActiveDriver.InitTrans(nConn);
-end;
-
 //Date: 2021-03-14
 //Parm: 连接对象 or 查询对象
 //Desc: 在nConn上开启事务
-procedure TDBManager.BeginTrans(const nConn: TObject);
+function TDBManager.BeginTrans(const nConn: TObject): TDBTransContext;
 begin
-  FActiveDriver.BeginTrans(nConn);
-end;
-
-//Date: 2021-03-14
-//Parm: 连接对象 or 查询对象
-//Desc: 提交nConn上的事务
-procedure TDBManager.CommitTrans(const nConn: TObject);
-begin
-  FActiveDriver.CommitTrans(nConn);
-end;
-
-//Date: 2021-03-14
-//Parm: 连接对象 or 查询对象
-//Desc: 回滚nConn上的事务
-procedure TDBManager.RollbackTrans(const nConn: TObject);
-begin
-  FActiveDriver.RollbackTrans(nConn);
+  Result := TDBTransContext.Create(Self, nConn);
 end;
 
 end.

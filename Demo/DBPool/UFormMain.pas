@@ -74,7 +74,7 @@ begin
     //启动日志
   end;
 
-  gMG.FThreadPool.ThreadMin := 3;
+  //gMG.FThreadPool.ThreadMin := 3;
   //限制线程数
 
   with gMG.FDBManager do
@@ -116,7 +116,7 @@ begin
   nList := nil;
   try
     nList := gMG.FObjectPool.Lock(TStrings) as TStrings;
-    for nIdx := 2 to 2 do
+    for nIdx := 1 to 2 do
       nList.Add( 'Insert Into TableA(D_ID, D_Port) Values(''WriteB'', ' + nIdx.ToString + ')' );
     //xxxxx
 
@@ -157,12 +157,12 @@ begin
       FOnWork.WorkRefer := procedure (const nConfig: PThreadWorkerConfig;
         const nThread: TThread)
       var nQA,nQB: TDataset;
+          nTA,nTB: TDBTransContext;
       begin
         nQA := nil;
         nQB := nil;
         with gMG.FDBManager do
         try
-          WriteLog('');
           nQA := LockDBQuery();
           nQB := LockDBQuery();
 
@@ -172,21 +172,21 @@ begin
             Writelog(Fields[0].AsString);
           end;
 
-          InitTrans(nQA);         //重置事务计数
-          BeginTrans(nQA);        //A.事务开始:开启事务,增加计数
+         nTA := BeginTrans(nQA);    //A.事务开始:开启事务,增加计数
           try
-            BeginTrans(nQB);      //B.事务开始:同线程再次开启事务时,只增加计数
+            nTB := BeginTrans(nQB); //B.事务开始:同线程再次开启事务时,只增加计数
             try
-              CommitTrans(nQB);   //B.事务提交:同线程提交事务时,只减少计数
+              WriteDB_InTransB;     //事务内嵌套调用,同属于一个事务
+              nTB.CommitTrans;      //B.事务提交:同线程提交事务时,只减少计数
             except
-              RollbackTrans(nQB); //B.事务回滚:同线程事务回滚
+              nTB.RollbackTrans;    //B.事务回滚:同线程事务回滚
             end;
 
-            WriteDB_InTransA;     //事务内嵌套调用,同属于一个事务
-            CommitTrans(nQA);     //A.事务提交:计数为1时提交事务
-            WriteDB_InTransB;     //事务外嵌套调用,单独事务
+            WriteDB_InTransA;       //事务内嵌套调用,同属于一个事务
+            nTA.CommitTrans;        //A.事务提交:计数为1时提交事务
+            WriteDB_InTransB;       //事务外嵌套调用,单独事务
           except
-            RollbackTrans(nQA);   //A.事务回滚,若已回滚则忽略
+            nTA.RollbackTrans;      //A.事务回滚,若已回滚则忽略
           end;
         finally
           ReleaseDBQuery(nQA);
