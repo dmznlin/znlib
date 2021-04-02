@@ -7,7 +7,7 @@ unit UWaitIndicator;
 interface
 
 uses
-  Windows, SysUtils, Classes, Graphics, Forms, ULibFun;
+  Winapi.Windows, SysUtils, Classes, Graphics, Forms, ULibFun;
 
 procedure ShowWaitForm(const nPForm: TForm; const nMsg: string = '';
  const nRefresh: Boolean = False); overload;

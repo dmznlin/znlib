@@ -105,7 +105,7 @@ Version 1.0.0, 2004-07-15
 
 interface
 
-uses Windows, SysUtils, Types, Classes;
+uses SysUtils, Types, Classes;
 
 //////////////////////////////////////////////////////////////////
 // Universal Encode/Decode algorithms for Base16, Base32 and Base64

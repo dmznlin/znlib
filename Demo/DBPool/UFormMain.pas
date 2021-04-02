@@ -177,16 +177,16 @@ begin
             nTB := BeginTrans(nQB); //B.事务开始:同线程再次开启事务时,只增加计数
             try
               WriteDB_InTransB;     //事务内嵌套调用,同属于一个事务
-              nTB.CommitTrans;      //B.事务提交:同线程提交事务时,只减少计数
+              nTB.CommitTrans;      //B.事务提交:同线程提交事务,只减少计数
             except
-              nTB.RollbackTrans;    //B.事务回滚:同线程事务回滚
+              nTB.RollbackTrans;    //B.同线程事务回滚,只减少计数
             end;
 
             WriteDB_InTransA;       //事务内嵌套调用,同属于一个事务
-            nTA.CommitTrans;        //A.事务提交:计数为1时提交事务
+            nTA.CommitTrans;        //A.事务提交:计数为1则提交事务
             WriteDB_InTransB;       //事务外嵌套调用,单独事务
           except
-            nTA.RollbackTrans;      //A.事务回滚,若已回滚则忽略
+            nTA.RollbackTrans;      //A.事务回滚:计数为1则回滚事务
           end;
         finally
           ReleaseDBQuery(nQA);

@@ -35,6 +35,37 @@
   *.结构相同的多张表,处理方法如下:
     1.TDBTable.Copy: 复制表结构.
     2.TDBTable.Add方法中,若SQL语句含有 cDBTables 常量,则所有表都会执行.
+
+  *.事务(嵌套)的使用方法:
+    procedure TransDemo();
+    var nQA,nQB: TDataset;
+        nTA,nTB: TDBTransContext;
+    begin
+      nQA := nil;
+      nQB := nil;
+      with gMG.FDBManager do
+      try
+        nQA := LockDBQuery();
+        nQB := LockDBQuery();
+
+        nTA := BeginTrans(nQA);   //A.事务开始:开启事务,增加计数
+        try
+          nTB := BeginTrans(nQB); //B.事务开始:同线程再次开启事务时,只增加计数
+          try
+            nTB.CommitTrans;      //B.事务提交:同线程提交事务,只减少计数
+          except
+            nTB.RollbackTrans;    //B.事务回滚:同线程事务回滚,只减少计数
+          end;
+
+          nTA.CommitTrans;        //A.事务提交:计数为1则提交事务
+        except
+          nTA.RollbackTrans;      //A.事务回滚:计数为1则回滚事务
+        end;
+      finally
+        ReleaseDBQuery(nQA);
+        ReleaseDBQuery(nQB);
+      end;
+    end;
 *******************************************************************************}
 unit UDBManager;
 
@@ -50,6 +81,9 @@ const
   sDBTables  = '$TBS';
   sDBIndex   = '$IDX';
   sDBTrigger = '$TRG';
+
+  //数据密钥
+  sDBEncryptKey                  = 'libdbkey';
 
   //小数字段
   sField_Access_Decimal          = 'Float';
@@ -87,7 +121,11 @@ type
     FName  : string;                            //连接名称
     FConn  : string;                            //连接字符串
     FFitDB : TDBType;                           //适配数据库
+
+    FValid : Boolean;                           //是否有效
+    FChanged: Boolean;                          //是否变动
   end;
+  TDBConnConfigs = array of TDBConnConfig;
 
   TDBConnTransStatus = (tsNull, tsBegin, tsCommit, tsRollback);
   //事务状态: 空,开启,提交,回滚
@@ -189,11 +227,11 @@ type
     function CheckDBConn(const nDB: string = ''): string; virtual;
     {*数据库链路*}
     function LockDBQuery(const nDB: string = ''): TDataSet; virtual;
-    procedure ReleaseDBQuery(const nQuery: TDataSet;
+    procedure ReleaseDBQuery(const nQuery: TObject;
       const nResetConn: Boolean = False); virtual;
     {*数据库对象*}
     function DBQuery(const nSQL: string;
-      const nQuery: TObject;
+      const nQuery: TObject = nil;
       const nDB: string = '';
       const nLockBookmark: Boolean = False): TDataSet; virtual;
     function DBExecute(const nSQL: string;
@@ -262,6 +300,9 @@ type
     {*注册对象*}
     function InitDB(const nDB: string; const nMemo: TStrings = nil): Boolean;
     {*初始化数据库*}
+    procedure LoadConfigFile(const nFile: string);
+    procedure SaveConfigFile(const nFile: string);
+    {*读写配置*}
     procedure AddTableBuilder(const nBuilder: TDBTableBuilder);
     procedure AddDB(nConfig: TDBConnConfig);
     function AddTable(const nTable: string; const nList: TList;
@@ -279,10 +320,10 @@ type
     function CheckDBConn(const nDB: string = ''): string;
     {*数据库链路*}
     function LockDBQuery(const nDB: string = ''): TDataSet;
-    procedure ReleaseDBQuery(const nQuery: TDataSet;
+    procedure ReleaseDBQuery(const nQuery: TObject;
       const nResetConn: Boolean = False);
     {*数据库对象*}
-    function DBQuery(const nSQL: string; const nQuery: TObject;
+    function DBQuery(const nSQL: string; const nQuery: TObject = nil;
       const nDB: string = ''; const nLockBookmark: Boolean = False): TDataSet;
     function DBExecute(const nSQL: string; const nCmd: TObject = nil;
       const nDB: string = ''): Integer; overload;
@@ -297,6 +338,7 @@ type
     property DefaultDB: string read FDefaultDB write FDefaultDB;
     property DefaultFit: TDBType read FDefaultFit write FDefaultFit;
     property Driver: TDBDriver read FActiveDriver;
+    property DBList: TDictionary<string, TDBConnConfig> read FDBConfig;
     property AutoReconnect: Boolean read FAutoReconnect write FAutoReconnect;
     {*属性相关*}
   end;
@@ -308,7 +350,7 @@ var
 implementation
 
 uses
-  {$IFDEF EnableADODriver}UDBDriverADO,{$ENDIF}
+  System.IniFiles, {$IFDEF EnableADODriver}UDBDriverADO,{$ENDIF}
   ULibFun, UManagerGroup;
 
 class procedure TDBManager.WriteLog(const nEvent: string; const nMemo: TStrings);
@@ -434,7 +476,7 @@ end;
 //Date: 2020-04-17
 //Parm: 查询对象;重置连接状态
 //Desc: 释放nQuery到连接池
-procedure TDBDriver.ReleaseDBQuery(const nQuery: TDataSet;
+procedure TDBDriver.ReleaseDBQuery(const nQuery: TObject;
   const nResetConn: Boolean);
 begin
   //null
@@ -925,6 +967,124 @@ begin
   end;
 end;
 
+//Date: 2021-03-26
+//Parm: 配置文件
+//Desc: 载入nFile文件
+procedure TDBManager.LoadConfigFile(const nFile: string);
+var nStr: string;
+    nIdx: Integer;
+    nIni: TIniFile;
+    nList: TStrings;
+    nCfg: TDBConnConfig;
+begin
+  FDBConfig.Clear;
+  //clear first
+  if not FileExists(nFile) then Exit;
+  //invalid file
+
+  nList := nil;
+  nIni := TIniFile.Create(nFile);
+  with nIni do
+  try
+    nStr := ReadString('Config', 'DefaultDB', '');
+    if nStr <> '' then
+      FDefaultDB := nStr;
+    //xxxxx
+
+    nStr := ReadString('Config', 'DefaultFit', '');
+    if nStr <> '' then
+      FDefaultFit := TStringHelper.Str2Enum<TDBType>(nStr);
+    //xxxxx
+
+    nStr := ReadString('Config', 'AutoReconnect', '');
+    if nStr <> '' then
+      FAutoReconnect := nStr <> 'N';
+    //xxxxx
+
+    nStr := ReadString('Config', 'ActiveDriver', '');
+    if nStr <> '' then
+      ActiveDriver(nStr);
+    //xxxxx
+
+    nList := gMG.FObjectPool.Lock(TStrings) as TStrings;
+    ReadSections(nList);
+    //read all sections
+
+    nIdx := nList.IndexOf('Config');
+    if nIdx > -1 then
+      nList.Delete(nIdx);
+    //delete main section
+
+    for nIdx := 0 to nList.Count-1 do
+    with nCfg do
+    begin
+      FID := nList[nIdx];
+      FName := ReadString(FID, 'name', '');
+
+      nStr := ReadString(FID, 'conn', '');
+      FConn := TEncodeHelper.Decode_3DES(nStr, sDBEncryptKey);
+
+      nStr := ReadString(FID, 'fitdb', 'dtDefault');
+      FFitDB := TStringHelper.Str2Enum<TDBType>(nStr);
+
+      FValid := True;
+      FChanged := False;
+      AddDB(nCfg); //new db config
+    end;
+  finally
+    gMG.FObjectPool.Release(nList);
+    nIni.Free;
+  end;
+end;
+
+//Date: 2021-03-31
+//Parm: 配置文件
+//Desc: 保存配置到nFile文件
+procedure TDBManager.SaveConfigFile(const nFile: string);
+var nStr: string;
+    nIni: TIniFile;
+    nCfg,nConn: TDBConnConfig;
+begin
+  nIni := TIniFile.Create(nFile);
+  with nIni do
+  try
+    WriteString('Config', 'DefaultDB', FDefaultDB);
+    WriteString('Config', 'DefaultFit', TStringHelper.Enum2Str<TDBType>(FDefaultFit));
+    WriteString('Config', 'ActiveDriver', Driver.DriverInfo.DrvName);
+
+    if FAutoReconnect then
+         nStr := 'Y'
+    else nStr := 'N';
+    WriteString('Config', 'AutoReconnect', nStr);
+
+    for nCfg in FDBConfig.Values do
+    begin
+      if not nCfg.FChanged then Continue;
+      //only save changed value
+
+      if not nCfg.FValid then //delete
+      begin
+        nIni.EraseSection(nCfg.FID);
+        FDBConfig.Remove(nCfg.FID);
+        Continue;
+      end;
+
+      with nCfg do
+      begin
+        WriteString(FID, 'name', nCfg.FName);
+        WriteString(FID, 'fitdb', TStringHelper.Enum2Str<TDBType>(FFitDB));
+        WriteString(FID, 'conn', TEncodeHelper.Encode_3DES(FConn, sDBEncryptKey));
+
+        nConn := nCfg;
+        nConn.FChanged := False;
+        AddDB(nConn); //modify
+      end;
+    end;
+  finally
+    nIni.Free;
+  end;
+end;
+
 //------------------------------------------------------------------------------
 //Date: 2020-04-20
 //Parm: 数据库标识
@@ -1386,6 +1546,11 @@ begin
   if Length(Drivers) < 1 then
     raise Exception.Create('TDBManager: Database Driver List Is Empty!');
   ActiveDriver(Drivers[0].DriverInfo.DrvName);
+
+  {$IFDEF EnableThirdDEC}
+  LoadConfigFile(TApplicationHelper.gDBConfig);
+  //载入默认配置文件
+  {$ENDIF}
 end;
 
 //Date: 2021-03-14
@@ -1444,7 +1609,7 @@ end;
 //Date: 2020-04-17
 //Parm: 对象;重置
 //Desc: 释放nQuery对象
-procedure TDBManager.ReleaseDBQuery(const nQuery: TDataSet;
+procedure TDBManager.ReleaseDBQuery(const nQuery: TObject;
   const nResetConn: Boolean);
 begin
   FActiveDriver.ReleaseDBQuery(nQuery, nResetConn);

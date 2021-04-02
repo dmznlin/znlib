@@ -24,11 +24,11 @@ type
     function CheckDBConn(const nDB: string = ''): string; override;
     {*数据库链路*}
     function LockDBQuery(const nDB: string = ''): TDataSet; override;
-    procedure ReleaseDBQuery(const nQuery: TDataSet;
+    procedure ReleaseDBQuery(const nQuery: TObject;
       const nResetConn: Boolean = False); override;
     {*数据库对象*}
     function DBQuery(const nSQL: string;
-      const nQuery: TObject;
+      const nQuery: TObject = nil;
       const nDB: string = '';
       const nLockBookmark: Boolean = False): TDataSet; override;
     function DBExecute(const nSQL: string;
@@ -260,7 +260,7 @@ end;
 //Date: 2020-04-17
 //Parm: 对象;重置
 //Desc: 释放nQuery对象
-procedure TDBDriverADO.ReleaseDBQuery(const nQuery: TDataSet;
+procedure TDBDriverADO.ReleaseDBQuery(const nQuery: TObject;
   const nResetConn: Boolean);
 var nQry: TADOQuery;
     nCD: PDBConnData;
@@ -299,75 +299,85 @@ var nStep: Integer;
     nException: string;
     nBookMark: TBookmark;
 begin
-  Result := nil;
-  nQry := nQuery as TADOQuery;
-  nException := '';
-
-  nStep := 0;
-  while nStep <= 2 do
+  nQry := nil;
   try
-    if nStep = 1 then
-    begin
-      if CheckDBConn(nDB) = '' then
-           Break  //connection is ok
-      else raise Exception.Create('verify connection failure');
-    end else
+    if Assigned(nQuery) then
+         nQry := nQuery as TADOQuery
+    else nQry := LockDBQuery(nDB) as TADOQuery;
 
-    if nStep = 2 then
-    begin
-      nQry.Connection.Close;
-      nQry.Connection.Open;
-    end; //reconnnect
+    Result := nil;
+    nException := '';
+    nStep := 0;
 
-    if not nQry.Connection.Connected then
-      nQry.Connection.Connected := True;
-    //xxxxx
-
-    if nLockBookmark then
-    begin
-      nQry.DisableControls;
-      nBookMark := nQry.GetBookmark;
-    end; //lock bookmark first
-
+    while nStep <= 2 do
     try
-      nQry.Close;
-      nQry.SQL.Text := nSQL;
-      nQry.Open;
+      if nStep = 1 then
+      begin
+        if CheckDBConn(nDB) = '' then
+             Break  //connection is ok
+        else raise Exception.Create('verify connection failure');
+      end else
 
-      Result := nQry;
-      nException := '';
+      if nStep = 2 then
+      begin
+        nQry.Connection.Close;
+        nQry.Connection.Open;
+      end; //reconnnect
+
+      if not nQry.Connection.Connected then
+        nQry.Connection.Connected := True;
+      //xxxxx
 
       if nLockBookmark then
       begin
-        if nQry.BookmarkValid(nBookMark) then
-          nQry.GotoBookmark(nBookMark);
-        //restore booktmark
-      end;
+        nQry.DisableControls;
+        nBookMark := nQry.GetBookmark;
+      end; //lock bookmark first
 
-      Break;
-    finally
-      if nLockBookmark then
-      begin
-        nQry.FreeBookmark(nBookMark);
-        nQry.EnableControls;
-      end;
-    end;
-  except
-    on nErr: Exception do
-    begin
-      Inc(nStep);
-      nException := nErr.Message;
+      try
+        nQry.Close;
+        nQry.SQL.Text := nSQL;
+        nQry.Open;
 
-      if nException = '' then
-        nException := 'Unknow Error(Null).';
-      FOwner.WriteLog(nException + #13#10 + nSQL);
+        Result := nQry;
+        nException := '';
 
-      if (not FOwner.AutoReconnect) or (nStep > 2) then
-      begin
-        nQry.Connection.Connected := False;
+        if nLockBookmark then
+        begin
+          if nQry.BookmarkValid(nBookMark) then
+            nQry.GotoBookmark(nBookMark);
+          //restore booktmark
+        end;
+
         Break;
+      finally
+        if nLockBookmark then
+        begin
+          nQry.FreeBookmark(nBookMark);
+          nQry.EnableControls;
+        end;
+      end;
+    except
+      on nErr: Exception do
+      begin
+        Inc(nStep);
+        nException := nErr.Message;
+
+        if nException = '' then
+          nException := 'Unknow Error(Null).';
+        FOwner.WriteLog(nException + #13#10 + nSQL);
+
+        if (not FOwner.AutoReconnect) or (nStep > 2) then
+        begin
+          nQry.Connection.Connected := False;
+          Break;
+        end;
       end;
     end;
+  finally
+    if not Assigned(nQuery) then
+      ReleaseDBQuery(nQry);
+    //xxxxx
   end;
 
   if nException <> '' then

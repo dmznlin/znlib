@@ -42,6 +42,11 @@
 {$ENDIF}
 //组件类别
 
+{$IFDEF EncryptLib}
+  {$DEFINE EnableThirdDEC}
+  //启用加解密算法库(Delphi Encryption Compendium)
+{$ENDIF}
+
 {$IFDEF RemObjects}
   {$DEFINE RO_v90}
   //使用ver9.0的RemObjects

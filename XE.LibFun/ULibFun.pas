@@ -13,6 +13,7 @@ uses
   {$IFDEF HasVCL}Vcl.Forms, Vcl.Controls,{$ENDIF}
   {$IFDEF HasFMX}FMX.Forms, FMX.Controls,{$ENDIF}
   {$IFDEF EnableThirdANSI}UByteString,{$ENDIF}
+  {$IFDEF EnableThirdDEC}DECCipherBase, DECCiphers, DECFormat,{$ENDIF}
   System.Classes, System.UITypes, System.SysUtils, System.NetEncoding,
   System.Rtti, System.Hash, System.Variants, System.IniFiles, System.Math;
 
@@ -30,6 +31,8 @@ type
   class var
     gPath: string;
     //系统所在路径
+    gSysConfig: string;
+    //系统配置文件
     gFormConfig: string;
     //窗体配置文件
     gDBConfig: string;
@@ -238,6 +241,11 @@ type
     //base64
     class function EncodeMD5(const nData: string): string; static;
     //md5
+    class function Encode_1DES(const nData,nKey: string): string; static;
+    class function Decode_1DES(const nData,nKey: string): string; static;
+    class function Encode_3DES(const nData,nKey: string): string; static;
+    class function Decode_3DES(const nData,nKey: string): string; static;
+    //DES en&decode
     {$IFDEF JsonSerializers}
     class function EncodeRecord<T: record>(const nRecord: T): string; static;
     class function DecodeRecord<T: record>(const nRecord: string): T; static;
@@ -274,7 +282,7 @@ type
     //get the week of nDate
     class function TimeLong2CH(const nTime: Int64): string; static;
     //change time long to chinese string
-    class function DateTimeSerial: string; static;
+    class function DateTimeSerial(const nSeparator: Boolean = False): string; static;
     //serial id by date
     class function GetTickCount: Cardinal; static;
     //tick counter
@@ -1957,6 +1965,94 @@ begin
   Result := THashMD5.GetHashString(nData);
 end;
 
+//Date: 2021-03-26
+//Parm: 待编码数据;密钥
+//Desc: 对nData执行1DES编码,输出Base64密文
+class function TEncodeHelper.Encode_1DES(const nData, nKey: string): string;
+{$IFDEF EnableThirdDEC}
+var nCipher: TCipher_1DES;
+{$ENDIF}
+begin
+  {$IFDEF EnableThirdDEC}
+  nCipher := TCipher_1DES.Create;
+  try
+    nCipher.Init(RawByteString(nKey));
+    nCipher.Mode := cmCBCx;
+    Result := nCipher.EncodeStringToString(nData, TFormat_Base64);
+  finally
+    nCipher.Free;
+  end;
+  {$ELSE}
+  raise Exception.Create('LibFun: DEC Library Is Disabled.');
+  {$ENDIF}
+end;
+
+//Date: 2021-03-26
+//Parm: 待解码数据;密钥
+//Desc: 对nData执行1DES解码
+class function TEncodeHelper.Decode_1DES(const nData, nKey: string): string;
+{$IFDEF EnableThirdDEC}
+var nCipher: TCipher_1DES;
+{$ENDIF}
+begin
+  {$IFDEF EnableThirdDEC}
+  nCipher := TCipher_1DES.Create;
+  try
+    nCipher.Init(RawByteString(nKey));
+    nCipher.Mode := cmCBCx;
+    Result := nCipher.DecodeStringToString(nData, TFormat_Base64);
+  finally
+    nCipher.Free;
+  end;
+  {$ELSE}
+  raise Exception.Create('LibFun: DEC Library Is Disabled.');
+  {$ENDIF}
+end;
+
+//Date: 2021-03-26
+//Parm: 待编码数据;密钥
+//Desc: 对nData执行3DES编码,输出Base64密文
+class function TEncodeHelper.Encode_3DES(const nData, nKey: string): string;
+{$IFDEF EnableThirdDEC}
+var nCipher: TCipher_3DES;
+{$ENDIF}
+begin
+  {$IFDEF EnableThirdDEC}
+  nCipher := TCipher_3DES.Create;
+  try
+    nCipher.Init(RawByteString(nKey));
+    nCipher.Mode := cmCBCx;
+    Result := nCipher.EncodeStringToString(nData, TFormat_Base64);
+  finally
+    nCipher.Free;
+  end;
+  {$ELSE}
+  raise Exception.Create('LibFun: DEC Library Is Disabled.');
+  {$ENDIF}
+end;
+
+//Date: 2021-03-26
+//Parm: 待解码数据;密钥
+//Desc: 对nData执行1DES解码
+class function TEncodeHelper.Decode_3DES(const nData, nKey: string): string;
+{$IFDEF EnableThirdDEC}
+var nCipher: TCipher_3DES;
+{$ENDIF}
+begin
+  {$IFDEF EnableThirdDEC}
+  nCipher := TCipher_3DES.Create;
+  try
+    nCipher.Init(RawByteString(nKey));
+    nCipher.Mode := cmCBCx;
+    Result := nCipher.DecodeStringToString(nData, TFormat_Base64);
+  finally
+    nCipher.Free;
+  end;
+  {$ELSE}
+  raise Exception.Create('LibFun: DEC Library Is Disabled.');
+  {$ENDIF}
+end;
+
 {$IFDEF JsonSerializers}
 //Date: 2017-12-20
 //Parm: 结构数据
@@ -2156,10 +2252,12 @@ end;
 
 //Date: 2017-11-20
 //Desc: 使用日期生产唯一串号
-class function TDateTimeHelper.DateTimeSerial: string;
+class function TDateTimeHelper.DateTimeSerial(const nSeparator: Boolean): string;
 begin
   Sleep(1); //must be
-  Result := FormatDateTime('yyyymmddhhnnsszzz', Now());
+  if nSeparator then
+       Result := FormatDateTime('yyyy-mm-dd hh:nn:ss.zzz', Now())
+  else Result := FormatDateTime('yyyymmddhhnnsszzz', Now());
 end;
 
 //Date: 2019-04-01
@@ -2210,9 +2308,10 @@ begin
       gPath := gPath + nSymbol;
     end;
 
-    gFormConfig := gPath + 'FormInfo.Ini';
-    gDBConfig := gPath + 'DBConn.Ini';
-    gLogPath := gPath + 'Logs' + nSymbol;
+    gSysConfig  := gPath + 'Config.Ini';
+    gFormConfig := gPath + 'Forms.Ini';
+    gDBConfig   := gPath + 'DBConn.Ini';
+    gLogPath    := gPath + 'Logs' + nSymbol;
   end;
 end;
 
