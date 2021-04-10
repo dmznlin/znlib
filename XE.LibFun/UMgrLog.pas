@@ -30,24 +30,6 @@ type
     FEvent   : string;             //日志内容
   end;
 
-  TSimpleLogger = class(TObject)
-  private
-    FFileExt: string;
-    FLogField: string;
-    {*日志特征*}
-    FWritePath: string;
-    FWriteLock: TCrossProcWaitObject;
-    {*同步锁定*}
-  public
-    constructor Create(const nPath: string; const nExt: string = '';
-      const nField: string = ''; const nSyncLock: Boolean = False);
-    destructor Destroy; override;
-    {*创建释放*}
-    procedure WriteLog(const nWriter: TLogWriter; const nEvent: string);
-    {*记录日志*}
-  end;
-
-  //****************************************************************************
   TLogManager = class;
   TLogManagerStatus = record
     FNumAll       : Integer;       //总处理日志数
@@ -154,69 +136,6 @@ implementation
 uses
   UManagerGroup, ULibFun;
 
-constructor TSimpleLogger.Create(const nPath,nExt,nField: string;
-  const nSyncLock: Boolean);
-begin
-  FFileExt := Trim(nExt);
-  if FFileExt = '' then
-    FFileExt := '.log';
-  //xxxxx
-
-  FLogField := Trim(nField);
-  if FLogField = '' then
-    FLogField := #9;
-  //xxxxx
-
-  if not DirectoryExists(nPath) then
-    ForceDirectories(nPath);
-  FWritePath := nPath;
-
-  if nSyncLock then
-       FWriteLock := TCrossProcWaitObject.Create()
-  else FWriteLock := nil; //for thread or process sync
-end;
-
-destructor TSimpleLogger.Destroy;
-begin
-  FWriteLock.Free;
-  inherited;
-end;
-
-//Date: 2021-01-04
-//Parm: 日志对象;事件
-//Desc: 向日志文件中写入nWriter.nEvent事件
-procedure TSimpleLogger.WriteLog(const nWriter: TLogWriter; const nEvent: string);
-var nStr: string;
-    nFile: TextFile;
-begin
-  if Assigned(FWriteLock) then
-    FWriteLock.SyncLockEnter(True);
-  //xxxxx
-  try
-    nStr := FWritePath +  TDateTimeHelper.Date2Str(Now) + FFileExt;
-    AssignFile(nFile, nStr);
-
-    if FileExists(nStr) then
-         Append(nFile)
-    else Rewrite(nFile);
-
-    nStr := FormatDateTime('hh:nn:ss.zzz', Time()) + FLogField +
-            Copy(nWriter.FOjbect.ClassName, 1, 32) + FLogField;
-    //时间,类名
-
-    if nWriter.FDesc <> '' then
-      nStr := nStr + nWriter.FDesc + FLogField;            //描述
-    nStr := nStr + nEvent;                                 //事件
-
-    WriteLn(nFile, nStr);
-  finally
-    if Assigned(FWriteLock) then
-      FWriteLock.SyncLockLeave(True);
-    CloseFile(nFile);
-  end;
-end;
-
-//------------------------------------------------------------------------------
 constructor TLogManager.Create;
 begin
   inherited;
@@ -245,21 +164,15 @@ begin
   begin
     if not Assigned(gMG.FManagers[nIdx].FManager) then
       gMG.FManagers[nIdx].FManager := TLogManager.Create;
-    {$IFDEF EnableLogManager}
     gMG.FLogManager := gMG.FManagers[nIdx].FManager as TLogManager;
-    {$ENDIF}
   end else
   begin
-    {$IFDEF EnableLogManager}
     gMG.FLogManager := nil;
-    {$ENDIF}
     FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
 
-  {$IFDEF EnableLogManager}
   gLogManager := gMG.FLogManager;
   //启用全局变量
-  {$ENDIF}
 end;
 
 procedure TLogManager.RunAfterRegistAllManager;

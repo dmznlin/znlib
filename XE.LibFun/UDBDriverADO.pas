@@ -375,7 +375,7 @@ begin
       end;
     end;
   finally
-    if not Assigned(nQuery) then
+    if (nException <> '') and (not Assigned(nQuery)) then
       ReleaseDBQuery(nQry);
     //xxxxx
   end;

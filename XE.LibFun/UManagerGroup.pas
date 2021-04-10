@@ -18,9 +18,26 @@ uses
   {$IFDEF EnableThreadPool}UThreadPool,{$ENDIF}
   {$IFDEF EnableChannelManager}UMgrChannel,{$ENDIF}
   {$IFDEF EnableMQTTMessager}UMosMessager,{$ENDIF}
-  {$IFDEF EnableParamManager}UParameters,{$ENDIF} ULibFun;
+  {$IFDEF EnableParamManager}UParameters,{$ENDIF} ULibFun, UWaitItem;
 
 type
+  TSimpleLogger = class(TObject)
+  private
+    FFileExt: string;
+    FLogField: string;
+    {*日志特征*}
+    FWritePath: string;
+    FWriteLock: TCrossProcWaitObject;
+    {*同步锁定*}
+  public
+    constructor Create(const nPath: string; const nExt: string = '';
+      const nField: string = ''; const nSyncLock: Boolean = False);
+    destructor Destroy; override;
+    {*创建释放*}
+    procedure WriteLog(const nClass,nDesc,nEvent: string);
+    {*记录日志*}
+  end;
+
   TManagersCallMethod = reference to procedure (const nObj: TObject;
     const nInstance: TRttiInstanceType; const nMethod: TRttiMethod);
   //xxxxx
@@ -40,6 +57,8 @@ type
     var
       FManagers: array of TItem;
       {*实例列表*}
+      FSimpleLogger: TSimpleLogger;
+      {*简易日志*}
   public
     FObjectPool: TObjectPoolManager;
     //对象缓冲池
@@ -83,6 +102,9 @@ type
     //关联主进程运行,处理特定资源
     procedure GetManagersStatus(const nList: TStrings);
     //获取有效管理器的当前状态
+    procedure WriteLog(const nClass,nDesc,nEvent: string); overload;
+    procedure WriteLog(const nClass: TClass; const nDesc,nEvent: string); overload;
+    //日志管理器未生效时记录简易日志
   end;
 
 var
@@ -91,6 +113,67 @@ var
   
 implementation
 
+constructor TSimpleLogger.Create(const nPath,nExt,nField: string;
+  const nSyncLock: Boolean);
+begin
+  FFileExt := Trim(nExt);
+  if FFileExt = '' then
+    FFileExt := '.log';
+  //xxxxx
+
+  FLogField := Trim(nField);
+  if FLogField = '' then
+    FLogField := #9;
+  //xxxxx
+
+  if not DirectoryExists(nPath) then
+    ForceDirectories(nPath);
+  FWritePath := nPath;
+
+  if nSyncLock then
+       FWriteLock := TCrossProcWaitObject.Create()
+  else FWriteLock := nil; //for thread or process sync
+end;
+
+destructor TSimpleLogger.Destroy;
+begin
+  FWriteLock.Free;
+  inherited;
+end;
+
+//Date: 2021-01-04
+//Parm: 日志对象类名;对象描述;事件
+//Desc: 向日志文件中写入nClass.nEvent事件
+procedure TSimpleLogger.WriteLog(const nClass,nDesc,nEvent: string);
+var nStr: string;
+    nFile: TextFile;
+begin
+  if Assigned(FWriteLock) then
+    FWriteLock.SyncLockEnter(True);
+  //xxxxx
+  try
+    nStr := FWritePath +  TDateTimeHelper.Date2Str(Now) + FFileExt;
+    AssignFile(nFile, nStr);
+
+    if FileExists(nStr) then
+         Append(nFile)
+    else Rewrite(nFile);
+
+    nStr := FormatDateTime('hh:nn:ss.zzz', Time()) + FLogField +
+            Copy(nClass, 1, 32) + FLogField;
+    //时间,类名
+
+    if nDesc <> '' then
+      nStr := nStr + nDesc + FLogField;            //描述
+    WriteLn(nFile, nStr + nEvent);                 //写入事件
+  finally
+    if Assigned(FWriteLock) then
+      FWriteLock.SyncLockLeave(True);
+    CloseFile(nFile);
+  end;
+end;
+
+//------------------------------------------------------------------------------
 //Date: 2019-05-27
 //Parm: 方法名称;对象方法;回调方法
 //Desc: 枚举所有管理,执行nMethodName方法
@@ -266,9 +349,27 @@ begin
   end);
 end;
 
+//Date: 2021-04-09
+//Parm: 日志对象;对象描述;事件
+//Desc: 向日志文件中写入nClass.nEvent事件
+procedure TManagerGroup.WriteLog(const nClass: TClass; const nDesc,nEvent: string);
+begin
+  FSimpleLogger.WriteLog(nClass.ClassName, nDesc, nEvent);
+end;
+
+//Date: 2021-04-09
+//Parm: 日志对象名称;对象描述;事件
+//Desc: 向日志文件中写入nClass.nEvent事件
+procedure TManagerGroup.WriteLog(const nClass, nDesc, nEvent: string);
+begin
+  FSimpleLogger.WriteLog(nClass, nDesc, nEvent);
+end;
+
 initialization
   FillChar(gMG, SizeOf(TManagerGroup), #0);
+  gMG.FSimpleLogger := TSimpleLogger.Create(TApplicationHelper.gLogPath, '_S.log');
   gMG.RegistAll(True);
 finalization
   gMG.RegistAll(False);
+  gMG.FSimpleLogger.Free;
 end.

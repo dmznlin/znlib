@@ -345,20 +345,9 @@ implementation
 uses
   UManagerGroup, UMgrLog, ULibFun;
 
-var
-  gSimpleLogger: TSimpleLogger = nil;
-  //日志记录器
-
 procedure TThreadPoolManager.WriteLog(const nEvent: string);
-var nWriter: TLogWriter;
 begin
-  with nWriter do
-  begin
-    FDesc := '线程管理器';
-    FOjbect := TThreadPoolManager;
-  end;
-
-  gSimpleLogger.WriteLog(nWriter, nEvent);
+  gMG.WriteLog('TThreadPoolManager', '线程管理器', nEvent);
 end;
 
 constructor TThreadPoolManager.Create;
@@ -378,9 +367,6 @@ begin
   FStatus.FWorkIdleInit := TDateTimeHelper.GetTickCount();
   FStatus.FRunErrorIndex := Low(FStatus.FRunErrors);
 
-  gSimpleLogger := TSimpleLogger.Create(TApplicationHelper.gLogPath, '_TM.log');
-  //enable logger
-
   FRunners := TList.Create;
   FWorkers := TList.Create;
   FMonitor := TThreadMonitor.Create(Self);
@@ -397,8 +383,6 @@ begin
   StopRunners;
   ClearWorkers(True);
   FRunners.Free;
-
-  FreeAndNil(gSimpleLogger);
   inherited;
 end;
 

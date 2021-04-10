@@ -115,6 +115,8 @@ begin
 end;
 
 destructor TObjectPoolManager.Destroy;
+var nInit: Int64;
+    nList: TStrings;
 begin
   SyncEnter;
   FSrvClosed := cYes; //set close flag  
@@ -122,9 +124,28 @@ begin
 
   if FNumLocked > 0 then
   begin
+    nList := nil;
+    nInit := TDateTimeHelper.GetTickCount(); //init
+
     while FNumLocked > 0 do
+    begin
       Sleep(1);
-    //wait for relese
+      //wait for relese
+
+      if (nList = nil) and
+         (TDateTimeHelper.GetTickCountDiff(nInit) > 10 * 1000) then //10s
+      try
+        nList := TStringList.Create;
+        GetStatus(nList);
+        //list objects status
+
+        gMG.WriteLog(TObjectPoolManager, '对象管理器',
+          '对象没有完全释放,详情如下:' + #13#10 + nList.Text);
+        Break;
+      finally
+        nList.Free;
+      end;
+    end;
   end;
     
   ClearPool(True);
