@@ -6,12 +6,13 @@
 
 //----------------------------------- 管理器 -----------------------------------
 {.$DEFINE RemObjects}
+{$DEFINE RO_v90}
 //启用通道管理器
 
-{.$DEFINE TaskMonitor}
+{$DEFINE TaskMonitor}
 //启用任务管理器
 
-{.$DEFINE PlugManager}
+{$DEFINE PlugManager}
 //启用插件管理器
 
 {$DEFINE LogManager}

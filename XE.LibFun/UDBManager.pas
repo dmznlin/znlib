@@ -266,7 +266,8 @@ type
     {*驱动列表*}
     class procedure RegistDriver(const nDriver: TDBDriverClass);
     {*注册驱动*}
-    class procedure WriteLog(const nEvent: string; const nMemo: TStrings = nil);
+    class procedure WriteLog(const nEvent: string; const nMemo: TStrings = nil;
+      const nSimpleLog: Boolean = False);
     {*记录日志*}
   private
     FDefaultFit: TDBType;
@@ -353,11 +354,16 @@ uses
   System.IniFiles, {$IFDEF EnableADODriver}UDBDriverADO,{$ENDIF}
   ULibFun, UManagerGroup;
 
-class procedure TDBManager.WriteLog(const nEvent: string; const nMemo: TStrings);
+class procedure TDBManager.WriteLog(const nEvent: string; const nMemo: TStrings;
+  const nSimpleLog: Boolean);
 begin
   if Assigned(nMemo) then
     nMemo.Add(TDateTimeHelper.Time2Str(Now(), True, True) + #9 + nEvent);
-  gMG.FLogManager.AddLog(TDBManager, '数据管理器', nEvent);
+  //xxxxx
+
+  if nSimpleLog then
+       gMG.WriteLog(TDBManager, '数据管理器', nEvent)
+  else gMG.FLogManager.AddLog(TDBManager, '数据管理器', nEvent);
 end;
 
 {*******************************************************************************
@@ -1527,13 +1533,17 @@ end;
 //Parm: 驱动类名
 //Desc: 注册nDriver到驱动列表
 class procedure TDBManager.RegistDriver(const nDriver: TDBDriverClass);
-var nIdx: Integer;
+var nStr: string;
+    nIdx: Integer;
 begin
   for nIdx := Low(Drivers) to High(Drivers) do
    with Drivers[nIdx].DriverInfo do
     if DrvName = nDriver.DriverInfo.DrvName then
-     raise Exception.Create('TDBManager: Driver "' + DrvName + '" Has Exists.');
-  //xxxxx
+    begin
+      nStr := 'TDBManager: Driver "' + DrvName + '" Has Exists.';
+      WriteLog(nStr, nil, True);
+      raise Exception.Create(nStr);
+    end;
 
   nIdx := Length(Drivers);
   SetLength(Drivers, nIdx + 1);
@@ -1542,9 +1552,15 @@ end;
 
 //Desc: 激活默认驱动
 procedure TDBManager.RunAfterRegistAllManager;
+var nStr: string;
 begin
   if Length(Drivers) < 1 then
-    raise Exception.Create('TDBManager: Database Driver List Is Empty!');
+  begin
+    nStr := 'TDBManager: Database Driver List Is Empty!';
+    WriteLog(nStr, nil, True);
+    raise Exception.Create(nStr);
+  end;
+
   ActiveDriver(Drivers[0].DriverInfo.DrvName);
 
   {$IFDEF EnableThirdDEC}
@@ -1557,7 +1573,8 @@ end;
 //Parm: 驱动名称
 //Desc: 激活nDriverName驱动
 procedure TDBManager.ActiveDriver(const nDriverName: string);
-var nIdx: Integer;
+var nStr: string;
+    nIdx: Integer;
 begin
   if Assigned(FActiveDriver) and
      (FActiveDriver.DriverInfo.DrvName = nDriverName) then Exit;
@@ -1571,7 +1588,9 @@ begin
     Exit;
   end;
 
-  raise Exception.Create('TDBManager: Driver "' + nDriverName + '" Is Invalid.');
+  nStr := 'TDBManager: Driver "' + nDriverName + '" Is Invalid.';
+  WriteLog(nStr, nil, True);
+  raise Exception.Create(nStr);
 end;
 
 //Date: 2020-04-17

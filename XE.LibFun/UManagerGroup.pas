@@ -86,6 +86,9 @@ type
     //参数管理器
     {$IFDEF EnableChannelManager}FChannelManager: TChannelManager;{$ENDIF}
     //RemObjects通道管理器
+  private
+    procedure InnerLog(const nEvent: string);
+    //管理器内部日志
   public
     procedure CallManagersMethod(const nMethodName: string;
       const nObjMethod: Boolean; const nCallback: TManagersCallMethod);
@@ -248,6 +251,14 @@ begin
   end; //注册后执行
 end;
 
+//Date: 2021-04-11
+//Parm: 事件
+//Desc: 记录管理器内部事件
+procedure TManagerGroup.InnerLog(const nEvent: string);
+begin
+  WriteLog('TManagerGroup', '管理器组', nEvent);
+end;
+
 //Date: 2017-04-18
 //Parm: 调用类;变量名;管理器变量
 //Desc: 当nCallClass需要nManager支持,但nManager为nil,抛出异常.
@@ -258,7 +269,10 @@ begin
   if not Assigned(nManager) then
   begin
     nStr := '%s Needs TManagerGroup.%s(nil) Support.';
-    raise Exception.Create(Format(nStr, [nCallClass, nManagerName]));
+    nStr := Format(nStr, [nCallClass, nManagerName]);
+
+    InnerLog(nStr);
+    raise Exception.Create(nStr);
   end;
 end;
 
@@ -297,14 +311,20 @@ begin
         if nBase <> sAllManager then        
         begin
           nStr := '%s: Manager "%s" Is Not Valid Class.';
-          raise Exception.Create(Format(nStr, [nCallClass, nBase]));
+          nStr := Format(nStr, [nCallClass, nBase]);
+
+          InnerLog(nStr);
+          raise Exception.Create(nStr);
         end;  
       end;
 
       if not nBool then
       begin
         nStr := '%s: Manager "%s" Is Not Exists.';
-        raise Exception.Create(Format(nStr, [nCallClass, nBase]));
+        nStr := Format(nStr, [nCallClass, nBase]);
+
+        InnerLog(nStr);
+        raise Exception.Create(nStr);
       end; //not exits
     end;
   finally
