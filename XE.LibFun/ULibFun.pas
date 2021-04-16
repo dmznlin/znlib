@@ -9,7 +9,7 @@ interface
 
 uses
   {$IFDEF JsonSerializers}System.JSON.Serializers, System.JSON.Types,{$ENDIF}
-  {$IFDEF MSWin}Winapi.Windows,{$ENDIF}
+  {$IFDEF MSWin}Winapi.Windows, UNetwork,{$ENDIF}
   {$IFDEF HasVCL}Vcl.Forms, Vcl.Controls,{$ENDIF}
   {$IFDEF HasFMX}FMX.Forms, FMX.Controls,{$ENDIF}
   {$IFDEF EnableThirdANSI}UByteString,{$ENDIF}
@@ -28,17 +28,36 @@ type
     //id record
 
   public
-  class var
-    gPath: string;
-    //系统所在路径
-    gSysConfig: string;
-    //系统配置文件
-    gFormConfig: string;
-    //窗体配置文件
-    gDBConfig: string;
-    //数据库配置文件
-    gLogPath: string;
-    //日志所在目录
+    type
+      TProgramConfig = record
+      FProgram    : string;                              //程序标识
+      FTitleApp   : string;                              //状态栏名称
+      FTitleMain  : string;                              //主窗体名称
+      FDeployName : string;                              //部署单位名称
+      FCopyRight  : string;                              //程序版权声明
+
+      //for server mode
+      FPort       : Integer;                             //服务端口
+      FFavicon    : string;                              //收藏夹显示图标
+    end;
+
+    TAppParam = record
+      FGroupID    : string;                              //所属集团
+      FFactory    : string;                              //所属工厂
+      FLocalIP    : string;                              //本机IP
+      FLocalMAC   : string;                              //本机MAC
+      FLocalName  : string;                              //本机名称
+
+      FActive     : Integer;                             //活动程序
+      FPrograms   : TArray<TProgramConfig>;              //程序参数
+    end;
+
+    class var
+      gPath       : string;                              //系统所在路径
+      gSysConfig  : string;                              //系统配置文件
+      gFormConfig : string;                              //窗体配置文件
+      gDBConfig   : string;                              //数据库配置文件
+      gLogPath    : string;                              //日志所在目录
 
   public
     class function GetCPUIDStr: string; static;
@@ -62,6 +81,11 @@ type
     class procedure SaveFormConfig(const nForm: TForm;
       const nIniF: TIniFile = nil; const nFile: string = '');
     //存储窗体信息
+    class function ReplaceGlobalPath(const nPath: string): string;
+    //替换nPath中的$Path宏定义
+    class procedure LoadParameters(var nParam: TAppParam; nIni: TIniFile = nil;
+      const nExtend: Boolean = True);
+    //载入系统配置参数
   end;
 
   TStringHelper = class
@@ -405,7 +429,7 @@ end;
 
 //Date: 2018-03-15
 //Parm: 配置文件
-//Desc: 验证nFile文件配置的日期是否过期s
+//Desc: 验证nFile文件配置的日期是否过期
 class function TApplicationHelper.IsSystemExpire(const nFile: string): Boolean;
 var nStr,nEn,nLock: string;
 begin
@@ -672,6 +696,96 @@ begin
     if not Assigned(nIniF) then
       nIni.Free;
     //xxxxx
+  end;
+end;
+
+//Date: 2021-04-15
+//Parm: 文件路径
+//Desc: 替换nPath中的全局路径
+class function TApplicationHelper.ReplaceGlobalPath(const nPath: string): string;
+begin
+  Result := TStringHelper.CopyRight(gPath, 1);
+  if (Result = '\') or (Result = '/') then
+       Result := TStringHelper.CopyNoRight(gPath, 1)
+  else Result := gPath;
+
+  Result := StringReplace(nPath, '$Path', Result, [rfReplaceAll, rfIgnoreCase]);
+end;
+
+//Date: 2021-04-15
+//Parm: 配置参数;文件对象
+//Desc: 加载基础配置参数到nParam中
+class procedure TApplicationHelper.LoadParameters(var nParam: TAppParam;
+  nIni: TIniFile; const nExtend: Boolean);
+const sMain = 'Config';
+var nStr: string;
+    nIdx: Integer;
+    nBool: Boolean;
+    nList: TStrings;
+begin
+  nList := nil;
+  nBool := Assigned(nIni);
+
+  if not nBool then
+    nIni := TIniFile.Create(TApplicationHelper.gSysConfig);
+  //xxxxx
+
+  with nParam,nIni do
+  try
+    FGroupID := ReadString(sMain, 'GroupID', 'group');       //集团代码
+    FFactory := ReadString(sMain, 'FactoryID', 'factory');   //工厂代码
+    nStr     := ReadString(sMain, 'ProgID', 'runsoft');      //系统代码
+
+    if Trim(nStr) = '' then
+      raise Exception.Create('ULibFun.LoadParameters: Invalid "ProgID" Config');
+    //xxxxx
+
+    nList := TStringList.Create;
+    TStringHelper.Split(nStr, nList, 0, ',');                //id,id,id
+    SetLength(FPrograms, nList.Count);
+
+    FActive := 0;
+    nStr := ReadString(sMain, 'Active', '');                 //默认系统代码
+
+    for nIdx := 0 to nList.Count - 1 do
+    with FPrograms[nIdx] do
+    begin
+      FProgram    := nList[nIdx];
+      FTitleApp   := ReadString(FProgram, 'AppTitle', 'application');
+      FTitleMain  := ReadString(FProgram, 'MainTitle', 'main');
+      FDeployName := ReadString(FProgram, 'DeployName', 'deploy');
+      FCopyRight  := ReadString(FProgram, 'CopyRight', 'copyright');
+
+      //for server mode
+      FPort       := ReadInteger(FProgram, 'ServerPort', 8080);
+      FFavicon    := ReplaceGlobalPath(ReadString(FProgram, 'Favicon', ''));
+
+      if CompareText(FProgram, nStr) = 0 then
+        FActive := nIdx;
+      //set default
+    end;
+  finally
+    nList.Free;
+    if not nBool then nIni.Free;
+  end;
+
+  if nBool then
+       nStr := nIni.FileName
+  else nStr := gSysConfig;
+
+  if not IsValidConfigFile(nStr, nParam.FPrograms[nParam.FActive].FProgram) then
+    raise Exception.Create('ULibFun.LoadParameters: Invalid Config File.');
+  //invalid config
+
+  if nExtend then
+  begin
+    {$IFDEF MSWin}
+    with nParam do
+    begin
+      FLocalMAC := MakeActionID_MAC();
+      GetLocalIPConfig(FLocalName, FLocalIP);
+    end;
+    {$ENDIF}
   end;
 end;
 
