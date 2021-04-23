@@ -245,15 +245,25 @@ end;
 function TDBDriverADO.LockDBQuery(const nDB: string): TDataSet;
 var nConn: TADOConnection;
 begin
-  nConn := LockDBConn(nDB) as TADOConnection;
-  //get connection first
-  Result := gMG.FObjectPool.Lock(TADOQuery) as TADOQuery;
+  nConn := nil;
+  Result := nil;
+  try
+    nConn := LockDBConn(nDB) as TADOConnection;
+    //get connection first
+    Result := gMG.FObjectPool.Lock(TADOQuery) as TADOQuery;
 
-  with Result as TADOQuery do
-  begin
-    Close;
-    ParamCheck := False;
-    Connection := nConn;
+    with Result as TADOQuery do
+    begin
+      Close;
+      ParamCheck := False;
+      Connection := nConn;
+    end;
+  except
+    if Assigned(Result) then
+         ReleaseDBQuery(Result)
+    else ReleaseDBConn(nConn);
+
+    raise;
   end;
 end;
 
