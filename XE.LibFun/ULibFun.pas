@@ -76,15 +76,15 @@ type
     //枚举nPCtrl的所有子控件
     {$ENDIF}
     class procedure LoadFormConfig(const nForm: TForm;
-      const nIniF: TIniFile = nil; const nFile: string = '');
+      const nIniF: TIniFile = nil; const nFile: string = ''); static;
     //载入窗体信息
     class procedure SaveFormConfig(const nForm: TForm;
-      const nIniF: TIniFile = nil; const nFile: string = '');
+      const nIniF: TIniFile = nil; const nFile: string = ''); static;
     //存储窗体信息
-    class function ReplaceGlobalPath(const nPath: string): string;
+    class function ReplaceGlobalPath(const nPath: string): string; static;
     //替换nPath中的$Path宏定义
     class procedure LoadParameters(var nParam: TAppParam; nIni: TIniFile = nil;
-      const nExtend: Boolean = True);
+      const nExtend: Boolean = True); static;
     //载入系统配置参数
   end;
 

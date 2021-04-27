@@ -82,6 +82,10 @@ const
   sDBIndex   = '$IDX';
   sDBTrigger = '$TRG';
 
+  //连接字符串标识
+  sDBUser    = '$USER';
+  sDBPwd     = '$PWD';
+
   //数据密钥
   sDBEncryptKey                  = 'libdbkey';
 
@@ -117,13 +121,16 @@ type
 
   PDBConnConfig = ^TDBConnConfig;
   TDBConnConfig = record
-    FID    : string;                            //连接标识
-    FName  : string;                            //连接名称
-    FConn  : string;                            //连接字符串
-    FFitDB : TDBType;                           //适配数据库
+    FID       : string;                         //连接标识
+    FName     : string;                         //连接名称
+    FConn     : string;                         //连接字符串
+    FFitDB    : TDBType;                        //适配数据库
 
-    FValid : Boolean;                           //是否有效
-    FChanged: Boolean;                          //是否变动
+    FUser     : string;                         //数据库账户
+    FPassword : string;                         //数据库密码
+    FConnCfg  : string;                         //连接配置
+    FValid    : Boolean;                        //是否有效
+    FChanged  : Boolean;                        //是否变动
   end;
   TDBConnConfigs = array of TDBConnConfig;
 
@@ -907,6 +914,14 @@ begin
     nConfig.FFitDB := FDefaultFit;
   //check default
 
+  nConfig.FConn := StringReplace(nConfig.FConnCfg,
+    sDBUser, nConfig.FUser, [rfReplaceAll, rfIgnoreCase]);
+  //user
+
+  nConfig.FConn := StringReplace(nConfig.FConn,
+    sDBPwd, nConfig.FPassword, [rfReplaceAll, rfIgnoreCase]);
+  //password
+
   if FDBConfig.ContainsKey(nConfig.FID) then
        FDBConfig.Items[nConfig.FID] := nConfig
   else FDBConfig.Add(nConfig.FID, nConfig);
@@ -1027,8 +1042,14 @@ begin
       FID := nList[nIdx];
       FName := ReadString(FID, 'name', '');
 
+      nStr := ReadString(FID, 'user', '');
+      FUser := TEncodeHelper.Decode_3DES(nStr, sDBEncryptKey);
+
+      nStr := ReadString(FID, 'password', '');
+      FPassword := TEncodeHelper.Decode_3DES(nStr, sDBEncryptKey);
+
       nStr := ReadString(FID, 'conn', '');
-      FConn := TEncodeHelper.Decode_3DES(nStr, sDBEncryptKey);
+      FConnCfg := TEncodeHelper.DecodeBase64(nStr);
 
       nStr := ReadString(FID, 'fitdb', 'dtDefault');
       FFitDB := TStringHelper.Str2Enum<TDBType>(nStr);
@@ -1079,7 +1100,9 @@ begin
       begin
         WriteString(FID, 'name', nCfg.FName);
         WriteString(FID, 'fitdb', TStringHelper.Enum2Str<TDBType>(FFitDB));
-        WriteString(FID, 'conn', TEncodeHelper.Encode_3DES(FConn, sDBEncryptKey));
+        WriteString(FID, 'user', TEncodeHelper.Encode_3DES(FUser, sDBEncryptKey));
+        WriteString(FID, 'password', TEncodeHelper.Encode_3DES(FPassword, sDBEncryptKey));
+        WriteString(FID, 'conn', TEncodeHelper.EncodeBase64(FConnCfg));
 
         nConn := nCfg;
         nConn.FChanged := False;
