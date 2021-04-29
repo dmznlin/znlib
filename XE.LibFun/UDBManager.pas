@@ -1584,12 +1584,14 @@ begin
     raise Exception.Create(nStr);
   end;
 
-  ActiveDriver(Drivers[0].DriverInfo.DrvName);
-
   {$IFDEF EnableThirdDEC}
   LoadConfigFile(TApplicationHelper.gDBConfig);
   //载入默认配置文件
   {$ENDIF}
+
+  if not Assigned(FActiveDriver) then
+    ActiveDriver(Drivers[0].DriverInfo.DrvName);
+  //激活默认驱动
 end;
 
 //Date: 2021-03-14
