@@ -19,16 +19,18 @@ uses
 
 type
   TApplicationHelper = class
-  strict private
-  const
-    sVerifyCode = ';Verify:';
-    //id verify
-  type
-     TCPUID = array[1..4] of Longint;
-    //id record
-
   public
+    const
+      sVerifyCode = ';Verify:';
+      //id verify
+
+      sDefaultAdminKey = 'sys_admin';
+      //the key for encrypt admin's data
+
     type
+      TCPUID = array[1..4] of Longint;
+      //id record
+
       TProgramConfig = record
       FProgram    : string;                              //程序标识
       FTitleApp   : string;                              //状态栏名称
