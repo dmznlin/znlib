@@ -24,7 +24,7 @@ type
       sVerifyCode = ';Verify:';
       //id verify
 
-      sDefaultAdminKey = 'sys_admin';
+      sDefaultAdminKey = 'sysadmin';
       //the key for encrypt admin's data
 
     type
@@ -32,27 +32,28 @@ type
       //id record
 
       TProgramConfig = record
-      FProgram    : string;                              //程序标识
-      FTitleApp   : string;                              //状态栏名称
-      FTitleMain  : string;                              //主窗体名称
-      FDeployName : string;                              //部署单位名称
-      FCopyRight  : string;                              //程序版权声明
+        FProgram    : string;                            //程序标识
+        FTitleApp   : string;                            //状态栏名称
+        FTitleMain  : string;                            //主窗体名称
+        FDeployName : string;                            //部署单位名称
+        FCopyRight  : string;                            //程序版权声明
 
-      //for server mode
-      FPort       : Integer;                             //服务端口
-      FFavicon    : string;                              //收藏夹显示图标
-    end;
+        //for server mode
+        FPort       : Integer;                           //服务端口
+        FFavicon    : string;                            //收藏夹显示图标
+      end;
 
-    TAppParam = record
-      FGroupID    : string;                              //所属集团
-      FFactory    : string;                              //所属工厂
-      FLocalIP    : string;                              //本机IP
-      FLocalMAC   : string;                              //本机MAC
-      FLocalName  : string;                              //本机名称
+      TAppParam = record
+        FGroupID    : string;                            //所属集团
+        FFactory    : string;                            //所属工厂
+        FLocalIP    : string;                            //本机IP
+        FLocalMAC   : string;                            //本机MAC
+        FLocalName  : string;                            //本机名称
+        FAdminKey   : string;                            //管理员密钥
 
-      FActive     : Integer;                             //活动程序
-      FPrograms   : TArray<TProgramConfig>;              //程序参数
-    end;
+        FActive     : Integer;                           //活动程序
+        FPrograms   : TArray<TProgramConfig>;            //程序参数
+      end;
 
     class var
       gPath       : string;                              //系统所在路径
@@ -126,6 +127,11 @@ type
     class function MacroValue(const nData: string;
       const nMacro: TDynamicMacroArray): string; static;
     //处理宏定义
+    class function MS(const nData: array of string;
+      const nIdx: Integer): string; overload; static;
+    class function MS(const nData: array of string;
+      const nFirst: Boolean): string; overload; static;
+    //多个字符串中选择一个(multi select)
     class function StrListIndex(const nStr: string; const nList: TStrings;
       const nSection: Integer; const nFlag: string = ''): Integer;
     class function StrArrayIndex(const nStr: string; const nArray: TStringArray;
@@ -742,6 +748,11 @@ begin
       raise Exception.Create('ULibFun.LoadParameters: Invalid "ProgID" Config');
     //xxxxx
 
+    FAdminKey := ReadString(sMain, 'AdminKey', '');          //管理员密钥
+    if FAdminKey = '' then
+         FAdminKey := sDefaultAdminKey
+    else FAdminKey := TEncodeHelper.Decode_3DES(FAdminKey, sDefaultAdminKey);
+
     nList := TStringList.Create;
     TStringHelper.Split(nStr, nList, 0, ',');                //id,id,id
     SetLength(FPrograms, nList.Count);
@@ -862,6 +873,32 @@ begin
     Result := StringReplace(Result, nMacro[nIdx].FMacro,
                             nMacro[nIdx].FValue, [rfReplaceAll, rfIgnoreCase]);
   end;
+end;
+
+//Date: 2021-05-06
+//Parm: 字段内容;索引
+//Desc: 使用nData的nIdx项内容
+class function TStringHelper.MS(const nData: array of string;
+  const nIdx: Integer): string;
+begin
+  if (nIdx > High(nData)) or (nIdx < Low(nData)) then
+    raise Exception.Create('TStringHelper.MS: Data out of range.');
+  Result := nData[nIdx];
+end;
+
+//Date: 2021-05-06
+//Parm: 字段内容;选项
+//Desc: 依据nBool使用nData的内容
+class function TStringHelper.MS(const nData: array of string;
+  const nFirst: Boolean): string;
+begin
+    if Length(nData) < 2 then
+    raise Exception.Create('TStringHelper.MS: Data out of range.');
+  //xxxxx
+
+  if nFirst then
+       Result := nData[0]
+  else Result := nData[1];
 end;
 
 //Date: 2018-05-03
