@@ -23,6 +23,8 @@ type
     const
       sVerifyCode = ';Verify:';
       //id verify
+      sVerifyIgnore = '@@@';
+      //ignore prefix when verify
 
       sDefaultAdminKey = 'sysadmin';
       //the key for encrypt admin's data
@@ -469,14 +471,29 @@ begin
   end;
 end;
 
+//Date: 2021-05-06
+//Parm: 列表;种子
+//Desc: 将nList中需要忽略的内容,替换为nSeed
+procedure VerifyIgnore(const nList: TStrings; const nSeed: string);
+var nIdx: Integer;
+begin
+  with TApplicationHelper do
+  begin
+    for nIdx := nList.Count - 1 downto 1 do
+     if Copy(nList[nIdx], TStringHelper.cFI, 3) = sVerifyIgnore then
+      nList[nIdx] := nSeed;
+  end;
+end;
+
 //Date: 2018-03-15
 //Parm: 文件全路径;加密种子
 //Desc: 为nFile添加校验信息
 class procedure TApplicationHelper.AddVerifyData(const nFile, nSeed: string);
 var nStr: string;
-    nList: TStrings;
+    nList,nTmp: TStrings;
 begin
   if not FileExists(nFile) then Exit;
+  nTmp := nil;
   nList := TStringList.Create;
   try
     nList.LoadFromFile(nFile);
@@ -484,11 +501,15 @@ begin
          nList[0] := nSeed
     else nList.Insert(0, nSeed);
 
-    nStr := TEncodeHelper.EncodeMD5(nList.Text);
-    nStr := sVerifyCode + nStr;
+    nTmp := TStringList.Create;
+    nTmp.AddStrings(nList);
+    VerifyIgnore(nTmp, nSeed);
+
+    nStr := sVerifyCode + TEncodeHelper.EncodeMD5(nTmp.Text);
     nList[0] := nStr;
     nList.SaveToFile(nFile);
   finally
+    nTmp.Free;
     nList.Free;
   end;
 end;
@@ -521,6 +542,7 @@ begin
       System.Delete(nStr, 1, Length(sVerifyCode));
 
       nList[0] := nSeed;
+      VerifyIgnore(nList, nSeed);
       Result := TEncodeHelper.EncodeMD5(nList.Text) = nStr;
     end;
   finally
@@ -735,7 +757,7 @@ begin
   nBool := Assigned(nIni);
 
   if not nBool then
-    nIni := TIniFile.Create(TApplicationHelper.gSysConfig);
+    nIni := TIniFile.Create(gSysConfig);
   //xxxxx
 
   with nParam,nIni do
@@ -748,7 +770,7 @@ begin
       raise Exception.Create('ULibFun.LoadParameters: Invalid "ProgID" Config');
     //xxxxx
 
-    FAdminKey := ReadString(sMain, 'AdminKey', '');          //管理员密钥
+    FAdminKey := ReadString(sMain, sVerifyIgnore + 'AdminKey', ''); //管理员密钥
     if FAdminKey = '' then
          FAdminKey := sDefaultAdminKey
     else FAdminKey := TEncodeHelper.Decode_3DES(FAdminKey, sDefaultAdminKey);
