@@ -21,24 +21,32 @@ type
   TApplicationHelper = class
   public
     const
-      sVerifyCode = ';Verify:';
+      sVerifyCode   = ';Verify:';
       //id verify
       sVerifyIgnore = '@@@';
       //ignore prefix when verify
-
-      sDefaultAdminKey = 'sysadmin';
-      //the key for encrypt admin's data
+      sDefaultKey   = 'sysadmin';
+      //the key for encrypt data
 
     type
       TCPUID = array[1..4] of Longint;
       //id record
 
+      TDeployType = (Desktop, Web, Mobile);
+      TDeployTypes = set of TDeployType;
+      //部署类型: Desktop-Client,PC-Web,Mobile-Web
+
+      TOrganizationStructure = (osGroup, osArea, osFactory);
+      TOrganizationStructures = set of TOrganizationStructure;
+      //组织架构: 集团,区域,工厂
+
       TProgramConfig = record
         FProgram    : string;                            //程序标识
         FTitleApp   : string;                            //状态栏名称
         FTitleMain  : string;                            //主窗体名称
-        FDeployName : string;                            //部署单位名称
         FCopyRight  : string;                            //程序版权声明
+        FDeployName : string;                            //部署单位名称
+        FDeployType : TDeployType;                       //部署类型(方式)
 
         //for server mode
         FPort       : Integer;                           //服务端口
@@ -53,16 +61,16 @@ type
         FLocalName  : string;                            //本机名称
         FAdminKey   : string;                            //管理员密钥
 
-        FActive     : Integer;                           //活动程序
+        FActive     : TProgramConfig;                    //活动程序
         FPrograms   : TArray<TProgramConfig>;            //程序参数
       end;
 
     class var
-      gPath       : string;                              //系统所在路径
-      gSysConfig  : string;                              //系统配置文件
-      gFormConfig : string;                              //窗体配置文件
-      gDBConfig   : string;                              //数据库配置文件
-      gLogPath    : string;                              //日志所在目录
+      gPath         : string;                            //系统所在路径
+      gSysConfig    : string;                            //系统配置文件
+      gFormConfig   : string;                            //窗体配置文件
+      gDBConfig     : string;                            //数据库配置文件
+      gLogPath      : string;                            //日志所在目录
 
   public
     class function GetCPUIDStr: string; static;
@@ -89,7 +97,7 @@ type
     class function ReplaceGlobalPath(const nPath: string): string; static;
     //替换nPath中的$Path宏定义
     class procedure LoadParameters(var nParam: TAppParam; nIni: TIniFile = nil;
-      const nExtend: Boolean = True); static;
+      const nExtend: Boolean = False); static;
     //载入系统配置参数
   end;
 
@@ -772,14 +780,14 @@ begin
 
     FAdminKey := ReadString(sMain, sVerifyIgnore + 'AdminKey', ''); //管理员密钥
     if FAdminKey = '' then
-         FAdminKey := sDefaultAdminKey
-    else FAdminKey := TEncodeHelper.Decode_3DES(FAdminKey, sDefaultAdminKey);
+         FAdminKey := sDefaultKey
+    else FAdminKey := TEncodeHelper.Decode_3DES(FAdminKey, sDefaultKey);
 
     nList := TStringList.Create;
     TStringHelper.Split(nStr, nList, 0, ',');                //id,id,id
     SetLength(FPrograms, nList.Count);
 
-    FActive := 0;
+    FActive.FProgram := '';
     nStr := ReadString(sMain, 'Active', '');                 //默认系统代码
 
     for nIdx := 0 to nList.Count - 1 do
@@ -788,17 +796,25 @@ begin
       FProgram    := nList[nIdx];
       FTitleApp   := ReadString(FProgram, 'AppTitle', 'application');
       FTitleMain  := ReadString(FProgram, 'MainTitle', 'main');
-      FDeployName := ReadString(FProgram, 'DeployName', 'deploy');
       FCopyRight  := ReadString(FProgram, 'CopyRight', 'copyright');
+
+      FDeployName := ReadString(FProgram, 'DeployName', 'deploy');
+      FDeployType := TStringHelper.Str2Enum<TDeployType>(
+                     ReadString(FProgram, 'DeployType', ''));
+      //xxxxx
 
       //for server mode
       FPort       := ReadInteger(FProgram, 'ServerPort', 8080);
       FFavicon    := ReplaceGlobalPath(ReadString(FProgram, 'Favicon', ''));
 
       if CompareText(FProgram, nStr) = 0 then
-        FActive := nIdx;
+        FActive := FPrograms[nIdx];
       //set default
     end;
+
+    if FActive.FProgram = '' then
+      FActive := FPrograms[0];
+    //first as default
   finally
     nList.Free;
     if not nBool then nIni.Free;
@@ -808,7 +824,7 @@ begin
        nStr := nIni.FileName
   else nStr := gSysConfig;
 
-  if not IsValidConfigFile(nStr, nParam.FPrograms[nParam.FActive].FProgram) then
+  if not IsValidConfigFile(nStr, nParam.FActive.FProgram) then
     raise Exception.Create('ULibFun.LoadParameters: Invalid Config File.');
   //invalid config
 
