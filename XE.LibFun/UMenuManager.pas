@@ -13,8 +13,8 @@ unit UMenuManager;
 interface
 
 uses
-  System.Classes, System.SysUtils, System.Generics.Collections, Data.Win.ADODB,
-  UBaseObject;
+  System.Classes, System.SysUtils, System.Generics.Collections, Data.DB,
+  UBaseObject, ULibFun;
 
 type
   TMenuItemType = (mtDefault, mtProg, mtEntity, mtParent, mtItem, mtAssist);
@@ -33,6 +33,9 @@ const
   //default flag
 
 type
+  TMenuAction = (maDefault, maNewForm, maNewFrame, maExecute);
+  //菜单动作: 默认,新窗体,新页面,执行命令
+
   TMenuData = record
     FID           : string;                              //标识
     FName         : string;                              //名称
@@ -49,12 +52,13 @@ type
     FMenuID       : string;                              //菜单标识
     FPMenu        : string;                              //上级菜单
     FTitle        : string;                              //菜单标题
-    FImgIndex     : integer;                             //图标索引
+    FAction       : TMenuAction;                         //菜单动作
+    FActionData   : string;                              //动作数据
     FFlag         : string;                              //附加参数(下划线..)
-    FAction       : string;                              //菜单动作
-    FFilter       : string;                              //过滤条件
+    FImgIndex     : integer;                             //图标索引
     FLang         : string;                              //语言标识
     FNewOrder     : Single;                              //创建序列
+    FDeploy       : TApplicationHelper.TDeployTypes;     //部署类型
   end;
 
   TMenuItems = array of TMenuItem;                       //菜单列表
@@ -73,8 +77,8 @@ type
     function SetParent(const nPMenu: string): PMenuEntity;
     function SetType(const nType: TMenuItemType): PMenuEntity;
     {*设置属性*}
-    function AddM(const nID,nTitle: string; const nAction: string = '';
-      nPMenu: string = sMenuItemDefault;
+    function AddM(const nID,nTitle: string;
+      const nAction: TMenuAction = maDefault; nPMenu: string = sMenuItemDefault;
       const nFilter: string = ''; nType: TMenuItemType = mtDefault): PMenuEntity;
     {*添加菜单*}
   end;
@@ -101,7 +105,7 @@ type
     {*延迟执行*}
     procedure AddLanguage(const nID,nName: string);
     procedure DeleteLanguage(const nID: string);
-    procedure LoadLanguage(const nQuery: TADOQuery = nil);
+    procedure LoadLanguage(const nQuery: TDataSet = nil);
     {*语言管理*}
     procedure AddMenuBuilder(const nBuilder: TMenuItemBuilder);
     function AddEntity(const nProg,nEntity: string; const nList: TList): PMenuEntity;
@@ -122,11 +126,12 @@ var
 implementation
 
 uses
-  ULibFun, UManagerGroup, UDBManager;
+  UManagerGroup, UDBManager;
 
 const
   sTableLang        = 'Sys_Lang';         //多语言配置
   sTableMenu        = 'Sys_Menus';        //菜单配置
+  sTableMenuUser    = 'Sys_MenusUser';    //用户私有菜单
 
 procedure WriteLog(const nEvent: string; const nMemo: TStrings = nil);
 begin
@@ -154,21 +159,23 @@ begin
 
   gMG.FDBManager.AddTable(sTableMenu, nList, dtMSSQL).
   AddF('R_ID',          sField_SQLServer_AutoInc, '记录标识').
-  AddF('M_Prog',        'varchar(15)',            '程序标识').
+  AddF('M_UserID',      'varchar(15)',            '用户标识').
+  AddF('M_ProgID',      'varchar(15)',            '程序标识').
   AddF('M_Entity',      'varchar(15)',            '实体标识').
-  AddF('M_PMenu',       'varchar(15)',            '上级菜单').
   AddF('M_MenuID',      'varchar(15)',            '菜单标识').
+  AddF('M_PMenu',       'varchar(15)',            '上级菜单').
   AddF('M_Title',       'varchar(50)',            '菜单标题').
-  AddF('M_Action',      'varchar(100)',           '菜单动作').
+  AddF('M_Action',      'varchar(15)',            '菜单动作').
+  AddF('M_Data',        'varchar(320)',           '动作数据').
   AddF('M_Flag',        'varchar(20)',            '附加参数').
-  AddF('M_Filter',      'varchar(100)',           '过滤条件').
-  AddF('M_Type',        'varchar(5)',             '类型标识').
   AddF('M_Lang',        'varchar(5)',             '语言标识').
+  AddF('M_Deploy',      'varchar(32)',            '部署类型(Desktop,Web)').
   AddF('M_ImgIndex',    'integer default -1',     '图标索引', '-1').
   AddF('M_NewOrder',    'float default 0',        '创建序列', '0').
   //for field
-  AddI('idx_prog', 'CREATE INDEX idx_prog ON $TB.* (M_Prog ASC)');
+  AddI('idx_prog', 'CREATE INDEX $IDX ON $TBS(M_Prog ASC)').
   //for index
+  Copy(sTableMenuUser);
 end;
 
 //------------------------------------------------------------------------------
@@ -214,8 +221,8 @@ end;
 //Date: 2020-04-22
 //Parm: 菜单标识;菜单标题;父菜单
 //Desc: 新增菜单项
-function TMenuEntity.AddM(const nID, nTitle, nAction: string; nPMenu: string;
-  const nFilter: string; nType: TMenuItemType): PMenuEntity;
+function TMenuEntity.AddM(const nID, nTitle: string; const nAction: TMenuAction;
+  nPMenu: string; const nFilter: string; nType: TMenuItemType): PMenuEntity;
 var nIdx,nInt: Integer;
 begin
   Result := @Self;
@@ -253,7 +260,7 @@ begin
     FPMenu        := nPMenu;
     FTitle        := nTitle;
     FAction       := nAction;
-    FFilter       := nFilter;
+    FActionData   := '';
 
     FFlag         := '';
     FLang         := '';
@@ -309,7 +316,7 @@ end;
 //Desc: 添加多语言项
 procedure TMenuManager.AddLanguage(const nID, nName: string);
 var nStr: string;
-    nQuery: TADOQuery;
+    nQuery: TDataSet;
 begin
   nQuery := nil;
   try
@@ -357,10 +364,10 @@ end;
 
 //Date: 2020-04-24
 //Desc: 载入多语言列表
-procedure TMenuManager.LoadLanguage(const nQuery: TADOQuery);
+procedure TMenuManager.LoadLanguage(const nQuery: TDataSet);
 var nStr: string;
     nIdx: Integer;
-    nQry: TADOQuery;
+    nQry: TDataSet;
 begin
   nQry := nil;
   with gMG.FDBManager do
@@ -495,7 +502,7 @@ var nStr,nSQL: string;
     nMenus: TList;
     nListA,nListB: TStrings;
 
-    nQuery: TADOQuery;
+    nQuery: TDataSet;
     nEntity: PMenuEntity;
 begin
   Result := False;
@@ -572,7 +579,6 @@ begin
             SF('M_Title', FTitle),
             SF('M_Action', FAction),
             SF('M_Flag', FFlag),
-            SF('M_Filter', FFilter),
             SF('M_Type', sMenuTypeID[FType]),
             SF('M_Lang', FMultiLang[i].FID),
             SF('M_NewOrder', j, sfVal)

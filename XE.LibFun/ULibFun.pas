@@ -800,7 +800,7 @@ begin
 
       FDeployName := ReadString(FProgram, 'DeployName', 'deploy');
       FDeployType := TStringHelper.Str2Enum<TDeployType>(
-                     ReadString(FProgram, 'DeployType', ''));
+                     ReadString(FProgram, sVerifyIgnore + 'DeployType', ''));
       //xxxxx
 
       //for server mode
