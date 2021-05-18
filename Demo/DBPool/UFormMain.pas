@@ -44,7 +44,7 @@ begin
   nCfg.FName := 'д╛хо©Б';
   nCfg.FFitDB := dtMSSQL;
   nCfg.FConn := Form1.Edit1.Text;
-  gMG.FDBManager.AddDB(nCfg);
+  gMG.FDBManager.AddDB(nCfg, False);
 end;
 
 procedure SystemTables(const nList: TList);

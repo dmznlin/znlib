@@ -15,7 +15,8 @@ uses
   {$IFDEF EnableThirdANSI}UByteString,{$ENDIF}
   {$IFDEF EnableThirdDEC}DECCipherBase, DECCiphers, DECFormat,{$ENDIF}
   System.Classes, System.UITypes, System.SysUtils, System.NetEncoding,
-  System.Rtti, System.Hash, System.Variants, System.IniFiles, System.Math;
+  System.Rtti, System.TypInfo, System.Hash, System.Variants, System.IniFiles,
+  System.Math;
 
 type
   TApplicationHelper = class
@@ -109,6 +110,8 @@ type
     type
       TFillPos = (fpLeft, fpMid, fpRight);
       //填充位置:左,中间,右
+      TTrimPos = (tpNo, tpLTrim, tpRTrim, tpTrim);
+      //修剪方式:不修剪,左侧,右侧,两侧
       TStringArray = array of string;
       //字符串动态数组
 
@@ -153,9 +156,9 @@ type
     class function Combine(const nStrArray: array of string; 
       nFlag: string = '';      
       const nFlagEnd: Boolean = True): string; overload; static;
-    class function Split(const nStr: string; const nList: TStrings; 
-      const nNum: Word = 0; nFlag: string = ''; 
-      const nFlagEnd: Boolean = True): Boolean; static;
+    class function Split(const nStr: string; const nList: TStrings;
+      nFlag: string = ''; const nTrim: TTrimPos = tpNo;
+      const nNum: Word = 0; const nFlagEnd: Boolean = True): Boolean; static;
     //合并,拆分字符串
     class function AdjustFormat(const nItems,nSymbol: string; 
       const nAdd: Boolean; nFlag: string = ''; 
@@ -206,6 +209,9 @@ type
     class function Str2Enum<T>(const nEnum: string): T; static;
     class procedure EnumItems<T>(const nList: TStrings); static;
     //获取枚举类型字符串描述
+    class function Set2Str<T,ST>(const nSet: ST): string; static;
+    class function Str2Set<T,ST>(const nSet: string): ST; static;
+    //获取集合类型的字符串描述
     class function Ansi_UTF8(const nStr: string): string; static;
     class function Ansi_Unicode(const nStr: string): string; static;
     class function UTF8_Unicode(const nStr: string): string; static;
@@ -784,7 +790,7 @@ begin
     else FAdminKey := TEncodeHelper.Decode_3DES(FAdminKey, sDefaultKey);
 
     nList := TStringList.Create;
-    TStringHelper.Split(nStr, nList, 0, ',');                //id,id,id
+    TStringHelper.Split(nStr, nList, ',', tpTrim);           //id,id,id
     SetLength(FPrograms, nList.Count);
 
     FActive.FProgram := '';
@@ -954,7 +960,7 @@ begin
 
     for nIdx := nList.Count-1 downto 0 do
     begin
-      Split(nList[nIdx], nTmp, 0, nFlag);
+      Split(nList[nIdx], nTmp, nFlag);
       if (nTmp.Count > nSection) and 
          (CompareText(nStr, nTmp[nSection]) = 0) then
       begin
@@ -1031,32 +1037,49 @@ begin
 end;
 
 //Date: 2017-03-17
-//Parm: 字符串;结果列表;结果个数;分隔符
+//Parm: 字符串;结果列表;分隔符;结果个数
 //Desc: 使用nFlag将nStr拆分,结果存入nList.
 class function TStringHelper.Split(const nStr: string; const nList: TStrings;
-  const nNum: Word; nFlag: string; const nFlagEnd: Boolean): Boolean;
-var nPos,nNow,nLen: integer;
+  nFlag: string; const nTrim: TTrimPos;
+  const nNum: Word; const nFlagEnd: Boolean): Boolean;
+var nTxt: string;
+    nPos,nNow,nLen: integer;
+
+    procedure TrimStr;
+    begin
+      case nTrim of
+       tpLTrim : nTxt := TrimLeft(nTxt);
+       tpRTrim : nTxt := TrimRight(nTxt);
+       tpTrim  : nTxt := Trim(nTxt);
+      end;
+
+      nList.Add(nTxt);
+    end;
 begin
   if nFlag = '' then
     nFlag := ';';
   //def flag
-  
+
   nList.Clear;
   nlen := Length(nFlag);
-  nPos := Pos(nFlag, nStr, 1);
+  nPos := Pos(nFlag, nStr, cFI);
 
   nNow := 1;
   while nPos > 0 do
   begin
-    nList.Add(Copy(nStr, nNow, nPos - nNow));
+    nTxt := Copy(nStr, nNow, nPos - nNow);
+    TrimStr;
+
     nNow := nPos + nLen;
     nPos := Pos(nFlag, nStr, nNow);
   end;
 
   nLen := Length(nStr);
   if nNow <= nLen then
-    nList.Add(Copy(nStr, nNow, nLen - nNow + 1));
-  //xxxxx
+  begin
+    nTxt := Copy(nStr, nNow, nLen - nNow + 1);
+    TrimStr;
+  end;
 
   if (not nFlagEnd) and (nNow = nLen + 1) then
   begin
@@ -1177,7 +1200,7 @@ begin
   nList := TStringList.Create;
   try
     if nFlag = '' then nFlag := ';';
-    Split(nItems, nList, 0, nFlag, nFlagEnd);
+    Split(nItems, nList, nFlag, tpNo, 0, nFlagEnd);
     Result := AdjustFormat(nList, nSymbol, nAdd, nFlag, False);
   finally
     nList.Free;
@@ -1557,6 +1580,158 @@ begin
     Result := nTEnum.GetValue<T>(nDef);
   finally
     Free;
+  end;
+end;
+
+//Date: 2021-05-18
+//Parm: 集合
+//Desc: 返回nSet的字符串描述
+class function TStringHelper.Set2Str<T, ST>(const nSet: ST): string;
+var nStr: string;
+    nIdx: Integer;
+    nVal: set of 0..255;
+    nNames: TArray<string>;
+
+    nType: TRttiType;
+    nTSet: TRttiSetType;
+    nTEnum: TRttiEnumerationType;
+begin
+  with TRttiContext.Create do
+  try
+    nType := GetType(TypeInfo(T));
+    if not (nType is TRttiEnumerationType) then
+    begin
+      nStr := 'TStringHelper.Set2Str: %s Is Invalid EnumType.';
+      nStr := Format(nStr, [nType.Name]);
+      raise Exception.Create(nStr);
+    end;
+
+    nTEnum := nType as TRttiEnumerationType;
+    case nTEnum.OrdType of
+     otSByte,otUByte: ;
+     else
+      begin
+        nStr := 'TStringHelper.Set2Str: SizeOf(%s) > 1.';
+        nStr := Format(nStr, [nType.Name]);
+        raise Exception.Create(nStr);
+      end;
+    end;
+
+    nType := GetType(TypeInfo(ST));
+    if not (nType is TRttiSetType) then
+    begin
+      nStr := 'TStringHelper.Set2Str: %s Is Invalid SetType.';
+      nStr := Format(nStr, [nType.Name]);
+      raise Exception.Create(nStr);
+    end;
+
+    nTSet := nType as TRttiSetType;
+    if (nTSet.ElementType.Handle <> nTEnum.Handle) then
+    begin
+      nStr := 'TStringHelper.Set2Str: %s No-Match %s Type.';
+      nStr := Format(nStr, [nTSet.Name, nTEnum.Name]);
+      raise Exception.Create(nStr);
+    end;
+
+    if SizeOf(ST) > SizeOf(nVal) then
+    begin
+      nStr := 'TStringHelper.Set2Str: SizeOf(%s) > 8 byte.';
+      nStr := Format(nStr, [nTSet.Name]);
+      raise Exception.Create(nStr);
+    end;
+
+    FillChar(nVal, SizeOf(nVal), 0);
+    Move(nSet, nVal, SizeOf(ST));
+    nNames := nTEnum.GetNames();
+
+    Result := '';
+    for nIdx := nTEnum.MinValue to nTEnum.MaxValue do
+     if nIdx in nVal then
+      if Result = '' then
+           Result := nNames[nIdx]
+      else Result := Result + ',' + nNames[nIdx];
+  finally
+    Free;
+  end;
+end;
+
+//Date: 2021-05-18
+//Parm: 集合字符串
+//Desc: 返回nSet对应的集合
+class function TStringHelper.Str2Set<T, ST>(const nSet: string): ST;
+var nStr: string;
+    nIdx: Integer;
+    nList: TStrings;
+    nVal: set of 0..255;
+    nNames: TArray<string>;
+
+    nType: TRttiType;
+    nTSet: TRttiSetType;
+    nTEnum: TRttiEnumerationType;
+begin
+  nList := nil;
+  with TRttiContext.Create do
+  try
+    nType := GetType(TypeInfo(T));
+    if not (nType is TRttiEnumerationType) then
+    begin
+      nStr := 'TStringHelper.Set2Str: %s Is Invalid EnumType.';
+      nStr := Format(nStr, [nType.Name]);
+      raise Exception.Create(nStr);
+    end;
+
+    nTEnum := nType as TRttiEnumerationType;
+    case nTEnum.OrdType of
+     otSByte,otUByte: ;
+     else
+      begin
+        nStr := 'TStringHelper.Set2Str: SizeOf(%s) > 1.';
+        nStr := Format(nStr, [nType.Name]);
+        raise Exception.Create(nStr);
+      end;
+    end;
+
+    nType := GetType(TypeInfo(ST));
+    if not (nType is TRttiSetType) then
+    begin
+      nStr := 'TStringHelper.Set2Str: %s Is Invalid SetType.';
+      nStr := Format(nStr, [nType.Name]);
+      raise Exception.Create(nStr);
+    end;
+
+    nTSet := nType as TRttiSetType;
+    if (nTSet.ElementType.Handle <> nTEnum.Handle) then
+    begin
+      nStr := 'TStringHelper.Set2Str: %s No-Match %s Type.';
+      nStr := Format(nStr, [nTSet.Name, nTEnum.Name]);
+      raise Exception.Create(nStr);
+    end;
+
+    if SizeOf(ST) > SizeOf(nVal) then
+    begin
+      nStr := 'TStringHelper.Set2Str: SizeOf(%s) > 8 byte.';
+      nStr := Format(nStr, [nTSet.Name]);
+      raise Exception.Create(nStr);
+    end;
+
+    nList := TStringList.Create;
+    Split(nSet, nList, ',', tpTrim);
+    //get all items
+
+    FillChar(nVal, SizeOf(nVal), 0);
+    nNames := nTEnum.GetNames();
+    //get all names
+
+    for nIdx := nTEnum.MinValue to nTEnum.MaxValue do
+     if nList.IndexOf(nNames[nIdx]) >= 0 then
+      System.Include(nVal, nIdx);
+    //set values
+
+    Move(nVal, Result, SizeOf(ST));
+    //combine data
+  finally
+    Free;
+    nList.Free;
   end;
 end;
 

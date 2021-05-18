@@ -312,7 +312,7 @@ type
     procedure SaveConfigFile(const nFile: string);
     {*读写配置*}
     procedure AddTableBuilder(const nBuilder: TDBTableBuilder);
-    procedure AddDB(nConfig: TDBConnConfig);
+    procedure AddDB(nConfig: TDBConnConfig; const nUseVar: Boolean = True);
     function AddTable(const nTable: string; const nList: TList;
       nDBType: TDBType = dtDefault): PDBTable;
     {*添加数据*}
@@ -906,21 +906,24 @@ begin
 end;
 
 //Date: 2020-04-16
-//Parm: 数据库配置
+//Parm: 数据库配置;使用变量
 //Desc: 新增数据库配置项
-procedure TDBManager.AddDB(nConfig: TDBConnConfig);
+procedure TDBManager.AddDB(nConfig: TDBConnConfig; const nUseVar: Boolean);
 begin
   if (nConfig.FFitDB <= Low(TDBType)) or (nConfig.FFitDB > High(TDBType)) then
     nConfig.FFitDB := FDefaultFit;
   //check default
 
-  nConfig.FConn := StringReplace(nConfig.FConnCfg,
-    sDBUser, nConfig.FUser, [rfReplaceAll, rfIgnoreCase]);
-  //user
+  if nUseVar then
+  begin
+    nConfig.FConn := StringReplace(nConfig.FConnCfg,
+      sDBUser, nConfig.FUser, [rfReplaceAll, rfIgnoreCase]);
+    //user
 
-  nConfig.FConn := StringReplace(nConfig.FConn,
-    sDBPwd, nConfig.FPassword, [rfReplaceAll, rfIgnoreCase]);
-  //password
+    nConfig.FConn := StringReplace(nConfig.FConn,
+      sDBPwd, nConfig.FPassword, [rfReplaceAll, rfIgnoreCase]);
+    //password
+  end;
 
   if FDBConfig.ContainsKey(nConfig.FID) then
        FDBConfig.Items[nConfig.FID] := nConfig

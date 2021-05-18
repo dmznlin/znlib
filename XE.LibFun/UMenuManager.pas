@@ -21,16 +21,9 @@ type
   //menu item
 
 const
-  sMenuTypeID: array[TMenuItemType] of string = ('df', 'pg', 'et', 'pr',
-    'mn', 'as');
-  //menu type id
-
   sMenuTypeText: array[TMenuItemType] of string = ('默认', '程序', '实体',
     '父菜单', '菜单项', '辅助项');
   //menu type desc
-
-  sMenuItemDefault = '#*#';
-  //default flag
 
 type
   TMenuAction = (maDefault, maNewForm, maNewFrame, maExecute);
@@ -68,6 +61,7 @@ type
   private
     FDefaultPMenu : string;                              //默认上级
     FDefaultType  : TMenuItemType;                       //默认类型
+    FDefaultDeploy : TApplicationHelper.TDeployTypes;    //默认部署
     {*辅助信息*}
     FProgID       : string;                              //程序标识
     FEntity       : string;                              //实体标识
@@ -76,10 +70,12 @@ type
   public
     function SetParent(const nPMenu: string): PMenuEntity;
     function SetType(const nType: TMenuItemType): PMenuEntity;
+    function SetDeploy(const nDeploy: TApplicationHelper.TDeployTypes): PMenuEntity;
     {*设置属性*}
     function AddM(const nID,nTitle: string;
-      const nAction: TMenuAction = maDefault; nPMenu: string = sMenuItemDefault;
-      const nFilter: string = ''; nType: TMenuItemType = mtDefault): PMenuEntity;
+      const nAction: TMenuAction = maDefault;
+      const nActionData: string = '';
+      nDeploy: TApplicationHelper.TDeployTypes = []): PMenuEntity;
     {*添加菜单*}
   end;
 
@@ -108,7 +104,8 @@ type
     procedure LoadLanguage(const nQuery: TDataSet = nil);
     {*语言管理*}
     procedure AddMenuBuilder(const nBuilder: TMenuItemBuilder);
-    function AddEntity(const nProg,nEntity: string; const nList: TList): PMenuEntity;
+    function AddEntity(const nProg,nProgName,nEntity,nEntityName: string;
+      const nList: TList): PMenuEntity;
     {*添加数据*}
     procedure GetMenus(const nList: TList);
     procedure ClearMenus(const nList: TList; const nFree: Boolean = False);
@@ -159,7 +156,6 @@ begin
 
   gMG.FDBManager.AddTable(sTableMenu, nList, dtMSSQL).
   AddF('R_ID',          sField_SQLServer_AutoInc, '记录标识').
-  AddF('M_UserID',      'varchar(15)',            '用户标识').
   AddF('M_ProgID',      'varchar(15)',            '程序标识').
   AddF('M_Entity',      'varchar(15)',            '实体标识').
   AddF('M_MenuID',      'varchar(15)',            '菜单标识').
@@ -168,12 +164,14 @@ begin
   AddF('M_Action',      'varchar(15)',            '菜单动作').
   AddF('M_Data',        'varchar(320)',           '动作数据').
   AddF('M_Flag',        'varchar(20)',            '附加参数').
+  AddF('M_Type',        'varchar(15)',            '菜单类型').
   AddF('M_Lang',        'varchar(5)',             '语言标识').
+  AddF('M_UserID',      'varchar(15)',            '用户标识').
   AddF('M_Deploy',      'varchar(32)',            '部署类型(Desktop,Web)').
   AddF('M_ImgIndex',    'integer default -1',     '图标索引', '-1').
   AddF('M_NewOrder',    'float default 0',        '创建序列', '0').
   //for field
-  AddI('idx_prog', 'CREATE INDEX $IDX ON $TBS(M_Prog ASC)').
+  AddI('idx_prog', 'CREATE INDEX $IDX ON $TBS(M_ProgID ASC)').
   //for index
   Copy(sTableMenuUser);
 end;
@@ -218,49 +216,61 @@ begin
   else FDefaultType := nType;
 end;
 
+//Date: 2021-05-18
+//Parm: 部署方式
+//Desc: 设置默认部署方式
+function TMenuEntity.SetDeploy(
+  const nDeploy: TApplicationHelper.TDeployTypes): PMenuEntity;
+begin
+  Result := @Self;
+  //return self address
+  FDefaultDeploy := nDeploy;
+end;
+
 //Date: 2020-04-22
-//Parm: 菜单标识;菜单标题;父菜单
+//Parm: 菜单标识;菜单标题;动作;动作数据;部署方式
 //Desc: 新增菜单项
 function TMenuEntity.AddM(const nID, nTitle: string; const nAction: TMenuAction;
-  nPMenu: string; const nFilter: string; nType: TMenuItemType): PMenuEntity;
-var nIdx,nInt: Integer;
+  const nActionData: string; nDeploy: TApplicationHelper.TDeployTypes): PMenuEntity;
+var nStr: string;
+    nIdx: Integer;
 begin
   Result := @Self;
   //return self address
 
-  if nPMenu = sMenuItemDefault then
-    nPMenu := FDefaultPMenu;
-  //xxxxx
-
-  if nType = mtDefault then
-    nType := FDefaultType;
-  nInt := -1;
-
   for nIdx := Low(FItems) to High(FItems) do
-   with FItems[nIdx] do
-    if CompareText(nID, FMenuID) = 0 then
-    begin
-      nInt := nIdx;
-      Break;
-    end; //same entity,same menuid
-
-  if nInt < 0 then
+  with FItems[nIdx] do
   begin
-    nInt := Length(FItems);
-    SetLength(FItems, nInt + 1);
-  end; //new menu item
+    if CompareText(nID, FMenuID) <> 0 then Continue;
+    //same entity,same menuid
 
-  with FItems[nInt] do
+    nStr := 'TMenuManager.AddM: %s.%s And %s.%s Have The Same MenuID.';
+    nStr := Format(nStr, [nID, nTitle, FMenuID, FTitle]);
+
+    WriteLog(nStr);
+    raise Exception.Create(nStr);
+  end;
+
+  if nDeploy = [] then
+    nDeploy := FDefaultDeploy;
+  //use default
+
+  nIdx := Length(FItems);
+  SetLength(FItems, nIdx + 1);
+  //new menu item
+
+  with FItems[nIdx] do
   begin
-    FType         := nType;
+    FType         := FDefaultType;
     FProgID       := FProgID;
     FEntity       := FEntity;
 
     FMenuID       := nID;
-    FPMenu        := nPMenu;
+    FPMenu        := FDefaultPMenu;
     FTitle        := nTitle;
     FAction       := nAction;
-    FActionData   := '';
+    FActionData   := nActionData;
+    FDeploy       := nDeploy;
 
     FFlag         := '';
     FLang         := '';
@@ -442,8 +452,8 @@ end;
 
 //Date: 2020-04-22
 //Parm: 程序标识;实体标识;列表
-//Desc: 在nList中//新增nProg.nEntity实体
-function TMenuManager.AddEntity(const nProg, nEntity: string;
+//Desc: 在nList中新增nProg.nEntity实体
+function TMenuManager.AddEntity(const nProg,nProgName,nEntity,nEntityName: string;
   const nList: TList): PMenuEntity;
 begin
   Result := FindEntity(nProg, nEntity, nList);
@@ -456,8 +466,10 @@ begin
     Result.FEntity := nEntity;
     SetLength(Result.FItems, 0);
 
-    Result.FDefaultPMenu := '';
-    Result.FDefaultType := mtItem;
+    Result.SetDeploy([]);
+    Result.SetParent('');
+    Result.SetType(mtProg).AddM(nProg, nProgName);
+    Result.SetType(mtEntity).AddM(nEntity, nEntityName);
   end;
 end;
 
@@ -485,7 +497,7 @@ end;
 procedure TMenuManager.GetMenus(const nList: TList);
 var nIdx: Integer;
 begin
-  ClearMenus(nList);
+  nList.Clear;
   //init first
 
   for nIdx := Low(FMenuBuilders) to High(FMenuBuilders) do
@@ -497,7 +509,7 @@ end;
 //Parm: 输出
 //Desc: 在数据中初始化
 function TMenuManager.InitMenus(const nMemo: TStrings): Boolean;
-var nStr,nSQL: string;
+var nStr,nSQL,nTmp: string;
     i,j,nIdx: Integer;
     nMenus: TList;
     nListA,nListB: TStrings;
@@ -531,14 +543,14 @@ begin
     nListB := gMG.FObjectPool.Lock(TStrings) as TStrings;
     nListB.Clear;
 
-    nSQL := 'Select M_Prog,M_Entity,M_MenuID,M_Lang From ' + sTableMenu;
+    nSQL := 'Select M_ProgID,M_Entity,M_MenuID,M_Lang From ' + sTableMenu;
     with DBQuery(nSQL, nQuery) do
     if RecordCount > 0 then
     begin
       First;
       while not Eof do
       begin
-        nStr := FieldByName('M_Prog').AsString + '.' +
+        nStr := FieldByName('M_ProgID').AsString + '.' +
                 FieldByName('M_Entity').AsString + '.' +
                 FieldByName('M_MenuID').AsString + '.' +
                 FieldByName('M_Lang').AsString;
@@ -570,19 +582,25 @@ begin
           if nListA.IndexOf(nStr) >= 0 then Continue;
           //menu exists
 
-          with TSQLBuilder do
-          nSQL := TSQLBuilder.MakeSQLByStr([
-            SF('M_Prog', nEntity.FProgID),
+          with TApplicationHelper do
+           nTmp := TStringHelper.Set2Str<TDeployType, TDeployTypes>(FDeploy);
+          //deploy
+
+          with TSQLBuilder,TStringHelper do
+          nSQL := MakeSQLByStr([
+            SF('M_ProgID', nEntity.FProgID),
             SF('M_Entity', nEntity.FEntity),
-            SF('M_PMenu', FPMenu),
             SF('M_MenuID', FMenuID),
+            SF('M_PMenu', FPMenu),
             SF('M_Title', FTitle),
-            SF('M_Action', FAction),
+            SF('M_Action', Enum2Str(FAction)),
+            SF('M_Data', FActionData),
             SF('M_Flag', FFlag),
-            SF('M_Type', sMenuTypeID[FType]),
+            SF('M_Type', Enum2Str(FType)),
+            SF('M_Deploy', nTmp),
             SF('M_Lang', FMultiLang[i].FID),
             SF('M_NewOrder', j, sfVal)
-            ], sTableMenu);
+          ], sTableMenu);
           //insert sql
 
           nListB.Add(nSQL);
