@@ -17,12 +17,12 @@ uses
   UBaseObject, ULibFun;
 
 type
-  TMenuItemType = (mtDefault, mtProg, mtEntity, mtParent, mtItem, mtAssist);
+  TMenuItemType = (mtDefault, mtProg, mtEntity, mtItem, mtAssist);
   //menu item
 
 const
   sMenuTypeText: array[TMenuItemType] of string = ('默认', '程序', '实体',
-    '父菜单', '菜单项', '辅助项');
+    '菜单项', '辅助项');
   //menu type desc
 
 type
@@ -39,7 +39,6 @@ type
 
   PMenuItem = ^TMenuItem;
   TMenuItem = record
-    FType         : TMenuItemType;                       //菜单类型
     FProgID       : string;                              //程序标识
     FEntity       : string;                              //实体标识
     FMenuID       : string;                              //菜单标识
@@ -51,7 +50,11 @@ type
     FImgIndex     : integer;                             //图标索引
     FLang         : string;                              //语言标识
     FNewOrder     : Single;                              //创建序列
+
+    FRecordID     : string;                              //记录编号(DB)
+    FType         : TMenuItemType;                       //菜单类型
     FDeploy       : TApplicationHelper.TDeployTypes;     //部署类型
+    FSubItems     : TList;                               //子菜单列表
   end;
 
   TMenuItems = array of TMenuItem;                       //菜单列表
@@ -107,9 +110,14 @@ type
     function AddEntity(const nProg,nProgName,nEntity,nEntityName: string;
       const nList: TList): PMenuEntity;
     {*添加数据*}
-    procedure GetMenus(const nList: TList);
-    procedure ClearMenus(const nList: TList; const nFree: Boolean = False);
-    {*获取表信息*}
+    procedure GetMenuData(const nList: TList);
+    procedure ClearMenuData(const nList: TList; const nFree: Boolean = False);
+    {*菜单数据*}
+    procedure GetMenus(const nDeploy: TApplicationHelper.TDeployType;
+      const nProg,nEntity,nLang: string;
+      const nList: TList; const nUser: string = '');
+    procedure ClearMenus(const nList: TList; const nFree: Boolean = True);
+    {*菜单信息*}
     function InitMenus(const nMemo: TStrings = nil): Boolean;
     {*初始化数据*}
     property MultiLanguage: TMenuDataList read FMultiLang;
@@ -128,7 +136,6 @@ uses
 const
   sTableLang        = 'Sys_Lang';         //多语言配置
   sTableMenu        = 'Sys_Menus';        //菜单配置
-  sTableMenuUser    = 'Sys_MenusUser';    //用户私有菜单
 
 procedure WriteLog(const nEvent: string; const nMemo: TStrings = nil);
 begin
@@ -166,14 +173,13 @@ begin
   AddF('M_Flag',        'varchar(20)',            '附加参数').
   AddF('M_Type',        'varchar(15)',            '菜单类型').
   AddF('M_Lang',        'varchar(5)',             '语言标识').
-  AddF('M_UserID',      'varchar(15)',            '用户标识').
+  AddF('M_UserID',      'varchar(16)',            '用户标识').
   AddF('M_Deploy',      'varchar(32)',            '部署类型(Desktop,Web)').
   AddF('M_ImgIndex',    'integer default -1',     '图标索引', '-1').
   AddF('M_NewOrder',    'float default 0',        '创建序列', '0').
   //for field
-  AddI('idx_prog', 'CREATE INDEX $IDX ON $TBS(M_ProgID ASC)').
+  AddI('idx_prog', 'CREATE INDEX $IDX ON $TBS(M_ProgID ASC,M_Entity ASC)');
   //for index
-  Copy(sTableMenuUser);
 end;
 
 //------------------------------------------------------------------------------
@@ -276,6 +282,7 @@ begin
     FLang         := '';
     FNewOrder     := 0;
     FImgIndex     := -1;
+    FSubItems     := nil;
   end;
 end;
 
@@ -476,7 +483,7 @@ end;
 //Date: 2020-04-22
 //Parm: 列表;是否释放
 //Desc: 清理nList实体信息
-procedure TMenuManager.ClearMenus(const nList: TList; const nFree: Boolean);
+procedure TMenuManager.ClearMenuData(const nList: TList; const nFree: Boolean);
 var nIdx: Integer;
 begin
   if Assigned(nList) then
@@ -494,7 +501,7 @@ end;
 //Date: 2020-04-22
 //Parm: 列表
 //Desc: 获取菜单实体信息
-procedure TMenuManager.GetMenus(const nList: TList);
+procedure TMenuManager.GetMenuData(const nList: TList);
 var nIdx: Integer;
 begin
   nList.Clear;
@@ -560,7 +567,7 @@ begin
     end;
 
     nMenus := gMG.FObjectPool.Lock(TList) as TList;
-    GetMenus(nMenus);
+    GetMenuData(nMenus);
     //get menus data
 
     WriteLog('::: 创建菜单数据 :::', nMemo);
@@ -573,10 +580,12 @@ begin
       for i := Low(FMultiLang) to High(FMultiLang) do //multi language
       begin
         for j := Low(nEntity.FItems) to High(nEntity.FItems) do
-        with nEntity.FItems[j] do
+        with nEntity.FItems[j],TSQLBuilder,TStringHelper do
         begin
-          nStr := nEntity.FProgID + '.' + nEntity.FEntity + '.' +
-                  FMenuID + '.' + FMultiLang[i].FID;
+          nStr := nEntity.FProgID + '.' +
+            SF_IF(['', nEntity.FEntity], FType = mtProg) + '.' +
+            SF_IF(['', FMenuID], FType in [mtProg, mtEntity]) + '.' +
+            FMultiLang[i].FID;
           //xxxxx
 
           if nListA.IndexOf(nStr) >= 0 then Continue;
@@ -586,11 +595,8 @@ begin
            nTmp := TStringHelper.Set2Str<TDeployType, TDeployTypes>(FDeploy);
           //deploy
 
-          with TSQLBuilder,TStringHelper do
           nSQL := MakeSQLByStr([
             SF('M_ProgID', nEntity.FProgID),
-            SF('M_Entity', nEntity.FEntity),
-            SF('M_MenuID', FMenuID),
             SF('M_PMenu', FPMenu),
             SF('M_Title', FTitle),
             SF('M_Action', Enum2Str(FAction)),
@@ -599,7 +605,15 @@ begin
             SF('M_Type', Enum2Str(FType)),
             SF('M_Deploy', nTmp),
             SF('M_Lang', FMultiLang[i].FID),
-            SF('M_NewOrder', j, sfVal)
+            SF('M_NewOrder', j, sfVal),
+
+            SF_IF([SF('M_Entity', ''),
+                   SF('M_Entity', nEntity.FEntity)], FType = mtProg),
+            //program no entity
+
+            SF_IF([SF('M_MenuID', ''),
+                   SF('M_MenuID', FMenuID)], FType in [mtProg, mtEntity])
+            //program and entity no id
           ], sTableMenu);
           //insert sql
 
@@ -615,10 +629,179 @@ begin
   finally
     gMG.FObjectPool.Release(nListA);
     gMG.FObjectPool.Release(nListB);
-    //string list
-    ClearMenus(nMenus);
+    gMG.FDBManager.ReleaseDBQuery(nQuery);
+
+    ClearMenuData(nMenus);
     gMG.FObjectPool.Release(nMenus);
     //menu list
+  end;
+end;
+
+//Date: 2021-05-19
+//Parm: 菜单项列表
+//Desc: 清理nList列表
+procedure TMenuManager.ClearMenus(const nList: TList; const nFree: Boolean);
+var nIdx: Integer;
+    nItem: PMenuItem;
+begin
+  if Assigned(nList) then
+  begin
+    for nIdx := nList.Count-1 downto 0 do
+    begin
+      nItem := nList[nIdx];
+      ClearMenus(nItem.FSubItems, True);
+      Dispose(nItem);
+    end;
+
+    if nFree then
+         nList.Free
+    else nList.Clear;
+  end;
+end;
+
+//Date: 2021-05-19
+//Parm: 部署方式;程序;实体;用户;语言
+//Desc: 载入nUser.nLang对应的nProg.nEntity的树状菜单列表数据
+procedure TMenuManager.GetMenus(const nDeploy: TApplicationHelper.TDeployType;
+  const nProg, nEntity, nLang: string; const nList: TList; const nUser: string);
+var nStr: string;
+    nQuery: TDataSet;
+    nType: TMenuItemType;
+    nItem,nPItem: PMenuItem;
+    nDPType: TApplicationHelper.TDeployTypes;
+
+    //Date: 2021-05-19
+    //Parm: 父菜单名;节点列表;当前层级
+    //Desc: 在nPList中检索名称为nPMenu的菜单项
+    function FindParent(const nPName: string; const nPList: TList;
+      const nPLevel: Integer = 1): PMenuItem;
+    var nIdx: Integer;
+        nBool: Boolean;
+    begin
+      Result := nil;
+
+      for nIdx := nPList.Count - 1 downto 0 do
+      begin
+        nPItem := nPList[nIdx];
+        if CompareText(nPItem.FLang, nLang) <> 0 then Continue;
+        //语言匹配
+        
+        if nType in [mtProg, mtEntity] then //程序和实体: 寻找程序菜单项
+        begin
+          nBool := (nPItem.FType = mtProg) and
+                   (CompareText(nPItem.FProgID, nProg) = 0);
+          //xxxxx
+        end else
+
+        if nPName = '' then //一级菜单: 寻找实体
+        begin
+          nBool := (nPItem.FType = mtEntity) and
+                   (CompareText(nPItem.FProgID, nProg) = 0) and
+                   (CompareText(nPItem.FEntity, nEntity) = 0);
+          //xxxxx
+        end else //菜单项: 依据MenuID匹配
+        begin
+          nBool := (CompareText(nPItem.FMenuID, nPName) = 0) and
+                   (CompareText(nPItem.FProgID, nProg) = 0) and
+                   (CompareText(nPItem.FEntity, nEntity) = 0);
+          //xxxxx
+        end;
+
+        if nBool then
+        begin
+          Result := nPItem;
+          Exit;
+        end;
+      end;
+
+      if (nType in [mtProg, mtEntity]) and (nPLevel > 0) then Exit;
+      //程序和实体扫描第一级
+
+      for nIdx := nPList.Count - 1 downto 0 do
+      begin
+        nPItem := nPList[nIdx];
+        if CompareText(nPItem.FLang, nLang) <> 0 then Continue;
+        //语言匹配
+
+        if Assigned(nPItem.FSubItems) then
+        begin
+          Result := FindParent(nPName, nPItem.FSubItems, nPLevel + 1);
+          if Assigned(Result) then Break;
+        end;
+      end;
+    end;
+begin
+  nQuery := nil;
+  with TApplicationHelper,TStringHelper do
+  try
+    nStr := 'Select * From %s Where M_ProgID=''%s'' ' +
+            'And (M_Entity='''' Or M_Entity=''%s'') And M_Lang=''%s'' ' +
+     StrIF(['And M_UserID Is Null ', 'And M_UserID =''%s'' '], nUser = '') +
+            'Order By M_NewOrder ASC';
+    nStr := Format(nStr, [sTableMenu, nProg, nEntity, nLang, nUser]);
+
+    nQuery := gMG.FDBManager.DBQuery(nStr);
+    with nQuery do
+    if RecordCount > 0 then
+    begin
+      First;
+      //go to first
+
+      while not Eof do
+      try
+        nStr := FieldByName('M_Deploy').AsString;
+        nDPType := TStringHelper.Str2Set<TDeployType, TDeployTypes>(nStr);
+        if (nDPType <> []) and (not (nDeploy in nDPType)) then Continue;
+        //not match deploy
+
+        nStr := FieldByName('M_Type').AsString;
+        nType := TStringHelper.Str2Enum<TMenuItemType>(nStr);
+        nPItem := FindParent(FieldByName('M_PMenu').AsString, nList);
+
+        if Assigned(nPItem) then
+        begin
+          if nType = mtProg then Continue;
+          //program has exits
+
+          if not Assigned(nPItem.FSubItems) then
+            nPItem.FSubItems := TList.Create;
+          //xxxxx
+
+          New(nItem);
+          nPItem.FSubItems.Add(nItem);
+          nItem.FSubItems := nil;
+        end else
+        begin
+          New(nItem);
+          nList.Add(nItem);
+          nItem.FSubItems := nil;
+        end;
+
+        with nItem^ do
+        begin
+          FType         := nType;
+          FDeploy       := nDPType;
+          FRecordID     := FieldByName('R_ID').AsString;
+          FProgID       := FieldByName('M_ProgID').AsString;
+          FEntity       := FieldByName('M_Entity').AsString;
+          FMenuID       := FieldByName('M_MenuID').AsString;
+          FPMenu        := FieldByName('M_PMenu').AsString;
+          FTitle        := FieldByName('M_Title').AsString;
+
+          nStr          := FieldByName('M_Action').AsString;
+          FAction       := TStringHelper.Str2Enum<TMenuAction>(nStr);
+          FActionData   := FieldByName('M_Data').AsString;
+          FFlag         := FieldByName('M_Flag').AsString;
+          FImgIndex     := FieldByName('M_ImgIndex').AsInteger;
+          FLang         := FieldByName('M_Lang').AsString;
+        end;
+
+      finally
+        Next;
+        //next record
+      end;
+    end;
+  finally
     gMG.FDBManager.ReleaseDBQuery(nQuery);
   end;
 end;
