@@ -52,6 +52,7 @@ type
     FNewOrder     : Single;                              //创建序列
 
     FRecordID     : string;                              //记录编号(DB)
+    FUserID       : string;                              //所属用户
     FType         : TMenuItemType;                       //菜单类型
     FDeploy       : TApplicationHelper.TDeployTypes;     //部署类型
     FSubItems     : TList;                               //子菜单列表
@@ -116,7 +117,7 @@ type
     procedure GetMenus(const nDeploy: TApplicationHelper.TDeployType;
       const nProg,nEntity,nLang: string;
       const nList: TList; const nUser: string = '');
-    procedure ClearMenus(const nList: TList; const nFree: Boolean = True);
+    procedure ClearMenus(const nList: TList; const nFree: Boolean = False);
     {*菜单信息*}
     function InitMenus(const nMemo: TStrings = nil): Boolean;
     {*初始化数据*}
@@ -147,39 +148,41 @@ end;
 //Desc: 添加管理器所需表
 procedure AddMenuTables(const nList: TList);
 begin
-  with gMG.FDBManager,TSQLBuilder do
-  AddTable(sTableLang, nList, dtMSSQL).
-  AddF('L_ID',          'varChar(5)',             '语言标识').
-  AddF('L_Name',        'varChar(32)',            '语言名称').
-  AddF('L_Valid',       'Char(1)',                '是否有效', '''Y''').
-  AddR('en', MakeSQLByStr([
-    SF('L_ID', 'en'),
-    SF('L_Name', 'English'),
-    SF('L_Valid', sFlag_Disabled)], sTableLang)).
-  AddR('cn', MakeSQLByStr([
-    SF('L_ID', 'cn'),
-    SF('L_Name', '简体中文')], sTableLang));
-  //for language
+  with gDBManager,TSQLBuilder do
+  begin
+    AddTable(sTableLang, nList, dtMSSQL).
+      AddF('L_ID',          'varChar(5)',             '语言标识').
+      AddF('L_Name',        'varChar(32)',            '语言名称').
+      AddF('L_Valid',       'Char(1)',                '是否有效', '''Y''').
+      AddR('en', MakeSQLByStr([
+        SF('L_ID', 'en'),
+        SF('L_Name', 'English'),
+        SF('L_Valid', sFlag_Disabled)], sTableLang)).
+      AddR('cn', MakeSQLByStr([
+        SF('L_ID', 'cn'),
+        SF('L_Name', '简体中文')], sTableLang));
+    //for language
 
-  gMG.FDBManager.AddTable(sTableMenu, nList, dtMSSQL).
-  AddF('R_ID',          sField_SQLServer_AutoInc, '记录标识').
-  AddF('M_ProgID',      'varchar(15)',            '程序标识').
-  AddF('M_Entity',      'varchar(15)',            '实体标识').
-  AddF('M_MenuID',      'varchar(15)',            '菜单标识').
-  AddF('M_PMenu',       'varchar(15)',            '上级菜单').
-  AddF('M_Title',       'varchar(50)',            '菜单标题').
-  AddF('M_Action',      'varchar(15)',            '菜单动作').
-  AddF('M_Data',        'varchar(320)',           '动作数据').
-  AddF('M_Flag',        'varchar(20)',            '附加参数').
-  AddF('M_Type',        'varchar(15)',            '菜单类型').
-  AddF('M_Lang',        'varchar(5)',             '语言标识').
-  AddF('M_UserID',      'varchar(16)',            '用户标识').
-  AddF('M_Deploy',      'varchar(32)',            '部署类型(Desktop,Web)').
-  AddF('M_ImgIndex',    'integer default -1',     '图标索引', '-1').
-  AddF('M_NewOrder',    'float default 0',        '创建序列', '0').
-  //for field
-  AddI('idx_prog', 'CREATE INDEX $IDX ON $TBS(M_ProgID ASC,M_Entity ASC)');
-  //for index
+    AddTable(sTableMenu, nList, dtMSSQL).
+      AddF('R_ID',          sField_SQLServer_AutoInc, '记录标识').
+      AddF('M_ProgID',      'varchar(15)',            '程序标识').
+      AddF('M_Entity',      'varchar(15)',            '实体标识').
+      AddF('M_MenuID',      'varchar(15)',            '菜单标识').
+      AddF('M_PMenu',       'varchar(15)',            '上级菜单').
+      AddF('M_Title',       'varchar(50)',            '菜单标题').
+      AddF('M_Action',      'varchar(15)',            '菜单动作').
+      AddF('M_Data',        'varchar(320)',           '动作数据').
+      AddF('M_Flag',        'varchar(20)',            '附加参数').
+      AddF('M_Type',        'varchar(15)',            '菜单类型').
+      AddF('M_Lang',        'varchar(5)',             '语言标识').
+      AddF('M_UserID',      'varchar(32)',            '用户标识').
+      AddF('M_Deploy',      'varchar(32)',            '部署类型(Desktop,Web)').
+      AddF('M_ImgIndex',    'integer default -1',     '图标索引', '-1').
+      AddF('M_NewOrder',    'float default 0',        '创建序列', '0').
+      //for field
+      AddI('idx_prog', 'CREATE INDEX $IDX ON $TBS(M_ProgID ASC,M_Entity ASC)');
+    //for index
+  end;
 end;
 
 //------------------------------------------------------------------------------
@@ -325,7 +328,7 @@ procedure TMenuManager.RunAfterRegistAllManager;
 begin
   gMG.CheckSupport('TMenuManager', ['TDBManager']);
   //检查支持
-  gMG.FDBManager.AddTableBuilder(AddMenuTables);
+  gDBManager.AddTableBuilder(AddMenuTables);
 end;
 
 //Date: 2020-04-21
@@ -337,7 +340,7 @@ var nStr: string;
 begin
   nQuery := nil;
   try
-    with gMG.FDBManager, TSQLBuilder do
+    with gDBManager, TSQLBuilder do
     begin
       nStr := 'Select L_ID From %s Where L_ID=''%s''';
       nStr := Format(nStr, [sTableLang, nID]);
@@ -351,7 +354,7 @@ begin
       DBExecute(nStr);
     end;
   finally
-    gMG.FDBManager.ReleaseDBQuery(nQuery);
+    gDBManager.ReleaseDBQuery(nQuery);
   end;
 end;
 
@@ -372,7 +375,7 @@ begin
     nStr := Format(nStr, [sTableMenu, nID]);
     nList.Add(nStr);
 
-    gMG.FDBManager.DBExecute(nList);
+    gDBManager.DBExecute(nList);
     //action
   finally
     gMG.FObjectPool.Release(nList);
@@ -387,7 +390,7 @@ var nStr: string;
     nQry: TDataSet;
 begin
   nQry := nil;
-  with gMG.FDBManager do
+  with gDBManager do
   try
     if Assigned(nQuery) then
          nQry := nQuery
@@ -534,7 +537,7 @@ begin
   nMenus := nil;
   nQuery := nil; //init
 
-  with gMG.FDBManager do
+  with gDBManager do
   try
     nQuery := LockDBQuery();
     LoadLanguage(nQuery);
@@ -550,7 +553,10 @@ begin
     nListB := gMG.FObjectPool.Lock(TStrings) as TStrings;
     nListB.Clear;
 
-    nSQL := 'Select M_ProgID,M_Entity,M_MenuID,M_Lang From ' + sTableMenu;
+    nSQL := 'Select M_ProgID,M_Entity,M_MenuID,M_Lang From %s ' +
+            'Where M_UserID Is Null';
+    nSQL := Format(nSQL, [sTableMenu]);
+
     with DBQuery(nSQL, nQuery) do
     if RecordCount > 0 then
     begin
@@ -629,7 +635,7 @@ begin
   finally
     gMG.FObjectPool.Release(nListA);
     gMG.FObjectPool.Release(nListB);
-    gMG.FDBManager.ReleaseDBQuery(nQuery);
+    gDBManager.ReleaseDBQuery(nQuery);
 
     ClearMenuData(nMenus);
     gMG.FObjectPool.Release(nMenus);
@@ -740,7 +746,7 @@ begin
             'Order By M_NewOrder ASC';
     nStr := Format(nStr, [sTableMenu, nProg, nEntity, nLang, nUser]);
 
-    nQuery := gMG.FDBManager.DBQuery(nStr);
+    nQuery := gDBManager.DBQuery(nStr);
     with nQuery do
     if RecordCount > 0 then
     begin
@@ -794,6 +800,7 @@ begin
           FFlag         := FieldByName('M_Flag').AsString;
           FImgIndex     := FieldByName('M_ImgIndex').AsInteger;
           FLang         := FieldByName('M_Lang').AsString;
+          FUserID       := FieldByName('M_UserID').AsString;
         end;
 
       finally
@@ -802,7 +809,7 @@ begin
       end;
     end;
   finally
-    gMG.FDBManager.ReleaseDBQuery(nQuery);
+    gDBManager.ReleaseDBQuery(nQuery);
   end;
 end;
 
