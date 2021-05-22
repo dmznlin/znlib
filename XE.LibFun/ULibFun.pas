@@ -159,6 +159,9 @@ type
     class function Split(const nStr: string; const nList: TStrings;
       nFlag: string = ''; const nTrim: TTrimPos = tpNo;
       const nNum: Word = 0; const nFlagEnd: Boolean = True): Boolean; static;
+    class function SplitArray(const nStr: string; var nArray: TStringArray;
+      nFlag: string = ''; const nTrim: TTrimPos = tpNo;
+      const nNum: Word = 0; const nFlagEnd: Boolean = True): Boolean; static;
     //合并,拆分字符串
     class function AdjustFormat(const nItems,nSymbol: string; 
       const nAdd: Boolean; nFlag: string = ''; 
@@ -1092,6 +1095,68 @@ begin
   if nNum > 0 then
        Result := nList.Count = nNum
   else Result := nList.Count > 0;
+end;
+
+//Date: 2021-05-22
+//Parm: 字符串;数组;分隔符;结果个数
+//Desc: 使用nFlag将nStr拆分,结果存入nResult.
+class function TStringHelper.SplitArray(const nStr: string;
+  var nArray: TStringArray; nFlag: string; const nTrim: TTrimPos;
+  const nNum: Word; const nFlagEnd: Boolean): Boolean;
+var nTxt: string;
+    nPos,nNow,nLen,nIdx: integer;
+
+    procedure TrimStr;
+    begin
+      case nTrim of
+       tpLTrim : nTxt := TrimLeft(nTxt);
+       tpRTrim : nTxt := TrimRight(nTxt);
+       tpTrim  : nTxt := Trim(nTxt);
+      end;
+
+      nIdx := Length(nArray);
+      SetLength(nArray, nIdx + 1);
+      nArray[nIdx] := nTxt;
+    end;
+begin
+  if nFlag = '' then
+    nFlag := ';';
+  //def flag
+
+  SetLength(nArray, 0);
+  nlen := Length(nFlag);
+  nPos := Pos(nFlag, nStr, cFI);
+
+  nNow := 1;
+  while nPos > 0 do
+  begin
+    nTxt := Copy(nStr, nNow, nPos - nNow);
+    TrimStr;
+
+    nNow := nPos + nLen;
+    nPos := Pos(nFlag, nStr, nNow);
+  end;
+
+  nLen := Length(nStr);
+  if nNow <= nLen then
+  begin
+    nTxt := Copy(nStr, nNow, nLen - nNow + 1);
+    TrimStr;
+  end;
+
+  if (not nFlagEnd) and (nNow = nLen + 1) then
+  begin
+    nLen := Length(nFlag);
+    if Copy(nStr, nNow - nLen, nLen) = nFlag then
+    begin
+      nTxt := '';
+      TrimStr;
+    end; //if nStr not end by flag,but the end is flag,append blank
+  end;
+
+  if nNum > 0 then
+       Result := Length(nArray) = nNum
+  else Result := Length(nArray) > 0;
 end;
 
 //Date: 2017-03-17
