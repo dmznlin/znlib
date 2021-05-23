@@ -241,6 +241,8 @@ type
       const nTable: string; const nWhere: string = '';
       const nIsNew: Boolean = True): string; static;
     //make insert,update sql
+    class function SQM(const nData: string): string; static;
+    //add single quotation marks
   end;
 
   TFloatHelper = class
@@ -2198,6 +2200,14 @@ begin
 
   Result := nPrefix + nMain + nPostfix;
   //full sql
+end;
+
+//Date: 2021-05-23
+//Parm: 字符串
+//Desc: 在nData两侧添加单引号
+class function TSQLBuilder.SQM(const nData: string): string;
+begin
+  Result := '''' + nData + '''';
 end;
 
 //------------------------------------------------------------------------------

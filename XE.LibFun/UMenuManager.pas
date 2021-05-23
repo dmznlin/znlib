@@ -87,6 +87,10 @@ type
   //for external-system fill menu.item info
 
   TMenuManager = class(TManagerBase)
+  public
+    const
+      sTable_Lang = 'Sys_Lang';                          //语言配置
+      sTable_Menu = 'Sys_Menus';                         //菜单配置
   private
     FMultiLang: TMenuDataList;
     {*多语言列表*}
@@ -134,10 +138,6 @@ implementation
 uses
   UManagerGroup, UDBManager;
 
-const
-  sTableLang        = 'Sys_Lang';         //多语言配置
-  sTableMenu        = 'Sys_Menus';        //菜单配置
-
 procedure WriteLog(const nEvent: string; const nMemo: TStrings = nil);
 begin
   if Assigned(nMemo) then
@@ -148,22 +148,22 @@ end;
 //Desc: 添加管理器所需表
 procedure AddMenuTables(const nList: TList);
 begin
-  with gDBManager,TSQLBuilder do
+  with gDBManager,TSQLBuilder,TMenuManager do
   begin
-    AddTable(sTableLang, nList, dtMSSQL).
+    AddTable(sTable_Lang, nList, dtMSSQL).
       AddF('L_ID',          'varChar(5)',             '语言标识').
       AddF('L_Name',        'varChar(32)',            '语言名称').
-      AddF('L_Valid',       'Char(1)',                '是否有效', '''Y''').
+      AddF('L_Valid',       'Char(1)',                '是否有效', SQM(sFlag_Enabled)).
       AddR('en', MakeSQLByStr([
         SF('L_ID', 'en'),
         SF('L_Name', 'English'),
-        SF('L_Valid', sFlag_Disabled)], sTableLang)).
+        SF('L_Valid', sFlag_Disabled)], sTable_Lang)).
       AddR('cn', MakeSQLByStr([
         SF('L_ID', 'cn'),
-        SF('L_Name', '简体中文')], sTableLang));
+        SF('L_Name', '简体中文')], sTable_Lang));
     //for language
 
-    AddTable(sTableMenu, nList, dtMSSQL).
+    AddTable(sTable_Menu, nList, dtMSSQL).
       AddF('R_ID',          sField_SQLServer_AutoInc, '记录标识').
       AddF('M_ProgID',      'varchar(15)',            '程序标识').
       AddF('M_Entity',      'varchar(15)',            '实体标识').
@@ -181,7 +181,7 @@ begin
       AddF('M_NewOrder',    'float default 0',        '创建序列', '0').
       //for field
       AddI('idx_prog', 'CREATE INDEX $IDX ON $TBS(M_ProgID ASC,M_Entity ASC)');
-    //for index
+      //for index
   end;
 end;
 
@@ -343,14 +343,14 @@ begin
     with gDBManager, TSQLBuilder do
     begin
       nStr := 'Select L_ID From %s Where L_ID=''%s''';
-      nStr := Format(nStr, [sTableLang, nID]);
+      nStr := Format(nStr, [sTable_Lang, nID]);
       nQuery := LockDBQuery();
 
       nStr := MakeSQLByStr([
         SF('L_ID', nID),
         SF('L_Name', nName),
         SF('L_Valid', sFlag_Enabled)
-      ], sTableLang, SF('L_ID', nID), DBQuery(nStr, nQuery).RecordCount < 1);
+      ], sTable_Lang, SF('L_ID', nID), DBQuery(nStr, nQuery).RecordCount < 1);
       DBExecute(nStr);
     end;
   finally
@@ -368,11 +368,11 @@ begin
   nList := gMG.FObjectPool.Lock(TStrings) as TStrings;
   try
     nStr := 'Delete From %s Where L_ID=''%s''';
-    nStr := Format(nStr, [sTableLang, nID]);
+    nStr := Format(nStr, [sTable_Lang, nID]);
     nList.Add(nStr);
 
     nStr := 'Delete From %s Where M_Lang=''%s''';
-    nStr := Format(nStr, [sTableMenu, nID]);
+    nStr := Format(nStr, [sTable_Lang, nID]);
     nList.Add(nStr);
 
     gDBManager.DBExecute(nList);
@@ -397,7 +397,7 @@ begin
     else nQry := LockDBQuery();
 
     nStr := 'Select L_ID,L_Name From %s Where L_Valid=''%s''';
-    nStr := Format(nStr, [sTableLang, sFlag_Enabled]);
+    nStr := Format(nStr, [sTable_Lang, sFlag_Enabled]);
 
     with DBQuery(nStr, nQry) do
     begin
@@ -555,7 +555,7 @@ begin
 
     nSQL := 'Select M_ProgID,M_Entity,M_MenuID,M_Lang From %s ' +
             'Where M_UserID Is Null';
-    nSQL := Format(nSQL, [sTableMenu]);
+    nSQL := Format(nSQL, [sTable_Menu]);
 
     with DBQuery(nSQL, nQuery) do
     if RecordCount > 0 then
@@ -620,7 +620,7 @@ begin
             SF_IF([SF('M_MenuID', ''),
                    SF('M_MenuID', FMenuID)], FType in [mtProg, mtEntity])
             //program and entity no id
-          ], sTableMenu);
+          ], sTable_Menu);
           //insert sql
 
           nListB.Add(nSQL);
@@ -744,7 +744,7 @@ begin
             'And (M_Entity='''' Or M_Entity=''%s'') And M_Lang=''%s'' ' +
      StrIF(['And M_UserID Is Null ', 'And M_UserID =''%s'' '], nUser = '') +
             'Order By M_NewOrder ASC';
-    nStr := Format(nStr, [sTableMenu, nProg, nEntity, nLang, nUser]);
+    nStr := Format(nStr, [sTable_Menu, nProg, nEntity, nLang, nUser]);
 
     nQuery := gDBManager.DBQuery(nStr);
     with nQuery do
