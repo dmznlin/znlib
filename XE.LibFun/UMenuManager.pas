@@ -50,6 +50,7 @@ type
     FImgIndex     : integer;                             //图标索引
     FLang         : string;                              //语言标识
     FNewOrder     : Single;                              //创建序列
+    FExpaned      : Boolean;                             //是否展开
 
     FRecordID     : string;                              //记录编号(DB)
     FUserID       : string;                              //所属用户
@@ -118,6 +119,10 @@ type
     procedure GetMenuData(const nList: TList);
     procedure ClearMenuData(const nList: TList; const nFree: Boolean = False);
     {*菜单数据*}
+    function BuildMenuSQL(const nMenu: PMenuItem): string;
+    procedure AddMenu(const nMenu: PMenuItem);
+    procedure DeleteMenu(const nMenu: PMenuItem);
+    {*菜单项*}
     procedure GetMenus(const nDeploy: TApplicationHelper.TDeployType;
       const nProg,nEntity,nLang: string;
       const nList: TList; const nUser: string = '');
@@ -177,6 +182,7 @@ begin
       AddF('M_Lang',        'varchar(5)',             '语言标识').
       AddF('M_UserID',      'varchar(32)',            '用户标识').
       AddF('M_Deploy',      'varchar(32)',            '部署类型(Desktop,Web)').
+      AddF('M_Expand',      'Char(1)',                '默认展开', SQM(sFlag_No)).
       AddF('M_ImgIndex',    'integer default -1',     '图标索引', '-1').
       AddF('M_NewOrder',    'float default 0',        '创建序列', '0').
       //for field
@@ -243,6 +249,7 @@ function TMenuEntity.AddM(const nID, nTitle: string; const nAction: TMenuAction;
   const nActionData: string; nDeploy: TApplicationHelper.TDeployTypes): PMenuEntity;
 var nStr: string;
     nIdx: Integer;
+    nInit: TMenuItem;
 begin
   Result := @Self;
   //return self address
@@ -264,15 +271,18 @@ begin
     nDeploy := FDefaultDeploy;
   //use default
 
+  FillChar(nInit, SizeOf(TMenuItem), #0);
+  //default item
+
   nIdx := Length(FItems);
   SetLength(FItems, nIdx + 1);
-  //new menu item
+  FItems[nIdx] := nInit;
 
   with FItems[nIdx] do
   begin
     FType         := FDefaultType;
-    FProgID       := FProgID;
-    FEntity       := FEntity;
+    FProgID       := Result.FProgID;
+    FEntity       := Result.FEntity;
 
     FMenuID       := nID;
     FPMenu        := FDefaultPMenu;
@@ -280,9 +290,8 @@ begin
     FAction       := nAction;
     FActionData   := nActionData;
     FDeploy       := nDeploy;
+    FExpaned      := (FType = mtProg) or (FType = mtEntity); //expand 1 level
 
-    FFlag         := '';
-    FLang         := '';
     FNewOrder     := 0;
     FImgIndex     := -1;
     FSubItems     := nil;
@@ -515,11 +524,67 @@ begin
   //xxxxx
 end;
 
+//Date: 2021-05-27
+//Parm: 菜单数据
+//Desc: 构建nMenu的insert,update语句
+function TMenuManager.BuildMenuSQL(const nMenu: PMenuItem): string;
+var nStr: string;
+begin
+  with nMenu^, TApplicationHelper, TSQLBuilder, TStringHelper do
+  begin
+    nStr := TStringHelper.Set2Str<TDeployType, TDeployTypes>(FDeploy);
+    //deploy
+
+    Result := MakeSQLByStr([
+      SF('M_ProgID', FProgID),
+      SF('M_PMenu', FPMenu),
+      SF('M_Title', FTitle),
+      SF('M_Action', Enum2Str(FAction)),
+      SF('M_Data', FActionData),
+      SF('M_Flag', FFlag),
+      SF('M_Type', Enum2Str(FType)),
+      SF('M_Deploy', nStr),
+      SF('M_Lang', FLang),
+      SF('M_ImgIndex', FImgIndex, sfVal),
+      SF('M_NewOrder', FNewOrder, sfVal),
+
+      SF_IF(['', SF('M_UserID', FUserID)], FUserID = ''),
+      SF_IF([SF('M_Expand', sFlag_Yes),
+             SF('M_Expand', sFlag_No)], FExpaned),
+      //default expanded
+
+      SF_IF([SF('M_Entity', ''),
+             SF('M_Entity', FEntity)], FType = mtProg),
+      //program no entity
+
+      SF_IF([SF('M_MenuID', ''),
+             SF('M_MenuID', FMenuID)], FType in [mtProg, mtEntity])
+      //program and entity no id
+    ], sTable_Menu, SF('R_ID', FRecordID, sfVal), FRecordID = '');
+  end;
+end;
+
+//Date: 2021-05-27
+//Parm: 菜单数据
+//Desc: 新增 或 覆盖nMenu菜单
+procedure TMenuManager.AddMenu(const nMenu: PMenuItem);
+begin
+
+end;
+
+//Date: 2021-05-27
+//Parm: 菜单数据
+//Desc: 删除nMenu菜单
+procedure TMenuManager.DeleteMenu(const nMenu: PMenuItem);
+begin
+
+end;
+
 //Date: 2020-04-24
 //Parm: 输出
 //Desc: 在数据中初始化
 function TMenuManager.InitMenus(const nMemo: TStrings): Boolean;
-var nStr,nSQL,nTmp: string;
+var nStr: string;
     i,j,nIdx: Integer;
     nMenus: TList;
     nListA,nListB: TStrings;
@@ -553,11 +618,11 @@ begin
     nListB := gMG.FObjectPool.Lock(TStrings) as TStrings;
     nListB.Clear;
 
-    nSQL := 'Select M_ProgID,M_Entity,M_MenuID,M_Lang From %s ' +
+    nStr := 'Select M_ProgID,M_Entity,M_MenuID,M_Lang From %s ' +
             'Where M_UserID Is Null';
-    nSQL := Format(nSQL, [sTable_Menu]);
+    nStr := Format(nStr, [sTable_Menu]);
 
-    with DBQuery(nSQL, nQuery) do
+    with DBQuery(nStr, nQuery) do
     if RecordCount > 0 then
     begin
       First;
@@ -597,33 +662,9 @@ begin
           if nListA.IndexOf(nStr) >= 0 then Continue;
           //menu exists
 
-          with TApplicationHelper do
-           nTmp := TStringHelper.Set2Str<TDeployType, TDeployTypes>(FDeploy);
-          //deploy
-
-          nSQL := MakeSQLByStr([
-            SF('M_ProgID', nEntity.FProgID),
-            SF('M_PMenu', FPMenu),
-            SF('M_Title', FTitle),
-            SF('M_Action', Enum2Str(FAction)),
-            SF('M_Data', FActionData),
-            SF('M_Flag', FFlag),
-            SF('M_Type', Enum2Str(FType)),
-            SF('M_Deploy', nTmp),
-            SF('M_Lang', FMultiLang[i].FID),
-            SF('M_NewOrder', j, sfVal),
-
-            SF_IF([SF('M_Entity', ''),
-                   SF('M_Entity', nEntity.FEntity)], FType = mtProg),
-            //program no entity
-
-            SF_IF([SF('M_MenuID', ''),
-                   SF('M_MenuID', FMenuID)], FType in [mtProg, mtEntity])
-            //program and entity no id
-          ], sTable_Menu);
-          //insert sql
-
-          nListB.Add(nSQL);
+          FLang := FMultiLang[i].FID;
+          FNewOrder := j;
+          nListB.Add(BuildMenuSQL(@nEntity.FItems[j]));
           WriteLog('已创建: ' + nStr, nMemo);
         end;
       end;
@@ -672,6 +713,7 @@ procedure TMenuManager.GetMenus(const nDeploy: TApplicationHelper.TDeployType;
   const nProg, nEntity, nLang: string; const nList: TList; const nUser: string);
 var nStr: string;
     nQuery: TDataSet;
+    nDefItem: TMenuItem;
     nType: TMenuItemType;
     nItem,nPItem: PMenuItem;
     nDPType: TApplicationHelper.TDeployTypes;
@@ -750,8 +792,8 @@ begin
     with nQuery do
     if RecordCount > 0 then
     begin
-      First;
-      //go to first
+      FillChar(nDefItem, SizeOf(TMenuItem), #0);
+      First; //go to first
 
       while not Eof do
       try
@@ -783,6 +825,7 @@ begin
           nItem.FSubItems := nil;
         end;
 
+        nItem^ := nDefItem; //init
         with nItem^ do
         begin
           FType         := nType;
@@ -801,6 +844,7 @@ begin
           FImgIndex     := FieldByName('M_ImgIndex').AsInteger;
           FLang         := FieldByName('M_Lang').AsString;
           FUserID       := FieldByName('M_UserID').AsString;
+          FExpaned      := FieldByName('M_Expand').AsString = sFlag_Yes;
         end;
 
       finally
