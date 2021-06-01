@@ -33,7 +33,7 @@ type
       TCPUID = array[1..4] of Longint;
       //id record
 
-      TDeployType = (Desktop, Web, Mobile);
+      TDeployType = (Desktop, Web, Mobile, dtAll);
       TDeployTypes = set of TDeployType;
       //部署类型: Desktop-Client,PC-Web,Mobile-Web
 
@@ -215,6 +215,9 @@ type
     class function Set2Str<T,ST>(const nSet: ST): string; static;
     class function Str2Set<T,ST>(const nSet: string): ST; static;
     //获取集合类型的字符串描述
+    class procedure FillList(const nList: TStrings; const nArray: array of string;
+      const nClearFirst: Boolean = True); static;
+    //使用数据填充列表
     class function Ansi_UTF8(const nStr: string): string; static;
     class function Ansi_Unicode(const nStr: string): string; static;
     class function UTF8_Unicode(const nStr: string): string; static;
@@ -1824,6 +1827,28 @@ begin
     //xxxxx
   finally
     Free;
+  end;
+end;
+
+//Date: 2021-06-01
+//Parm: 列表;数组
+//Desc: 使用nArray填充nList
+class procedure TStringHelper.FillList(const nList: TStrings;
+  const nArray: array of string; const nClearFirst: Boolean);
+var nIdx: Integer;
+begin
+  with nList do
+  try
+    BeginUpdate;
+    if nClearFirst then
+      Clear;
+    //xxxxx
+
+    for nIdx := Low(nArray) to High(nArray) do
+      nList.Add(nArray[nIdx]);
+    //xxxxx
+  finally
+    EndUpdate;
   end;
 end;
 

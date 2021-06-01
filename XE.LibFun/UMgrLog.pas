@@ -114,6 +114,8 @@ type
     class function Str2Type(const nStr: string;
       const nLong: Boolean = True): TLogType;
     {*日志类型*}
+    function MakeFileName(const nDate: TDateTime): string;
+    {*日志文件*}
     procedure GetStatus(const nList: TStrings;
       const nFriendly: Boolean = True); override;
     {*获取状态*}
@@ -453,6 +455,14 @@ begin
     Inc(FStatus.FNumError);
     SyncLeave;
   end;
+end;
+
+//Date: 2021-05-31
+//Parm: 日期
+//Desc: 生成nDate的日志文件名称
+function TLogManager.MakeFileName(const nDate: TDateTime): string;
+begin
+  Result := FWritePath + TDateTimeHelper.Date2Str(nDate) + FFileExt;
 end;
 
 //Date: 2019-01-24

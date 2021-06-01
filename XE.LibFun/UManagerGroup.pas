@@ -34,6 +34,8 @@ type
       const nField: string = ''; const nSyncLock: Boolean = False);
     destructor Destroy; override;
     {*创建释放*}
+    function MakeFileName(const nDate: TDateTime): string;
+    {*日志文件*}
     procedure WriteLog(const nClass,nDesc,nEvent: string);
     {*记录日志*}
   end;
@@ -142,6 +144,14 @@ destructor TSimpleLogger.Destroy;
 begin
   FWriteLock.Free;
   inherited;
+end;
+
+//Date: 2021-05-31
+//Parm: 日期
+//Desc: 生成nDate的日志文件名称
+function TSimpleLogger.MakeFileName(const nDate: TDateTime): string;
+begin
+  Result := FWritePath +  TDateTimeHelper.Date2Str(nDate) + FFileExt;
 end;
 
 //Date: 2021-01-04

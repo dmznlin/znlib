@@ -20,15 +20,19 @@ type
   TMenuItemType = (mtDefault, mtProg, mtEntity, mtItem, mtAssist);
   //menu item
 
-const
-  sMenuTypeText: array[TMenuItemType] of string = ('默认', '程序', '实体',
-    '菜单项', '辅助项');
-  //menu type desc
-
-type
   TMenuAction = (maDefault, maNewForm, maNewFrame, maExecute);
   //菜单动作: 默认,新窗体,新页面,执行命令
 
+const
+  sMenuItemType: array[TMenuItemType] of string = ('默认', '程序', '实体',
+    '菜单项', '辅助项');
+  //menu type desc
+
+  sMenuAction: array[TMenuAction] of string = ('默认操作', '打开窗体', '打开框架',
+    '执行程序');
+  //menu acton desc
+
+type
   TMenuData = record
     FID           : string;                              //标识
     FName         : string;                              //名称
@@ -130,6 +134,9 @@ type
     {*菜单信息*}
     function InitMenus(const nMemo: TStrings = nil): Boolean;
     {*初始化数据*}
+    procedure GetStatus(const nList: TStrings;
+      const nFriendly: Boolean = True); override;
+    {*获取状态*}
     property MultiLanguage: TMenuDataList read FMultiLang;
     {*属性相关*}
   end;
@@ -799,7 +806,9 @@ begin
       try
         nStr := FieldByName('M_Deploy').AsString;
         nDPType := TStringHelper.Str2Set<TDeployType, TDeployTypes>(nStr);
-        if (nDPType <> []) and (not (nDeploy in nDPType)) then Continue;
+
+        if (nDeploy <> dtAll) and
+           (nDPType <> []) and (not (nDeploy in nDPType)) then Continue;
         //not match deploy
 
         nStr := FieldByName('M_Type').AsString;
@@ -845,6 +854,7 @@ begin
           FLang         := FieldByName('M_Lang').AsString;
           FUserID       := FieldByName('M_UserID').AsString;
           FExpaned      := FieldByName('M_Expand').AsString = sFlag_Yes;
+          FNewOrder     := FieldByName('M_NewOrder').AsInteger;
         end;
 
       finally
@@ -854,6 +864,55 @@ begin
     end;
   finally
     gDBManager.ReleaseDBQuery(nQuery);
+  end;
+end;
+
+procedure TMenuManager.GetStatus(const nList: TStrings;
+  const nFriendly: Boolean);
+var nIdx,nInt: Integer;
+    nMenus: TList;
+    nEntity: PMenuEntity;
+begin
+  nMenus := nil;
+  with TObjectStatusHelper do
+  try
+    SyncEnter;
+    inherited GetStatus(nList, nFriendly);
+
+    nMenus := gMG.FObjectPool.Lock(TList) as TList;
+    GetMenuData(nMenus);
+    //get menus data
+
+    nInt := 0;
+    for nIdx := nMenus.Count-1 downto 0 do
+    begin
+      nEntity := nMenus[nIdx];
+      nInt := nInt + Length(nEntity.FItems);
+    end;
+
+    if not nFriendly then
+    begin
+      nList.Add('NumBuilder=' + Length(FMenuBuilders).ToString);
+      nList.Add('NumEntity=' + nMenus.Count.ToString);
+      nList.Add('NumMenuItem=' + nInt.ToString);
+      Exit;
+    end;
+
+    nList.Add(FixData('NumBuilder:', Length(FMenuBuilders).ToString));
+    nList.Add(FixData('NumEntity:', nMenus.Count.ToString));
+    nList.Add(FixData('NumMenuItem:', nInt.ToString));
+
+    for nIdx := 0 to nMenus.Count-1 do
+    begin
+      nEntity := nMenus[nIdx];
+      nList.Add(FixData(Format('EntityItem %d:', [nIdx+1]),
+        nEntity.FProgID + '.' + nEntity.FEntity));
+      //xxxxx
+    end;
+  finally
+    SyncLeave;
+    ClearMenuData(nMenus);
+    gMG.FObjectPool.Release(nMenus);
   end;
 end;
 
