@@ -105,6 +105,9 @@ type
     procedure RunAfterApplicationStart();
     procedure RunBeforApplicationHalt();
     //关联主进程运行,处理特定资源
+    procedure RunAfterRegistAllManager(const nProc: TProc;
+      const nAfter: Boolean = True);
+    //管理器准备好以后运行指定方法
     procedure GetManagersStatus(const nList: TStrings);
     //获取有效管理器的当前状态
     procedure WriteLog(const nClass,nDesc,nEvent: string); overload;
@@ -115,8 +118,18 @@ type
 var
   gMG: TManagerGroup;
   //全局使用
-  
+
 implementation
+
+type
+  TProcItem = record
+    FProc  : TProc;       //匿名方法
+    FAfter : Boolean;     //提前或延后执行
+  end;
+
+var
+  gRunAfterRegistAll: array of TProcItem;
+  //延迟执行方法列表
 
 constructor TSimpleLogger.Create(const nPath,nExt,nField: string;
   const nSyncLock: Boolean);
@@ -232,6 +245,7 @@ end;
 //Parm: 是否注册
 //Desc: 扫描Group中所有Manager,调用Manager的注册方法.
 procedure TManagerGroup.RegistAll(const nReg: Boolean);
+var nIdx: Integer;
 begin
   if not nReg then
   begin
@@ -252,12 +266,29 @@ begin
 
   if nReg then
   begin
+    for nIdx := Low(gRunAfterRegistAll) to High(gRunAfterRegistAll) do
+    if not gRunAfterRegistAll[nIdx].FAfter then
+    begin
+      gRunAfterRegistAll[nIdx].FProc();
+      gRunAfterRegistAll[nIdx].FProc := nil;
+    end;
+
     CallManagersMethod('RunAfterRegistAllManager', True,
     procedure (const nObj: TObject; const nInstance: TRttiInstanceType;
       const nMethod: TRttiMethod)
     begin
       nMethod.Invoke(nObj, []);
     end);
+
+    for nIdx := Low(gRunAfterRegistAll) to High(gRunAfterRegistAll) do
+    if gRunAfterRegistAll[nIdx].FAfter then    
+    begin
+      gRunAfterRegistAll[nIdx].FProc();
+      gRunAfterRegistAll[nIdx].FProc := nil;
+    end;
+
+    SetLength(gRunAfterRegistAll, 0);
+    //clear all
   end; //注册后执行
 end;
 
@@ -379,6 +410,23 @@ begin
   end);
 end;
 
+//Date: 2021-06-02
+//Parm: 匿名方法
+//Desc: 添加nProc方法,在管理器注册完毕后执行
+procedure TManagerGroup.RunAfterRegistAllManager(const nProc: TProc;
+  const nAfter: Boolean);
+var nIdx: Integer;
+begin
+  nIdx := Length(gRunAfterRegistAll);
+  SetLength(gRunAfterRegistAll, nIdx + 1);
+
+  with gRunAfterRegistAll[nIdx] do
+  begin
+    FProc := nProc;
+    FAfter := nAfter;
+  end;
+end;
+
 //Date: 2021-04-09
 //Parm: 日志对象;对象描述;事件
 //Desc: 向日志文件中写入nClass.nEvent事件
@@ -395,11 +443,27 @@ begin
   FSimpleLogger.WriteLog(nClass, nDesc, nEvent);
 end;
 
+//Date: 2021-06-02
+//Desc: 执行初始化
+procedure Init(const nInit: Boolean);
+begin
+  with gMG,TApplicationHelper do
+  begin
+    if nInit then
+    begin
+      FillChar(gMG, SizeOf(TManagerGroup), #0);
+      gMG.FSimpleLogger := TSimpleLogger.Create(gLogPath, '_S.log');
+      gMG.RegistAll(True);
+    end else
+    begin
+      gMG.RegistAll(False);
+      gMG.FSimpleLogger.Free;
+    end;
+  end;
+end;
+
 initialization
-  FillChar(gMG, SizeOf(TManagerGroup), #0);
-  gMG.FSimpleLogger := TSimpleLogger.Create(TApplicationHelper.gLogPath, '_S.log');
-  gMG.RegistAll(True);
+  Init(True);
 finalization
-  gMG.RegistAll(False);
-  gMG.FSimpleLogger.Free;
+  Init(False);
 end.

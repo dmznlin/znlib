@@ -58,6 +58,7 @@ type
 
     FRecordID     : string;                              //记录编号(DB)
     FUserID       : string;                              //所属用户
+    FUniqueID     : string;                              //数据关联标识
     FType         : TMenuItemType;                       //菜单类型
     FDeploy       : TApplicationHelper.TDeployTypes;     //部署类型
     FSubItems     : TList;                               //子菜单列表
@@ -124,6 +125,7 @@ type
     procedure ClearMenuData(const nList: TList; const nFree: Boolean = False);
     {*菜单数据*}
     function BuildMenuSQL(const nMenu: PMenuItem): string;
+    procedure InitMenu(const nMenu: PMenuItem);
     procedure AddMenu(const nMenu: PMenuItem);
     procedure DeleteMenu(const nMenu: PMenuItem);
     {*菜单项*}
@@ -148,7 +150,7 @@ var
 implementation
 
 uses
-  UManagerGroup, UDBManager;
+  UManagerGroup, UDBManager, UDBFun;
 
 procedure WriteLog(const nEvent: string; const nMemo: TStrings = nil);
 begin
@@ -188,6 +190,7 @@ begin
       AddF('M_Type',        'varchar(15)',            '菜单类型').
       AddF('M_Lang',        'varchar(5)',             '语言标识').
       AddF('M_UserID',      'varchar(32)',            '用户标识').
+      AddF('M_Unique',      'varchar(32)',            '数据关联').
       AddF('M_Deploy',      'varchar(32)',            '部署类型(Desktop,Web)').
       AddF('M_Expand',      'Char(1)',                '默认展开', SQM(sFlag_No)).
       AddF('M_ImgIndex',    'integer default -1',     '图标索引', '-1').
@@ -552,6 +555,7 @@ begin
       SF('M_Type', Enum2Str(FType)),
       SF('M_Deploy', nStr),
       SF('M_Lang', FLang),
+      SF('M_Unique', FUniqueID),
       SF('M_ImgIndex', FImgIndex, sfVal),
       SF('M_NewOrder', FNewOrder, sfVal),
 
@@ -571,20 +575,94 @@ begin
   end;
 end;
 
+//Date: 2021-06-02
+//Parm: 菜单数据
+//Desc: 初始化nMenu
+procedure TMenuManager.InitMenu(const nMenu: PMenuItem);
+var nInit: TMenuItem;
+begin
+  FillChar(nInit, SizeOf(TMenuItem), #0);
+  nMenu^ := nInit;
+
+  with nMenu^ do
+  begin
+    FImgIndex := -1;
+    FNewOrder := 0;
+    FType     := mtItem;
+  end;
+end;
+
 //Date: 2021-05-27
 //Parm: 菜单数据
 //Desc: 新增 或 覆盖nMenu菜单
 procedure TMenuManager.AddMenu(const nMenu: PMenuItem);
+var nStr: string;
+    nQuery: TDataSet;
+    nEntity: TMenuItem;
 begin
+  if nMenu.FRecordID <> '' then
+  begin
+    nStr := gMenuManager.BuildMenuSQL(nMenu);
+    gMG.FDBManager.DBExecute(nStr);
+    Exit;
+  end;
 
+  if nMenu.FType <> mtItem then Exit;
+  nMenu.FProgID := Trim(nMenu.FProgID);
+  nMenu.FEntity := Trim(nMenu.FEntity);
+
+  if (nMenu.FProgID = '') or (nMenu.FEntity = '') then
+  begin
+    nStr := 'TMenuManager.AddMenu: Program or Entity Is Null';
+    WriteLog(nStr);
+    raise Exception.Create(nStr);
+  end;
+
+  nQuery := nil;
+  try
+    nStr := 'Select Top 1 M_NewOrder From %s ' +
+            'Where M_ProgID=''%s'' And M_Entity=''%s'' ' +
+            'Order By M_NewOrder DESC';
+    nStr := Format(nStr, [sTable_Menu, nMenu.FProgID, nMenu.FEntity]);
+
+    nQuery := gDBManager.DBQuery(nStr);
+    if nQuery.RecordCount < 1 then
+    begin
+      nEntity := nMenu^;
+      with nEntity do
+      begin
+        FTitle    := '我的菜单';
+        FImgIndex := -1;
+        FNewOrder := 0;
+        FExpaned  := True;
+        FType     := mtEntity;
+      end;
+
+      nStr := gMenuManager.BuildMenuSQL(@nEntity);
+      gMG.FDBManager.DBExecute(nStr);
+      //add entity
+      nMenu.FNewOrder := 1;
+    end else nMenu.FNewOrder := nQuery.Fields[0].AsInteger + 1;
+
+    nStr := gMenuManager.BuildMenuSQL(nMenu);
+    gMG.FDBManager.DBExecute(nStr, nQuery);
+  finally
+    gDBManager.ReleaseDBQuery(nQuery);
+  end;
 end;
 
 //Date: 2021-05-27
 //Parm: 菜单数据
 //Desc: 删除nMenu菜单
 procedure TMenuManager.DeleteMenu(const nMenu: PMenuItem);
+var nStr: string;
 begin
-
+  if nMenu.FRecordID <> '' then
+  begin
+    nStr := 'Delete From %s Where R_ID=%s';
+    nStr := Format(nStr, [sTable_Menu, nMenu.FRecordID]);
+    gMG.FDBManager.DBExecute(nStr);
+  end;
 end;
 
 //Date: 2020-04-24
@@ -671,6 +749,11 @@ begin
 
           FLang := FMultiLang[i].FID;
           FNewOrder := j;
+
+          if FType = mtItem then
+            FUniqueID := TDBCommand.SnowflakeID();
+          //xxxxx
+          
           nListB.Add(BuildMenuSQL(@nEntity.FItems[j]));
           WriteLog('已创建: ' + nStr, nMemo);
         end;
@@ -853,6 +936,7 @@ begin
           FImgIndex     := FieldByName('M_ImgIndex').AsInteger;
           FLang         := FieldByName('M_Lang').AsString;
           FUserID       := FieldByName('M_UserID').AsString;
+          FUniqueID     := FieldByName('M_Unique').AsString;
           FExpaned      := FieldByName('M_Expand').AsString = sFlag_Yes;
           FNewOrder     := FieldByName('M_NewOrder').AsInteger;
         end;

@@ -72,7 +72,7 @@ procedure SystemTables(const nList: TList);
 begin
   with TSQLBuilder,TEncodeHelper,TApplicationHelper,TDBCommand do
   begin
-    gDBManager.AddTable(sTable_Users, nList).
+    gDBManager.AddTable(sTable_Users, nList, dtMSSQL).
       AddF('R_ID',        sField_SQLServer_AutoInc, '记录编号').
       AddF('U_ID',        'varChar(32)',            '用户标识').
       AddF('U_Name',      'varChar(32)',            '用户名称').
@@ -106,7 +106,7 @@ begin
       ], sTable_Users));
     //Users
 
-    gDBManager.AddTable(sTable_SerialBase, nList).
+    gDBManager.AddTable(sTable_SerialBase, nList, dtMSSQL).
       AddF('R_ID',        sField_SQLServer_AutoInc,    '记录编号').
       AddF('B_Group',     'varChar(15)',               '分组').
       AddF('B_Object',    'varChar(32)',               '对象').
@@ -123,7 +123,9 @@ end;
 class procedure TDBCommand.Init;
 begin
   FInitSnowflake := False;
-  gDBManager.AddTableBuilder(SystemTables);
+  gMG.RunAfterRegistAllManager( procedure
+    begin gDBManager.AddTableBuilder(SystemTables); end);
+  //delay run
 end;
 
 //Date: 2021-05-16
