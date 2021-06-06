@@ -56,6 +56,7 @@ type
     class procedure InitUser(var nUser: TUserData); static;
     class function GetUser(const nAccount: string;
       var nUser: TUserData): string; static;
+    class function BuildUserSQL(const nUser: PUserData): string; static;
     class function AddUser(const nUser: PUserData): string; static;
     class function DelUser(const nAccount: string): string; static;
     {*用户数据*}
@@ -308,6 +309,34 @@ begin
   nUser.FValidOn := TDateTimeHelper.Str2Date(sValidBefore);
 end;
 
+//Date: 2021-06-04
+//Parm: 用户数据
+//Desc: 构建nUser的insert,update语句
+class function TDBCommand.BuildUserSQL(const nUser: PUserData): string;
+begin
+  with TSQLBuilder,TEncodeHelper,TApplicationHelper do
+  Result := MakeSQLByStr([
+    SF('U_ID',       nUser.FUserID),
+    SF('U_Name',     nUser.FUserName),
+    SF('U_Account',  nUser.FAccount),
+    SF('U_Password', Encode_3DES(nUser.FPassword, sDefaultKey)),
+    SF('U_Encrypt',  Encode_3DES(nUser.FEncryptKey, sDefaultKey)),
+    SF('U_Phone',    nUser.FPhone),
+    SF('U_Mail',     nUser.FMail),
+    SF('U_Lang',     nUser.FLangID),
+    SF('U_Group',    nUser.FGroupID),
+    SF('U_Memo',     nUser.FMemo),
+    SF('U_CreateOn', sField_SQLServer_Now, sfVal),
+    SF('U_ValidOn',  TDateTimeHelper.Date2Str(nUser.FValidOn)),
+
+    SF_IF([SF('U_DynPwd', sFlag_Yes),
+           SF('U_DynPwd', sFlag_No)], nUser.FDynamicPwd),
+    SF_IF([SF('U_Admin', sFlag_Yes),
+           SF('U_Admin', sFlag_No)], nUser.FIsAdmin)
+    ], sTable_Users, SF('R_ID', nUser.FRecordID, sfVal), nUser.FRecordID = '');
+  //insert or update sql
+end;
+
 //Date: 2021-05-23
 //Parm: 用户数据
 //Desc: 添加用户
@@ -354,28 +383,7 @@ begin
       nUser.FLangID := 'cn';
     //xxxxx
 
-    with TSQLBuilder,TEncodeHelper,TApplicationHelper do
-    nStr := MakeSQLByStr([
-      SF('U_ID',       nUser.FUserID),
-      SF('U_Name',     nUser.FUserName),
-      SF('U_Account',  nUser.FAccount),
-      SF('U_Password', Encode_3DES(nUser.FPassword, sDefaultKey)),
-      SF('U_Encrypt',  Encode_3DES(nUser.FEncryptKey, sDefaultKey)),
-      SF('U_Phone',    nUser.FPhone),
-      SF('U_Mail',     nUser.FMail),
-      SF('U_Lang',     nUser.FLangID),
-      SF('U_Group',    nUser.FGroupID),
-      SF('U_Memo',     nUser.FMemo),
-      SF('U_CreateOn', sField_SQLServer_Now, sfVal),
-      SF('U_ValidOn',  TDateTimeHelper.Date2Str(nUser.FValidOn)),
-
-      SF_IF([SF('U_DynPwd', sFlag_Yes),
-             SF('U_DynPwd', sFlag_No)], nUser.FDynamicPwd),
-      SF_IF([SF('U_Admin', sFlag_Yes),
-             SF('U_Admin', sFlag_No)], nUser.FIsAdmin)
-      ], sTable_Users);
-    //insert sql
-
+    nStr := TDBCommand.BuildUserSQL(nUser);
     gMG.FDBManager.DBExecute(nStr, nQuery);
   finally
     gMG.FDBManager.ReleaseDBQuery(nQuery);
