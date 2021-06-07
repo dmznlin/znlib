@@ -36,3 +36,8 @@ https://github.com/nikosdion/timecode.git
 
 *.DEC: Delphi Encryption Compendium,编码加密算法库
 https://github.com/MHumm/DelphiEncryptionCompendium
+
+*.Zint: 条码库(条形码,二维码等)
+https://github.com/zint/zint
+https://github.com/landrix/Zint-Barcode-Generator-for-Delphi.git
+https://github.com/foxitsoftware/DelphiZXingQRCode.git
