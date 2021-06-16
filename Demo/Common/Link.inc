@@ -25,8 +25,11 @@
 {$DEFINE EncryptLib}
 //启用加解密算法库
 
-{.$DEFINE MenuManager}
+{$DEFINE MenuManager}
 //启用数据库管理器
 
-{.$DEFINE MQTTMessager}
+{$DEFINE DataDictManager}
+//启用数据库管理器
+
+{$DEFINE MQTTMessager}
 //启用MQTT消息中心

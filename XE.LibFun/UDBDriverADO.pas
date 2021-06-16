@@ -87,7 +87,7 @@ begin
         ResetTransData(nCD);
         //init trans
 
-        {$IFDEF DebugLog}
+        {$IFDEF Debug}
         WriteMultiThreadLog('ADO.LockDBConn', 'TADOConnection.Create');
         {$ENDIF}
       end,
@@ -159,7 +159,7 @@ begin
         //ø’œ–¡¨Ω”
       end;
 
-      {$IFDEF DebugLog}
+      {$IFDEF Debug}
       if Result then
         WriteMultiThreadLog('ADO.LockDBConn', 'Lock Mode:' + nTimes.ToString);
       {$ENDIF}
@@ -213,7 +213,7 @@ end;
 function TDBDriverADO.CheckDBConn(const nDB: string): string;
 var nQuery: TADOQuery;
 begin
-  {$IFDEF DebugLog}
+  {$IFDEF Debug}
   WriteMultiThreadLog('ADO.CheckDBConn');
   {$ENDIF}
 
@@ -517,7 +517,7 @@ function TDBDriverADO.GetCurrentConnection(const nConn: TObject;
   const nCallName, nEvent: string): TADOConnection;
 var nStr: string;
 begin
-  {$IFDEF DebugLog}
+  {$IFDEF Debug}
   WriteMultiThreadLog(nCallName, nEvent);
   {$ENDIF}
 

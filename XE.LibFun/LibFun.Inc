@@ -98,6 +98,13 @@
   //启用菜单管理器
 {$ENDIF}
 
+{$IFDEF DataDictManager}
+  {$DEFINE LogManager}
+  //启用日志管理器
+  {$DEFINE EnableDataDictManager}
+  //启用数据字典管理器
+{$ENDIF}
+
 {$IFDEF MQTTMessager}
   {$IFDEF MSWin}
     {$DEFINE LogManager}

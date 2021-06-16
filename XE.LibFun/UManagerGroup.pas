@@ -18,6 +18,7 @@ uses
   {$IFDEF EnableThreadPool}UThreadPool,{$ENDIF}
   {$IFDEF EnableChannelManager}UMgrChannel,{$ENDIF}
   {$IFDEF EnableMQTTMessager}UMosMessager,{$ENDIF}
+  {$IFDEF EnableDataDictManager}UMgrDataDict,{$ENDIF}
   {$IFDEF EnableParamManager}UParameters,{$ENDIF} ULibFun, UWaitItem;
 
 type
@@ -86,6 +87,8 @@ type
     //菜单管理器
     {$IFDEF EnableParamManager}FParamsManager: TParameterManager;{$ENDIF}
     //参数管理器
+    {$IFDEF EnableDataDictManager}FDataDictManager: TDataDictManager;{$ENDIF}
+    //数据字典管理器
     {$IFDEF EnableChannelManager}FChannelManager: TChannelManager;{$ENDIF}
     //RemObjects通道管理器
   private

@@ -28,6 +28,8 @@ type
       //ignore prefix when verify
       sDefaultKey   = 'sysadmin';
       //the key for encrypt data
+      sDefaultLang  = 'cn';
+      //language id
 
     type
       TCPUID = array[1..4] of Longint;

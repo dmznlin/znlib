@@ -15,6 +15,12 @@
         <Projects Include="SerialID\SerialID.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="DataDict\DataDict.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="MQTT\MQTT.dproj">
+            <Dependencies/>
+        </Projects>
     </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Default.Personality.12</Borland.Personality>
@@ -59,14 +65,32 @@
     <Target Name="SerialID:Make">
         <MSBuild Projects="SerialID\SerialID.dproj" Targets="Make"/>
     </Target>
+    <Target Name="DataDict">
+        <MSBuild Projects="DataDict\DataDict.dproj"/>
+    </Target>
+    <Target Name="DataDict:Clean">
+        <MSBuild Projects="DataDict\DataDict.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="DataDict:Make">
+        <MSBuild Projects="DataDict\DataDict.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="MQTT">
+        <MSBuild Projects="MQTT\MQTT.dproj"/>
+    </Target>
+    <Target Name="MQTT:Clean">
+        <MSBuild Projects="MQTT\MQTT.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="MQTT:Make">
+        <MSBuild Projects="MQTT\MQTT.dproj" Targets="Make"/>
+    </Target>
     <Target Name="Build">
-        <CallTarget Targets="DBPool;HighTimer;ThreadPool;SerialID"/>
+        <CallTarget Targets="DBPool;HighTimer;ThreadPool;SerialID;DataDict;MQTT"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="DBPool:Clean;HighTimer:Clean;ThreadPool:Clean;SerialID:Clean"/>
+        <CallTarget Targets="DBPool:Clean;HighTimer:Clean;ThreadPool:Clean;SerialID:Clean;DataDict:Clean;MQTT:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="DBPool:Make;HighTimer:Make;ThreadPool:Make;SerialID:Make"/>
+        <CallTarget Targets="DBPool:Make;HighTimer:Make;ThreadPool:Make;SerialID:Make;DataDict:Make;MQTT:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>
