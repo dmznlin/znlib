@@ -86,7 +86,7 @@ object fFormMain: TfFormMain
     Width = 111
     Height = 20
     TabOrder = 7
-    Text = '118.89.157.37'
+    Text = 'test.mosquitto.org'
   end
   object Edit4: TEdit
     Left = 127
@@ -94,7 +94,7 @@ object fFormMain: TfFormMain
     Width = 111
     Height = 20
     TabOrder = 8
-    Text = '8031'
+    Text = '1883'
   end
   object Edit5: TEdit
     Left = 10
@@ -102,7 +102,6 @@ object fFormMain: TfFormMain
     Width = 111
     Height = 20
     TabOrder = 9
-    Text = 'dmzn'
   end
   object Edit6: TEdit
     Left = 127
@@ -111,7 +110,6 @@ object fFormMain: TfFormMain
     Height = 20
     PasswordChar = '*'
     TabOrder = 10
-    Text = 'dmzn'
   end
   object CheckBox2: TCheckBox
     Left = 255

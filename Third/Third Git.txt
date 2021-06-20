@@ -41,3 +41,6 @@ https://github.com/MHumm/DelphiEncryptionCompendium
 https://github.com/zint/zint
 https://github.com/landrix/Zint-Barcode-Generator-for-Delphi.git
 https://github.com/foxitsoftware/DelphiZXingQRCode.git
+
+*.Grijjy Foundation: 对象、记录序列化等基础库
+https://github.com/grijjy/GrijjyFoundation

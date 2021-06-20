@@ -291,9 +291,12 @@ end;
 class function TDBCommand.ValidID(const nID: string): Boolean;
 var nIdx: Integer;
 begin
+  Result := True;
+  //init
+
   for nIdx := Length(nID) downto 1 do
   begin
-    Result := nID[nIdx] in ['0'..'9', 'a'..'z', 'A'..'Z', '_', '@'];
+    Result := CharInSet(nID[nIdx], ['0'..'9', 'a'..'z', 'A'..'Z', '_', '@']);
     if not Result then Exit;
   end;
 end;

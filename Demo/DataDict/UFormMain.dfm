@@ -22,9 +22,6 @@ object fFormMain: TfFormMain
     Align = alTop
     BevelOuter = bvNone
     TabOrder = 0
-    ExplicitLeft = 232
-    ExplicitTop = 80
-    ExplicitWidth = 185
     object Button1: TButton
       Left = 8
       Top = 10
@@ -33,6 +30,15 @@ object fFormMain: TfFormMain
       Caption = 'initdb'
       TabOrder = 0
       OnClick = Button1Click
+    end
+    object Button2: TButton
+      Left = 89
+      Top = 10
+      Width = 75
+      Height = 25
+      Caption = 'initdict'
+      TabOrder = 1
+      OnClick = Button2Click
     end
   end
   object Memo1: TMemo

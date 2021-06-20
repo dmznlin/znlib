@@ -667,7 +667,7 @@ end;
 
 //Date: 2020-04-24
 //Parm: 输出
-//Desc: 在数据中初始化
+//Desc: 初始化数据库中的菜单数据
 function TMenuManager.InitMenus(const nMemo: TStrings): Boolean;
 var nStr: string;
     i,j,nIdx: Integer;
