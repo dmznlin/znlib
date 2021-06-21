@@ -7,6 +7,50 @@
   *.代码内维护菜单项,保证系统菜单完整.原来使用菜单编辑器的方法,会导致部署差异.
   *.程序ProgID: 用于区分菜单所属的系统.
   *.实体Entity: 用于区分同系统内的不同菜单,包括主菜单和快捷菜单.
+
+  使用方法:
+  1.添加Builder
+    procedure SytemMenuBuilder(const nList: TList);
+    begin
+      gMenuManager.AddEntity(sProg_Main, '主程序', 'MAIN', '主菜单', nList).
+        SetParent('').SetType(mtItem).                 //1 level
+          AddM('A00', '系统').
+          AddM('B00', '网络').
+          AddM('C00', '参数').
+        SetParent('A00').SetType(mtItem).              //A00
+          AddM('A01', '切换语言').
+          AddM('A02', '修改密码').
+          AddM('A03', '动态口令').
+          AddM('A04', '退出系统', maExecute, sCMD_Exit).
+        SetParent('B00').SetType(mtItem).              //B00
+          AddM('B01', 'B01', maNewForm, 'formB01').
+          AddM('B02', 'B02').
+      //RunSoft.MAIN
+
+      gMenuManager.AddEntity(sProg_Admin, '管理工具', 'MAIN', '主菜单', nList).
+        SetParent('').SetType(mtItem).                 //1 level
+          AddM('A00', '系统管理').
+          AddM('B00', '基础信息').
+        SetParent('A00').SetType(mtItem).
+          AddM('A01', '数据备份').
+          AddM('A02', '数据恢复').
+        SetParent('B00').SetType(mtItem).
+          AddM('B01', '系统参数').
+          AddM('B02', '组织结构').
+          AddM('B03', '用户管理').
+      //RunAdmin.MAIN
+    end;
+
+    gMenuManager.AddMenuBuilder(SytemMenuBuilder);
+    //将菜单项提交至菜单管理器
+
+  2.初始化菜单项
+    gMenuManager.InitMenus();
+
+  3.加载菜单项
+    gMenuManager.GetMenus(FActive.FDeployType, FPrograms[nIdx].FProgram,
+        sEntity_Main, FUser.FLangID, FMenus);
+    //main menu
 *******************************************************************************}
 unit UMenuManager;
 
@@ -694,7 +738,7 @@ begin
 
     if Length(FMultiLang) < 1 then
     begin
-      WriteLog('InitMenus: 未配置语言', nMemo);
+      UMenuManager.WriteLog('InitMenus: 未配置语言', nMemo);
       Exit;
     end;
 
@@ -726,12 +770,12 @@ begin
     GetMenuData(nMenus);
     //get menus data
 
-    WriteLog('::: 创建菜单数据 :::', nMemo);
+    UMenuManager.WriteLog('::: 创建菜单数据 :::', nMemo);
     for nIdx := 0 to nMenus.Count -1 do
     begin
       nEntity := nMenus[nIdx];
       //entity item
-      WriteLog('创建实体: ' + nEntity.FProgID + '.' + nEntity.FEntity, nMemo);
+      UMenuManager.WriteLog('创建实体: ' + nEntity.FProgID + '.' + nEntity.FEntity, nMemo);
 
       for i := Low(FMultiLang) to High(FMultiLang) do //multi language
       begin
@@ -755,7 +799,7 @@ begin
           //xxxxx
           
           nListB.Add(BuildMenuSQL(@nEntity.FItems[j]));
-          WriteLog('已创建: ' + nStr, nMemo);
+          UMenuManager.WriteLog('已创建: ' + nStr, nMemo);
         end;
       end;
     end;

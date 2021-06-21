@@ -1,7 +1,7 @@
 object fFormMain: TfFormMain
   Left = 0
   Top = 0
-  Caption = 'fFormMain'
+  Caption = 'data dict'
   ClientHeight = 367
   ClientWidth = 578
   Color = clBtnFace
@@ -12,6 +12,7 @@ object fFormMain: TfFormMain
   Font.Style = []
   OldCreateOrder = False
   Position = poDesktopCenter
+  OnCreate = FormCreate
   PixelsPerInch = 96
   TextHeight = 12
   object Panel1: TPanel
@@ -22,6 +23,7 @@ object fFormMain: TfFormMain
     Align = alTop
     BevelOuter = bvNone
     TabOrder = 0
+    ExplicitTop = -6
     object Button1: TButton
       Left = 8
       Top = 10
@@ -39,6 +41,24 @@ object fFormMain: TfFormMain
       Caption = 'initdict'
       TabOrder = 1
       OnClick = Button2Click
+    end
+    object Button3: TButton
+      Left = 170
+      Top = 10
+      Width = 75
+      Height = 25
+      Caption = 'getdict'
+      TabOrder = 2
+      OnClick = Button3Click
+    end
+    object Button4: TButton
+      Left = 251
+      Top = 10
+      Width = 75
+      Height = 25
+      Caption = 'status'
+      TabOrder = 3
+      OnClick = Button4Click
     end
   end
   object Memo1: TMemo

@@ -2,13 +2,37 @@
   作者: dmzn@163.com 2021-06-08
   描述: 数据字典管理器
 
-  备注:
-  &.数据字典主要用于初始化ListView,cxGrid等数据表格,字典管理中维护了一组与之
-    相关的配置数据.
-  &.字典分两级管理: 程序模块,模块下多个实体,每个实体对应一组数据项.
-  &.字典管理器使用ProgID属性,来标识当前所有实体所归属的程序.
-  &.字典数据由数据库加载,即用即请求,管理器会缓存,所以每个实体数据只加载一次.
-  &.读取时调用LoadEntity,若成功则该实体会被激活,直接读取ActiveEntity就可以了.
+  使用方法:
+  1.添加Builder
+    procedure SytemDictBuilder(const nList: TList);
+    var nEty: PDictEntity;
+    begin
+      nEty := gDataDictManager.AddEntity('Main_A01', '操作日志', nList);
+      nEty.AddDict('R_ID',        '标识').
+           AddDict('L_Name',      '名称').
+           AddDict('L_Owner',     '拥有人').
+           AddDict('L_Index',     '顺序');
+      //添加字典项
+
+      with nEty.ByField('R_ID').FFooter do
+      begin
+        FDisplay  := 'total:';
+        FFormat   := '合计: 共 0 条';
+        FKind     := fkCount;
+        FPosition := fpAll;
+      end; //扩展字典项
+    end;
+
+    gDataDictManager.AddDictBuilder(SytemDictBuilder);
+    //添加至管理器
+    
+  2.初始化字典项
+    gDataDictManager.InitDictData('cn');  //中文字典项
+    gDataDictManager.InitDictData('en');  //英文字典项
+
+  3.加载字典项
+    var nEntity: TDictEntity;
+    gDataDictManager.GetEntity('Main_A01', 'cn', @nEntity);
 *******************************************************************************}
 unit UMgrDataDict;
 
@@ -67,16 +91,19 @@ type
   end;
   TDictItems = array of TDictItem;
 
-  PEntityItem = ^TEntityItem;
-  TEntityItem = record
-  private
+  PDictEntity = ^TDictEntity;
+  TDictEntity = record
     FEntity   : string;                                 //实体标记
     FName     : string;                                 //实体名称
     FLang     : string;                                 //语言标识
     FItems    : TDictItems;                             //字典数据(PDictItem)
   public
-    function AddDict(const nTitle,nField: string): PEntityItem;
-    {*添加字典项*}
+    function AddDict(const nField,nTitle: string): PDictEntity;
+    {*添加字典项*}    
+    function ByTitle(const nTitle: string): PDictItem;
+    function ByField(const nField: string): PDictItem;
+    function FindItem(const nData: string; const nMode: Byte): PDictItem;
+    {*检索字典项*} 
   end;
 
   TDictItemBuilder = procedure (const nList: TList);
@@ -91,7 +118,7 @@ type
     {*字典配置信息*}
   protected
     function FindEntity(const nEntity,nLang: string;
-      const nList: TList): PEntityItem;
+      const nList: TList): PDictEntity;
     {*检索数据*}
   public
     constructor Create;
@@ -102,20 +129,19 @@ type
     procedure RunAfterRegistAllManager; override;
     {*延迟执行*}
     procedure AddDictBuilder(const nBuilder: TDictItemBuilder);
-    function AddEntity(const nEntity,nName,nLang: string;
-      const nList: TList): PEntityItem;
-    {*添加数据*}
+    function AddEntity(const nEntity,nName: string;
+      const nList: TList): PDictEntity;
+    procedure GetEntity(const nEntity,nLang: string; const nData: PDictEntity);
+    {*字典数据*}
     procedure GetDictData(const nList: TList);
     procedure ClearDictData(const nList: TList; const nFree: Boolean = False);
     {*字典数据*}
-    function BuilDictSQL(const nEntity: PEntityItem;const nIdx:Integer): string;
-    procedure InitDict(const nEntity: PEntityItem;
+    function BuilDictSQL(const nEntity: PDictEntity;const nIdx:Integer): string;
+    procedure InitDict(const nEntity: PDictEntity;
       const nFirstItem: Boolean = True);
-    procedure AddDict(const nEntity: PEntityItem; const nIdx: Integer = 0);
-    procedure DelDict(const nEntity: PEntityItem; const nIdx: Integer = 0);
+    procedure AddDict(const nEntity: PDictEntity; const nIdx: Integer = 0);
+    procedure DelDict(const nEntity: PDictEntity; const nIdx: Integer = 0);
     {*字典项*}
-    procedure GetEntity(const nEntity,nLang: string; const nData: PEntityItem);
-    {*字典数据*}
     function InitDictData(const nLang: string;
       const nMemo: TStrings = nil): Boolean;
     {*初始化数据*}
@@ -147,7 +173,8 @@ begin
   begin
     AddTable(sTable_DataDict, nList, dtMSSQL).
       AddF('R_ID',          sField_SQLServer_AutoInc, '记录标识').
-      AddF('D_Entity',      'varchar(32)',            '所属实体').
+      AddF('D_Entity',      'varchar(32)',            '实体标识').
+      AddF('D_Name',        'varchar(32)',            '实体名称').
       AddF('D_Title',       'varchar(32)',            '数据标题').
       AddF('D_Align',       'smallint',               '标题对齐').
       AddF('D_Width',       'integer',                '标题宽度').
@@ -178,9 +205,9 @@ begin
 end;
 
 //Date: 2021-06-17
-//Parm: 标题;字段
+//Parm: 字段;标题
 //Desc: 添加字典项
-function TEntityItem.AddDict(const nTitle, nField: string): PEntityItem;
+function TDictEntity.AddDict(const nField,nTitle: string): PDictEntity;
 var nStr: string;
     nIdx: Integer;
     nInit: TDictItem;
@@ -192,8 +219,8 @@ begin
    if (CompareText(nTitle, FItems[nIdx].FTitle) = 0) and
       (CompareText(nField, FItems[nIdx].FDBItem.FField) = 0) then
    begin
-     nStr := 'TDataDictManager.AddDict: %s.%s Has Exists.';
-     nStr := Format(nStr, [nField, nTitle]);
+     nStr := 'TDataDictManager.AddDict: %s.%s.%s.%s Has Exists.';
+     nStr := Format(nStr, [FEntity, FName, nField, nTitle]);
 
      WriteLog(nStr);
      raise Exception.Create(nStr);
@@ -208,10 +235,56 @@ begin
 
   with FItems[nIdx] do
   begin
+    FIndex := -1;
     FVisible := True;
     FTitle := nTitle;
     FDBItem.FField := nField;
   end;
+end;
+
+//Date: 2021-06-21
+//Parm: 数据;模式
+//Desc: 依据nMode检索字典项
+function TDictEntity.FindItem(const nData: string; const nMode: Byte): PDictItem;
+var nIdx: Integer;
+begin
+  Result := nil;
+  for nIdx := Low(FItems) to High(FItems) do
+  begin
+    if nMode = 1 then //title
+    begin
+      if CompareText(nData, FItems[nIdx].FTitle) = 0 then
+      begin
+        Result := @FItems[nIdx];
+        Break;      
+      end;
+    end else
+
+    if nMode = 2 then //field
+    begin
+      if CompareText(nData, FItems[nIdx].FDBItem.FField) = 0 then
+      begin
+        Result := @FItems[nIdx];
+        Break;      
+      end;
+    end;
+  end;
+end;
+
+//Date: 2021-06-21
+//Parm: 标题
+//Desc: 检索标题是nTitle的字典项
+function TDictEntity.ByTitle(const nTitle: string): PDictItem;
+begin
+  Result := FindItem(nTitle, 1);
+end;
+
+//Date: 2021-06-21
+//Parm: 字段
+//Desc: 检索字段为nField的字典项
+function TDictEntity.ByField(const nField: string): PDictItem;
+begin
+  Result := FindItem(nField, 2);
 end;
 
 //------------------------------------------------------------------------------
@@ -294,7 +367,7 @@ begin
   if Assigned(nList) then
   begin
     for nIdx := nList.Count - 1 downto 0 do
-      Dispose(PEntityItem(nList[nIdx]));
+      Dispose(PDictEntity(nList[nIdx]));
     //xxxxx
 
     if nFree then
@@ -307,16 +380,16 @@ end;
 //Parm: 实体名;语言标识;列表
 //Desc: 在nList中检索nEntity.nLang实体
 function TDataDictManager.FindEntity(const nEntity,nLang: string;
-  const nList: TList): PEntityItem;
+  const nList: TList): PDictEntity;
 var nIdx: Integer;
-    nEty: PEntityItem;
+    nEty: PDictEntity;
 begin
   Result := nil;
   for nIdx := nList.Count - 1 downto 0 do
   begin
     nEty := nList[nIdx];
-    if (CompareText(nEntity, nEty.FEntity) = 0) and
-       (CompareText(nLang, nEty.FLang) = 0) then
+    if (CompareText(nEntity, nEty.FEntity) = 0) and (
+       (nLang = '') or (CompareText(nLang, nEty.FLang) = 0)) then
     begin
       Result := nEty;
       Break;
@@ -327,10 +400,10 @@ end;
 //Date: 2021-06-17
 //Parm: 实体标识;名称;语言
 //Desc: 在nList中增加//标识为nEntity字典实体
-function TDataDictManager.AddEntity(const nEntity, nName, nLang: string;
-  const nList: TList): PEntityItem;
+function TDataDictManager.AddEntity(const nEntity, nName: string;
+  const nList: TList): PDictEntity;
 begin
-  Result := FindEntity(nEntity, nLang, nList);
+  Result := FindEntity(nEntity, '', nList);
   if not Assigned(Result) then
   begin
     New(Result);
@@ -341,7 +414,6 @@ begin
     begin
       FEntity := nEntity;
       FName   := nName;
-      FLang   := nLang;
     end;
   end;
 end;
@@ -349,7 +421,7 @@ end;
 //Date: 2021-06-17
 //Parm: 实体;字典项索引
 //Desc: 构建nEntity.FItems[nIdx]的insert,update语句
-function TDataDictManager.BuilDictSQL(const nEntity: PEntityItem;
+function TDataDictManager.BuilDictSQL(const nEntity: PDictEntity;
   const nIdx: Integer): string;
 var nStr: string;
 begin
@@ -364,7 +436,8 @@ begin
   begin
     Result := MakeSQLByStr([
       SF('D_Entity', nEntity.FEntity),
-      SF('D_Title', nEntity.FName),
+      SF('D_Name', nEntity.FName),
+      SF('D_Title', FTitle),
       SF('D_Align', Ord(FAlign), sfVal),
       SF('D_Width', FWidth, sfVal),
       SF('D_Index', FIndex, sfVal),
@@ -397,19 +470,108 @@ end;
 //Desc: 初始化数据库中的字典数据
 function TDataDictManager.InitDictData(const nLang: string;
   const nMemo: TStrings): Boolean;
-begin
+var nStr: string;
+    i,nIdx: Integer;
+    nDicts: TList;
+    nListA,nListB: TStrings;
 
+    nQuery: TDataSet;
+    nEntity: PDictEntity;
+begin
+  Result := False;
+  if Assigned(nMemo) then
+    nMemo.Clear;
+  //xxxxx
+
+  nListA := nil;
+  nListB := nil;
+  nDicts := nil;
+  nQuery := nil; //init
+
+  with gDBManager do
+  try
+    nQuery := LockDBQuery();
+
+    nListA := gMG.FObjectPool.Lock(TStrings) as TStrings;
+    nListA.Clear;
+    nListB := gMG.FObjectPool.Lock(TStrings) as TStrings;
+    nListB.Clear;
+
+    nStr := 'Select D_Entity,D_LangID,D_Title,D_DBField From %s ' +
+            'Where D_LangID=''%s''';
+    nStr := Format(nStr, [sTable_DataDict, nLang]);
+
+    with DBQuery(nStr, nQuery) do
+    if RecordCount > 0 then
+    begin
+      First;
+      while not Eof do
+      begin
+        nStr := FieldByName('D_Entity').AsString + '.' +
+                FieldByName('D_LangID').AsString + '.' +
+                FieldByName('D_DBField').AsString + '.' +
+                FieldByName('D_Title').AsString;
+        nListA.Add(nStr);
+        Next;
+      end;
+    end;
+
+    nDicts := gMG.FObjectPool.Lock(TList) as TList;
+    GetDictData(nDicts);
+    //get dict data
+
+    UMgrDataDict.WriteLog('::: 创建字典数据 :::', nMemo);
+    for nIdx := 0 to nDicts.Count -1 do
+    begin
+      nEntity := nDicts[nIdx];
+      nEntity.FLang := nLang;
+
+      UMgrDataDict.WriteLog('创建实体: ' + nEntity.FEntity + '.' +
+                                           nEntity.FName, nMemo);
+      //xxxxx
+
+      for i := Low(nEntity.FItems) to High(nEntity.FItems) do
+      with nEntity.FItems[i],TSQLBuilder,TStringHelper do
+      begin
+        nStr := nEntity.FEntity + '.' + nLang + '.' +
+                FDBItem.FField + '.' + FTitle;
+        //xxxxx
+
+        if nListA.IndexOf(nStr) < 0 then
+        begin
+          if FIndex < 0 then          
+            FIndex := i;
+          //any property
+
+          nListB.Add(BuilDictSQL(nEntity, i));
+          UMgrDataDict.WriteLog('已创建: ' + nStr, nMemo);
+        end;
+      end;
+    end;
+
+    if nListB.Count > 0 then
+      DBExecute(nListB);
+    //save
+  finally
+    gMG.FObjectPool.Release(nListA);
+    gMG.FObjectPool.Release(nListB);
+    gDBManager.ReleaseDBQuery(nQuery);
+
+    ClearDictData(nDicts);
+    gMG.FObjectPool.Release(nDicts);
+    //menu list
+  end;
 end;
 
 //Date: 2021-06-17
 //Parm: 实体;首个字典项
 //Desc: 初始化nEntity和默认字典项
-procedure TDataDictManager.InitDict(const nEntity: PEntityItem;
+procedure TDataDictManager.InitDict(const nEntity: PDictEntity;
   const nFirstItem: Boolean);
-var nEty: TEntityItem;
+var nEty: TDictEntity;
     nDict: TDictItem;
 begin
-  FillChar(nEty, SizeOf(TEntityItem), #0);
+  FillChar(nEty, SizeOf(TDictEntity), #0);
   nEntity^ := nEty;
 
   if nFirstItem then
@@ -429,7 +591,7 @@ end;
 //Date: 2021-06-17
 //Parm: 字典项
 //Desc: 保存字典项
-procedure TDataDictManager.AddDict(const nEntity: PEntityItem;
+procedure TDataDictManager.AddDict(const nEntity: PDictEntity;
   const nIdx: Integer);
 var nStr: string;
     nQuery: TDataSet;
@@ -480,7 +642,7 @@ end;
 //Date: 2021-06-17
 //Parm: 字典项
 //Desc: 删除字典项
-procedure TDataDictManager.DelDict(const nEntity: PEntityItem;
+procedure TDataDictManager.DelDict(const nEntity: PDictEntity;
  const nIdx: Integer);
 var nStr: string;
 begin
@@ -503,7 +665,7 @@ end;
 //Parm: 实体;语言;数据
 //Desc: 载入nEntity.nLang的字典数据
 procedure TDataDictManager.GetEntity(const nEntity,nLang: string;
-  const nData: PEntityItem);
+  const nData: PDictEntity);
 var nStr: string;
     nIdx: Integer;
     nQuery: TDataSet;
@@ -532,7 +694,7 @@ begin
       First;
 
       nData.FEntity := FieldByName('D_Entity').AsString;
-      nData.FName   := FieldByName('D_Title').AsString;
+      nData.FName   := FieldByName('D_Name').AsString;
       nData.FLang   := FieldByName('D_LangID').AsString;
 
       while not Eof do
@@ -542,12 +704,12 @@ begin
 
         with nData.FItems[nIdx] do
         begin
-          FRecordID := FieldByName('').AsString;
-          FTitle    := FieldByName('').AsString;
-          FAlign    := TAlignment(FieldByName('').AsInteger);
-          FWidth    := FieldByName('').AsInteger;
-          FIndex    := FieldByName('').AsInteger;
-          FVisible  := StrToBool(FieldByName('').AsString);
+          FRecordID := FieldByName('R_ID').AsString;
+          FTitle    := FieldByName('D_Title').AsString;
+          FAlign    := TAlignment(FieldByName('D_Align').AsInteger);
+          FWidth    := FieldByName('D_Width').AsInteger;
+          FIndex    := FieldByName('D_Index').AsInteger;
+          FVisible  := StrToBool(FieldByName('D_Visible').AsString);
           //normal
           FDBItem.FTable := FieldByName('D_DBTable').AsString;
           FDBItem.FField := FieldByName('D_DBField').AsString;
@@ -582,21 +744,50 @@ end;
 //Desc: 将管理器状态数据存入nList
 procedure TDataDictManager.GetStatus(const nList: TStrings;
   const nFriendly: Boolean);
+var nIdx,nInt: Integer;
+    nDicts: TList;
+    nEntity: PDictEntity;
 begin
-    with TObjectStatusHelper do
+  nDicts := nil;
+  with TObjectStatusHelper do
   try
     SyncEnter;
     inherited GetStatus(nList, nFriendly);
 
+    nDicts := gMG.FObjectPool.Lock(TList) as TList;
+    GetDictData(nDicts);
+    //get dict data
+
+    nInt := 0;
+    for nIdx := nDicts.Count-1 downto 0 do
+    begin
+      nEntity := nDicts[nIdx];
+      nInt := nInt + Length(nEntity.FItems);
+    end;
+
     if not nFriendly then
     begin
-      //nList.Add('NumAll=' + FStatus.FNumAll.ToString);
+      nList.Add('NumBuilder=' + Length(FBuilders).ToString);
+      nList.Add('NumEntity=' + nDicts.Count.ToString);
+      nList.Add('NumDictItem=' + nInt.ToString);
       Exit;
     end;
 
-    //nList.Add(FixData('NumAll:', FStatus.FNumAll));
+    nList.Add(FixData('NumBuilder:', Length(FBuilders).ToString));
+    nList.Add(FixData('NumEntity:', nDicts.Count.ToString));
+    nList.Add(FixData('NumDictItem:', nInt.ToString));
+
+    for nIdx := 0 to nDicts.Count-1 do
+    begin
+      nEntity := nDicts[nIdx];
+      nList.Add(FixData(Format('EntityItem %d:', [nIdx+1]),
+        nEntity.FEntity + '.' + nEntity.FName));
+      //xxxxx
+    end;
   finally
     SyncLeave;
+    ClearDictData(nDicts);
+    gMG.FObjectPool.Release(nDicts);
   end;
 end;
 
