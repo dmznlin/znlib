@@ -128,7 +128,8 @@ type
     {*注册对象*}
     procedure RunAfterRegistAllManager; override;
     {*延迟执行*}
-    procedure AddDictBuilder(const nBuilder: TDictItemBuilder);
+    procedure AddDictBuilder(const nBuilder: TDictItemBuilder;
+      const nIdx: Integer = -1);
     function AddEntity(const nEntity,nName: string;
       const nList: TList): PDictEntity;
     procedure GetEntity(const nEntity,nLang: string; const nData: PDictEntity);
@@ -330,18 +331,25 @@ begin
 end;
 
 //Date: 2021-06-17
-//Parm: 配置方法
+//Parm: 配置方法;顺序
 //Desc: 新增字典配置方法
-procedure TDataDictManager.AddDictBuilder(const nBuilder: TDictItemBuilder);
-var nIdx: Integer;
+procedure TDataDictManager.AddDictBuilder(const nBuilder: TDictItemBuilder;
+  const nIdx: Integer);
+var i: Integer;
 begin
-  for nIdx := Low(FBuilders) to High(FBuilders) do
-    if @FBuilders[nIdx] = @nBuilder then Exit;
+  for i := Low(FBuilders) to High(FBuilders) do
+    if @FBuilders[i] = @nBuilder then Exit;
   //has exists
 
-  nIdx := Length(FBuilders);
-  SetLength(FBuilders, nIdx + 1);
-  FBuilders[nIdx] := nBuilder;
+  i := Length(FBuilders);
+  SetLength(FBuilders, i + 1);
+  FBuilders[i] := nBuilder;
+
+  if (nIdx > -1) and (nIdx < i) then
+  begin
+    FBuilders[i] := FBuilders[nIdx]; //save old
+    FBuilders[nIdx] := nBuilder;     //make new
+  end;
 end;
 
 //Date: 2021-06-17
@@ -434,6 +442,10 @@ begin
 
   with nEntity.FItems[nIdx], TSQLBuilder do
   begin
+    if FWidth < 1 then
+      FWidth := 120;
+    //default width
+
     Result := MakeSQLByStr([
       SF('D_Entity', nEntity.FEntity),
       SF('D_Name', nEntity.FName),

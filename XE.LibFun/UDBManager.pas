@@ -879,7 +879,7 @@ end;
 procedure TDBManager.GetTables(const nList: TList);
 var nIdx: Integer;
 begin
-  ClearTables(nList, False);
+  nList.Clear;
   //init first
 
   for nIdx := Low(FTableBuilders) to High(FTableBuilders) do

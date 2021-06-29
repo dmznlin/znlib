@@ -217,8 +217,9 @@ type
     class function Set2Str<T,ST>(const nSet: ST): string; static;
     class function Str2Set<T,ST>(const nSet: string): ST; static;
     //获取集合类型的字符串描述
-    class procedure FillList(const nList: TStrings; const nArray: array of string;
-      const nClearFirst: Boolean = True); static;
+    class procedure FillList(const nList: TStrings;
+      const nArray: array of string;
+      const nClearFirst: Boolean = True; const nSerial: Boolean = False); static;
     //使用数据填充列表
     class function Ansi_UTF8(const nStr: string): string; static;
     class function Ansi_Unicode(const nStr: string): string; static;
@@ -1836,8 +1837,8 @@ end;
 //Parm: 列表;数组
 //Desc: 使用nArray填充nList
 class procedure TStringHelper.FillList(const nList: TStrings;
-  const nArray: array of string; const nClearFirst: Boolean);
-var nIdx: Integer;
+  const nArray: array of string; const nClearFirst,nSerial: Boolean);
+var nIdx,nID: Integer;
 begin
   with nList do
   try
@@ -1846,9 +1847,14 @@ begin
       Clear;
     //xxxxx
 
+    if nSerial then
+         nID := 1 - Low(nArray) //from 1
+    else nID := 0;
+
     for nIdx := Low(nArray) to High(nArray) do
-      nList.Add(nArray[nIdx]);
-    //xxxxx
+      if nSerial then
+           nList.AddObject(IntToStr(nIdx + nID)+'.'+nArray[nIdx], Pointer(nIdx))
+      else nList.AddObject(nArray[nIdx], Pointer(nIdx));
   finally
     EndUpdate;
   end;
