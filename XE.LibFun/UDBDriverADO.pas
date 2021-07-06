@@ -57,7 +57,7 @@ uses
 //Desc: Çý¶¯ÐÅÏ¢
 class function TDBDriverADO.DriverInfo: TDBDriverInfo;
 begin
-  inherited;
+  Result := inherited DriverInfo;
   with Result do
   begin
     DrvName    := 'DBDriver.ADO';

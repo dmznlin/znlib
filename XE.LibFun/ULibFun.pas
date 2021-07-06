@@ -19,6 +19,54 @@ uses
   System.Math;
 
 type
+  /// <summary>
+  /// 命令调用时传递数据的结构
+  /// </summary>
+  PCommandParam = ^TCommandParam;
+  TCommandParam = record
+  private
+    const
+      cDim = 5;
+      {*参数维数*}
+    type
+      TParamType = (ptS, ptI, ptF, ptP, ptO);
+      {*参数类型*}
+
+      TValue<T> = record
+      private
+        FUsed: Boolean;
+        {*使用标记*}
+      public
+        Value: T;
+        {*参数取值*}
+      end;
+  public
+    Command: Integer;                                    //命令
+    ParamS: array[0..cDim - 1] of TValue<string>;        //字符
+    ParamI: array[0..cDim - 1] of TValue<Integer>;       //整数
+    ParamF: array[0..cDim - 1] of TValue<Double>;        //浮点
+    ParamP: array[0..cDim - 1] of TValue<Pointer>;       //指针
+    ParamO: array[0..cDim - 1] of TValue<TObject>;       //对象
+  private
+    function GetFree(const nType: TParamType): Integer;
+    {*获取空闲数据*}
+  public
+    procedure Init;
+    {*初始化*}
+    function AddS(const nS: string): PCommandParam; overload;
+    function AddI(const nI: Integer): PCommandParam; overload;
+    function AddF(const nF: Double): PCommandParam; overload;
+    function AddP(const nP: Pointer): PCommandParam; overload;
+    function AddO(const nO: TObject): PCommandParam; overload;
+    {*添加单个数据*}
+    function AddS(const nS: array of string): PCommandParam; overload;
+    function AddI(const nI: array of Integer): PCommandParam; overload;
+    function AddF(const nF: array of Double): PCommandParam; overload;
+    function AddP(const nP: array of Pointer): PCommandParam; overload;
+    function AddO(const nO: array of TObject): PCommandParam; overload;
+    {*添加多个数据*}
+  end;
+
   TApplicationHelper = class
   public
     const
@@ -351,6 +399,168 @@ type
   end;
 
 implementation
+
+//------------------------------------------------------------------------------
+//Date: 2021-07-06
+//Desc: 初始化
+procedure TCommandParam.Init;
+var nInit: TCommandParam;
+begin
+  FillChar(nInit, SizeOf(TCommandParam), #0);
+  Self := nInit;
+end;
+
+//Date: 2021-07-06
+//Parm: 参数类型
+//Desc: 获取nType参数的空闲项
+function TCommandParam.GetFree(const nType: TParamType): Integer;
+var nIdx: Integer;
+begin
+  Result := -1;
+  //init first
+
+  for nIdx := 0 to cDim-1 do
+  begin
+    case nType of
+     ptS:
+      if not ParamS[nIdx].FUsed then
+      begin
+        Result := nIdx;
+        ParamS[nIdx].FUsed := True;
+      end;
+     ptI:
+      if not ParamI[nIdx].FUsed then
+      begin
+        Result := nIdx;
+        ParamI[nIdx].FUsed := True;
+      end;
+     ptF:
+      if not ParamF[nIdx].FUsed then
+      begin
+        Result := nIdx;
+        ParamF[nIdx].FUsed := True;
+      end;
+     ptP:
+      if not ParamP[nIdx].FUsed then
+      begin
+        Result := nIdx;
+        ParamP[nIdx].FUsed := True;
+      end;
+     ptO:
+      if not ParamO[nIdx].FUsed then
+      begin
+        Result := nIdx;
+        ParamO[nIdx].FUsed := True;
+      end;
+    end;
+
+    if Result >= 0 then
+      Exit;
+    //xxxxx
+  end;
+
+  raise Exception.Create('ULibFun.GetFree: Param Record Is Full');
+end;
+
+//Date: 2021-07-06
+//Parm: 字符串
+//Desc: 添加nS到结构
+function TCommandParam.AddS(const nS: string): PCommandParam;
+begin
+  ParamS[GetFree(ptS)].Value := nS;
+  Result := @Self;
+end;
+
+//Date: 2021-07-06
+//Parm: 字符串数组
+//Desc: 添加nS到结构
+function TCommandParam.AddS(const nS: array of string): PCommandParam;
+var nIdx: Integer;
+begin
+  for nIdx := Low(nS) to High(nS) do
+    AddS(nS[nIdx]);
+  Result := @Self;
+end;
+
+//Date: 2021-07-06
+//Parm: 整数
+//Desc: 添加nI到结构
+function TCommandParam.AddI(const nI: Integer): PCommandParam;
+begin
+  ParamI[GetFree(ptI)].Value := nI;
+  Result := @Self;
+end;
+
+//Date: 2021-07-06
+//Parm: 整数数组
+//Desc: 添加nI到结构
+function TCommandParam.AddI(const nI: array of Integer): PCommandParam;
+var nIdx: Integer;
+begin
+  for nIdx := Low(nI) to High(nI) do
+    AddI(nI[nIdx]);
+  Result := @Self;
+end;
+
+//Date: 2021-07-06
+//Parm: 浮点
+//Desc: 添加nF到结构
+function TCommandParam.AddF(const nF: Double): PCommandParam;
+begin
+  ParamF[GetFree(ptF)].Value := nF;
+  Result := @Self;
+end;
+
+//Date: 2021-07-06
+//Parm: 浮点数组
+//Desc: 添加nF到结构
+function TCommandParam.AddF(const nF: array of Double): PCommandParam;
+var nIdx: Integer;
+begin
+  for nIdx := Low(nF) to High(nF) do
+    AddF(nF[nIdx]);
+  Result := @Self;
+end;
+
+//Date: 2021-07-06
+//Parm: 指针
+//Desc: 添加nP到结构
+function TCommandParam.AddP(const nP: Pointer): PCommandParam;
+begin
+  ParamP[GetFree(ptP)].Value := nP;
+  Result := @Self;
+end;
+
+//Date: 2021-07-06
+//Parm: 指针数组
+//Desc: 添加nP到结构
+function TCommandParam.AddP(const nP: array of Pointer): PCommandParam;
+var nIdx: Integer;
+begin
+  for nIdx := Low(nP) to High(nP) do
+    AddP(nP[nIdx]);
+  Result := @Self;
+end;
+
+//Date: 2021-07-06
+//Parm: 对象
+//Desc: 添加nO到结构
+function TCommandParam.AddO(const nO: TObject): PCommandParam;
+begin
+  ParamO[GetFree(ptO)].Value := nO;
+  Result := @Self;
+end;
+
+//Date: 2021-07-06
+//Parm: 对象数组
+//Desc: 添加nO到结构
+function TCommandParam.AddO(const nO: array of TObject): PCommandParam;
+var nIdx: Integer;
+begin
+  for nIdx := Low(nO) to High(nO) do
+    AddO(nO[nIdx]);
+  Result := @Self;
+end;
 
 //------------------------------------------------------------------------------
 //Date: 2018-03-15
