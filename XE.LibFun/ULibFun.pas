@@ -29,7 +29,7 @@ type
       cDim = 5;
       {*参数维数*}
     type
-      TParamType = (ptS, ptI, ptF, ptP, ptO);
+      TParamType = (ptStr, ptInt, ptFlt, ptPtr, ptObj);
       {*参数类型*}
 
       TValue<T> = record
@@ -45,9 +45,6 @@ type
     Flt: array[0..cDim - 1] of TValue<Double>;           //浮点
     Ptr: array[0..cDim - 1] of TValue<Pointer>;          //指针
     Obj: array[0..cDim - 1] of TValue<TObject>;          //对象
-  private
-    function GetFree(const nType: TParamType): Integer;
-    {*获取空闲数据*}
   public
     function Init(const nCmd: Integer = -1): PCommandParam;
     {*初始化*}
@@ -63,6 +60,10 @@ type
     function AddP(const nP: array of Pointer): PCommandParam; overload;
     function AddO(const nO: array of TObject): PCommandParam; overload;
     {*添加多个数据*}
+    function GetFree(const nType: TParamType): Integer;
+    {*获取空闲数据*}
+    function IsValid(const nType: TParamType; nNum: Integer = 1): Boolean;
+    {*验证数据有效*}
   end;
 
   TApplicationHelper = class
@@ -425,31 +426,31 @@ begin
   for nIdx := 0 to cDim-1 do
   begin
     case nType of
-     ptS:
+     ptStr:
       if not Str[nIdx].IsValid then
       begin
         Result := nIdx;
         Str[nIdx].IsValid := True;
       end;
-     ptI:
+     ptInt:
       if not Int[nIdx].IsValid then
       begin
         Result := nIdx;
         Int[nIdx].IsValid := True;
       end;
-     ptF:
+     ptFlt:
       if not Flt[nIdx].IsValid then
       begin
         Result := nIdx;
         Flt[nIdx].IsValid := True;
       end;
-     ptP:
+     ptPtr:
       if not Ptr[nIdx].IsValid then
       begin
         Result := nIdx;
         Ptr[nIdx].IsValid := True;
       end;
-     ptO:
+     ptObj:
       if not Obj[nIdx].IsValid then
       begin
         Result := nIdx;
@@ -470,7 +471,7 @@ end;
 //Desc: 添加nS到结构
 function TCommandParam.AddS(const nS: string): PCommandParam;
 begin
-  Str[GetFree(ptS)].Value := nS;
+  Str[GetFree(ptStr)].Value := nS;
   Result := @Self;
 end;
 
@@ -490,7 +491,7 @@ end;
 //Desc: 添加nI到结构
 function TCommandParam.AddI(const nI: Integer): PCommandParam;
 begin
-  Int[GetFree(ptI)].Value := nI;
+  Int[GetFree(ptInt)].Value := nI;
   Result := @Self;
 end;
 
@@ -510,7 +511,7 @@ end;
 //Desc: 添加nF到结构
 function TCommandParam.AddF(const nF: Double): PCommandParam;
 begin
-  Flt[GetFree(ptF)].Value := nF;
+  Flt[GetFree(ptFlt)].Value := nF;
   Result := @Self;
 end;
 
@@ -530,7 +531,7 @@ end;
 //Desc: 添加nP到结构
 function TCommandParam.AddP(const nP: Pointer): PCommandParam;
 begin
-  Ptr[GetFree(ptP)].Value := nP;
+  Ptr[GetFree(ptPtr)].Value := nP;
   Result := @Self;
 end;
 
@@ -550,7 +551,7 @@ end;
 //Desc: 添加nO到结构
 function TCommandParam.AddO(const nO: TObject): PCommandParam;
 begin
-  Obj[GetFree(ptO)].Value := nO;
+  Obj[GetFree(ptObj)].Value := nO;
   Result := @Self;
 end;
 
@@ -563,6 +564,34 @@ begin
   for nIdx := Low(nO) to High(nO) do
     AddO(nO[nIdx]);
   Result := @Self;
+end;
+
+//Date: 2021-07-07
+//Parm: 参数类型;有效值个数
+//Desc: 检测nType参数组内是否有nNum个有效值
+function TCommandParam.IsValid(const nType: TParamType; nNum: Integer): Boolean;
+var nIdx: Integer;
+begin
+  Result := nNum < 1;
+  if Result then Exit;
+  //check input param
+
+  for nIdx := 0 to cDim-1 do
+  begin
+    case nType of
+     ptStr: if Str[nIdx].IsValid then Dec(nNum) else Break;
+     ptInt: if Int[nIdx].IsValid then Dec(nNum) else Break;
+     ptFlt: if Flt[nIdx].IsValid then Dec(nNum) else Break;
+     ptPtr: if Ptr[nIdx].IsValid then Dec(nNum) else Break;
+     ptObj: if Obj[nIdx].IsValid then Dec(nNum) else Break;
+    end;
+
+    if nNum < 1 then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
 end;
 
 //------------------------------------------------------------------------------
