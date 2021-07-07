@@ -33,25 +33,23 @@ type
       {*参数类型*}
 
       TValue<T> = record
-      private
-        FUsed: Boolean;
-        {*使用标记*}
-      public
+        IsValid: Boolean;
+        {*参数有效*}
         Value: T;
         {*参数取值*}
       end;
   public
     Command: Integer;                                    //命令
-    ParamS: array[0..cDim - 1] of TValue<string>;        //字符
-    ParamI: array[0..cDim - 1] of TValue<Integer>;       //整数
-    ParamF: array[0..cDim - 1] of TValue<Double>;        //浮点
-    ParamP: array[0..cDim - 1] of TValue<Pointer>;       //指针
-    ParamO: array[0..cDim - 1] of TValue<TObject>;       //对象
+    Str: array[0..cDim - 1] of TValue<string>;           //字符
+    Int: array[0..cDim - 1] of TValue<Integer>;          //整数
+    Flt: array[0..cDim - 1] of TValue<Double>;           //浮点
+    Ptr: array[0..cDim - 1] of TValue<Pointer>;          //指针
+    Obj: array[0..cDim - 1] of TValue<TObject>;          //对象
   private
     function GetFree(const nType: TParamType): Integer;
     {*获取空闲数据*}
   public
-    procedure Init;
+    function Init(const nCmd: Integer = -1): PCommandParam;
     {*初始化*}
     function AddS(const nS: string): PCommandParam; overload;
     function AddI(const nI: Integer): PCommandParam; overload;
@@ -403,11 +401,16 @@ implementation
 //------------------------------------------------------------------------------
 //Date: 2021-07-06
 //Desc: 初始化
-procedure TCommandParam.Init;
+function TCommandParam.Init(const nCmd: Integer): PCommandParam;
 var nInit: TCommandParam;
 begin
   FillChar(nInit, SizeOf(TCommandParam), #0);
+  if nCmd >= 0 then
+    nInit.Command := nCmd;
+  //xxxxx
+
   Self := nInit;
+  Result := @Self;
 end;
 
 //Date: 2021-07-06
@@ -423,34 +426,34 @@ begin
   begin
     case nType of
      ptS:
-      if not ParamS[nIdx].FUsed then
+      if not Str[nIdx].IsValid then
       begin
         Result := nIdx;
-        ParamS[nIdx].FUsed := True;
+        Str[nIdx].IsValid := True;
       end;
      ptI:
-      if not ParamI[nIdx].FUsed then
+      if not Int[nIdx].IsValid then
       begin
         Result := nIdx;
-        ParamI[nIdx].FUsed := True;
+        Int[nIdx].IsValid := True;
       end;
      ptF:
-      if not ParamF[nIdx].FUsed then
+      if not Flt[nIdx].IsValid then
       begin
         Result := nIdx;
-        ParamF[nIdx].FUsed := True;
+        Flt[nIdx].IsValid := True;
       end;
      ptP:
-      if not ParamP[nIdx].FUsed then
+      if not Ptr[nIdx].IsValid then
       begin
         Result := nIdx;
-        ParamP[nIdx].FUsed := True;
+        Ptr[nIdx].IsValid := True;
       end;
      ptO:
-      if not ParamO[nIdx].FUsed then
+      if not Obj[nIdx].IsValid then
       begin
         Result := nIdx;
-        ParamO[nIdx].FUsed := True;
+        Obj[nIdx].IsValid := True;
       end;
     end;
 
@@ -467,7 +470,7 @@ end;
 //Desc: 添加nS到结构
 function TCommandParam.AddS(const nS: string): PCommandParam;
 begin
-  ParamS[GetFree(ptS)].Value := nS;
+  Str[GetFree(ptS)].Value := nS;
   Result := @Self;
 end;
 
@@ -487,7 +490,7 @@ end;
 //Desc: 添加nI到结构
 function TCommandParam.AddI(const nI: Integer): PCommandParam;
 begin
-  ParamI[GetFree(ptI)].Value := nI;
+  Int[GetFree(ptI)].Value := nI;
   Result := @Self;
 end;
 
@@ -507,7 +510,7 @@ end;
 //Desc: 添加nF到结构
 function TCommandParam.AddF(const nF: Double): PCommandParam;
 begin
-  ParamF[GetFree(ptF)].Value := nF;
+  Flt[GetFree(ptF)].Value := nF;
   Result := @Self;
 end;
 
@@ -527,7 +530,7 @@ end;
 //Desc: 添加nP到结构
 function TCommandParam.AddP(const nP: Pointer): PCommandParam;
 begin
-  ParamP[GetFree(ptP)].Value := nP;
+  Ptr[GetFree(ptP)].Value := nP;
   Result := @Self;
 end;
 
@@ -547,7 +550,7 @@ end;
 //Desc: 添加nO到结构
 function TCommandParam.AddO(const nO: TObject): PCommandParam;
 begin
-  ParamO[GetFree(ptO)].Value := nO;
+  Obj[GetFree(ptO)].Value := nO;
   Result := @Self;
 end;
 
