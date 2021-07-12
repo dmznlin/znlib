@@ -28,6 +28,9 @@ type
     FData    : Pointer;                 //附加
     FUsed    : Boolean;                 //使用中
     FUsedNum : Cardinal;                //使用计数
+  public
+    procedure Init(const nObject: TObject = nil);
+    {*初始化*}
   end;
 
   PObjectPoolClass = ^TObjectPoolClass;
@@ -40,6 +43,9 @@ type
     FNumLocked  : Integer;              //已锁定
     FNumLockAll : Int64;                //请求次数
     FItems      : TList;                //对象列表
+  public
+    procedure Init(const nClass: TClass = nil);
+    {*初始化*}
   end;
 
   TObjectLockFilter = reference to function(const nObject: TObject;
@@ -102,6 +108,34 @@ uses
 const
   cYes  = $0002;
   cNo   = $0005;
+
+//Date: 2021-07-12
+//Parm: 对象
+//Desc: 初始化缓冲池对象
+procedure TObjectPoolItem.Init(const nObject: TObject);
+var nInit: TObjectPoolItem;
+begin
+  FillChar(nInit, SizeOf(TObjectPoolItem), #0);
+  Self := nInit;
+
+  if Assigned(nObject) then
+    FObject := nObject;
+  //xxxxx
+end;
+
+//Date: 2021-07-12
+//Parm: 对象类
+//Desc: 初始化缓冲池类
+procedure TObjectPoolClass.Init(const nClass: TClass);
+var nInit: TObjectPoolClass;
+begin
+  FillChar(nInit, SizeOf(TObjectPoolClass), #0);
+  Self := nInit;
+
+  if Assigned(nClass) then
+    FClass := nClass;
+  //xxxxx
+end;
 
 //------------------------------------------------------------------------------
 constructor TObjectPoolManager.Create;
@@ -251,7 +285,7 @@ begin
     begin
       Result := Length(FPool);
       SetLength(FPool, Result + 1);
-      FillChar(FPool[Result], SizeOf(TObjectPoolClass), #0);
+      FPool[Result].Init();
     end else
 
     if nOnlyOnce then
@@ -386,7 +420,7 @@ begin
       begin
         New(nItem);
         FItems.Add(nItem);
-        FillChar(nItem^, SizeOf(TObjectPoolItem), #0);
+        nItem.Init();
         
         nItem.FObject := nNew(nItem.FData);
         Result := nItem.FObject;

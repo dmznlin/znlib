@@ -37,6 +37,9 @@ type
     FDataFirst: Pointer;                 //数据列表
     FDataNew: TMPDataNew;                //分配内存
     FDataDispose: TMPDataDispose;        //释放内存
+  public
+    procedure Init(const nType: Cardinal = 0);
+    {*初始化*}
   end;
 
   PMPDataItem = ^TMPDataItem;
@@ -44,12 +47,18 @@ type
     FData: Pointer;                      //数据节点
     FNext: Pointer;                      //下一节点
     FUsed: Boolean;                      //是否使用
+  public
+    procedure Init();
+    {*初始化*}
   end;
 
   TMPDataUsed = record
     FItem: PMPDataItem;                  //数据项
     FMain: PMPDataMain;                  //所在主项
     FUsed: Boolean;                      //是否使用
+  public
+    procedure Init();
+    {*初始化*}
   end;
 
   TMPDataUsedItems = array of TMPDataUsed;
@@ -111,7 +120,40 @@ uses
 const
   cYes  = $0002;
   cNo   = $0005;
-  
+
+//Date: 2021-07-12
+//Parm: 类型标识
+//Desc: 初始化数据内存
+procedure TMPDataMain.Init(const nType: Cardinal);
+var nInit: TMPDataMain;
+begin
+  FillChar(nInit, SizeOf(TMPDataMain), #0);
+  Self := nInit;
+
+  if nType > 0 then
+       FType := nType
+  else FType := gMG.FSerialIDManager.GetID;
+end;
+
+//Date: 2021-07-12
+//Desc: 初始化数据项
+procedure TMPDataItem.Init();
+var nInit: TMPDataItem;
+begin
+  FillChar(nInit, SizeOf(TMPDataItem), #0);
+  Self := nInit;
+end;
+
+//Date: 2021-07-12
+//Desc: 初始化数据缓存
+procedure TMPDataUsed.Init();
+var nInit: TMPDataUsed;
+begin
+  FillChar(nInit, SizeOf(TMPDataUsed), #0);
+  Self := nInit;
+end;
+
+//------------------------------------------------------------------------------
 constructor TMemDataManager.Create;
 begin
   inherited; 
@@ -249,20 +291,18 @@ begin
 
   SyncEnter;
   try
-    Result := gMG.FSerialIDManager.GetID;
-    //serial id
-
     New(nMain);
     FDataList.Add(nMain);
-    FillChar(nMain^, SizeOf(TMPDataMain), #0);
+    nMain.Init(gMG.FSerialIDManager.GetID);
 
-    nMain.FType := Result;
     nMain.FFlag := nFlag;
     nMain.FDesc := nDesc;
-
     nMain.FNumOnce := nNumOnce;
     nMain.FDataNew := nNew;
     nMain.FDataDispose := nDispose;
+
+    Result := nMain.FType;
+    //type id
   finally
     SyncLeave;
   end;   
@@ -383,7 +423,7 @@ begin
   for nIdx:=1 to nMain.FNumOnce do
   begin
     New(nItem);
-    FillChar(nItem^, SizeOf(TMPDataItem), #0);
+    nItem.Init;
 
     nItem.FNext := nMain.FDataFirst; //插入空闲首项
     nMain.FDataFirst := nItem;

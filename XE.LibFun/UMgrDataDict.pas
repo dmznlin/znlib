@@ -79,7 +79,7 @@ type
 
   PDictItem = ^TDictItem;
   TDictItem = record
-    FRecordID : string;                                //记录号
+    FRecordID : string;                                 //记录号
     FTitle    : string;                                 //标题
     FAlign    : TAlignment;                             //对齐
     FWidth    : integer;                                //宽度
@@ -88,6 +88,9 @@ type
     FDBItem   : TDictDBItem;                            //数据库
     FFormat   : TDictFormatItem;                        //格式化
     FFooter   : TDictGroupFooter;                       //页脚合计
+  public
+    procedure Init();
+    {*初始化*}
   end;
   TDictItems = array of TDictItem;
 
@@ -98,6 +101,8 @@ type
     FLang     : string;                                 //语言标识
     FItems    : TDictItems;                             //字典数据(PDictItem)
   public
+    procedure Init(const nFirstItem: Boolean = False);
+    {*初始化*}
     function AddDict(const nField,nTitle: string): PDictEntity;
     {*添加字典项*}    
     function ByTitle(const nTitle: string): PDictItem;
@@ -138,8 +143,6 @@ type
     procedure ClearDictData(const nList: TList; const nFree: Boolean = False);
     {*字典数据*}
     function BuilDictSQL(const nEntity: PDictEntity;const nIdx:Integer): string;
-    procedure InitDict(const nEntity: PDictEntity;
-      const nFirstItem: Boolean = True);
     procedure AddDict(const nEntity: PDictEntity; const nIdx: Integer = 0);
     procedure DelDict(const nEntity: PDictEntity; const nIdx: Integer = 0);
     {*字典项*}
@@ -205,13 +208,41 @@ begin
   end;
 end;
 
+//Date: 2021-07-12
+//Desc: 初始化字典项
+procedure TDictItem.Init();
+var nInit: TDictItem;
+begin
+  FillChar(nInit, SizeOf(TDictItem), #0);
+  Self := nInit;
+
+  FVisible := True;
+  FIndex   := -1;
+end;
+
+//------------------------------------------------------------------------------
+//Date: 2021-07-12
+//Parm: 首个字典项
+//Desc: 初始化实体和默认字典项
+procedure TDictEntity.Init(const nFirstItem: Boolean);
+var nInit: TDictEntity;
+begin
+  FillChar(nInit, SizeOf(TDictEntity), #0);
+  Self := nInit;
+
+  if nFirstItem then
+  begin
+    SetLength(FItems, 1);
+    FItems[0].Init;
+  end;
+end;
+
 //Date: 2021-06-17
 //Parm: 字段;标题
 //Desc: 添加字典项
 function TDictEntity.AddDict(const nField,nTitle: string): PDictEntity;
 var nStr: string;
     nIdx: Integer;
-    nInit: TDictItem;
 begin
   Result := @Self;
   //return self address
@@ -227,12 +258,9 @@ begin
      raise Exception.Create(nStr);
    end;
 
-  FillChar(nInit, SizeOf(TDictItem), #0);
-  //default item
-
   nIdx := Length(FItems);
   SetLength(FItems, nIdx + 1);
-  FItems[nIdx] := nInit;
+  FItems[nIdx].Init;
 
   with FItems[nIdx] do
   begin
@@ -416,8 +444,8 @@ begin
   begin
     New(Result);
     nList.Add(Result);
+    Result.Init(False);
 
-    InitDict(Result, False);
     with Result^ do
     begin
       FEntity := nEntity;
@@ -576,31 +604,6 @@ begin
 end;
 
 //Date: 2021-06-17
-//Parm: 实体;首个字典项
-//Desc: 初始化nEntity和默认字典项
-procedure TDataDictManager.InitDict(const nEntity: PDictEntity;
-  const nFirstItem: Boolean);
-var nEty: TDictEntity;
-    nDict: TDictItem;
-begin
-  FillChar(nEty, SizeOf(TDictEntity), #0);
-  nEntity^ := nEty;
-
-  if nFirstItem then
-  begin
-    FillChar(nDict, SizeOf(TDictItem), #0);
-    with nDict do
-    begin
-      FVisible := True;
-      FIndex   := -1;
-    end;
-
-    SetLength(nEntity.FItems, 0);
-    nEntity.FItems[0] := nDict;
-  end;
-end;
-
-//Date: 2021-06-17
 //Parm: 字典项
 //Desc: 保存字典项
 procedure TDataDictManager.AddDict(const nEntity: PDictEntity;
@@ -681,9 +684,8 @@ procedure TDataDictManager.GetEntity(const nEntity,nLang: string;
 var nStr: string;
     nIdx: Integer;
     nQuery: TDataSet;
-    nDefItem: TDictItem;
 begin
-  InitDict(nData, False);
+  nData.Init(False);
   //init
   nQuery := nil;
 
@@ -699,9 +701,8 @@ begin
     begin
       if RecordCount < 1 then Exit;
       //no data
-      SetLength(nData.FItems, RecordCount);
 
-      FillChar(nDefItem, SizeOf(TDictItem), #0);
+      SetLength(nData.FItems, RecordCount);
       nIdx := 0;
       First;
 
@@ -711,7 +712,7 @@ begin
 
       while not Eof do
       begin
-        nData.FItems[nIdx] := nDefItem;
+        nData.FItems[nIdx].Init;
         //init
 
         with nData.FItems[nIdx] do

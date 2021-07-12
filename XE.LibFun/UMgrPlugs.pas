@@ -37,6 +37,9 @@ type
     FModuleDesc     : string;    //描述
     FModuleFile     : string;    //文件
     FModuleBuildTime: TDateTime; //编译时间
+  public
+    procedure Init();
+    {*初始化*}
   end;
 
   TPlugModuleList = array of TPlugModuleInfo;
@@ -140,6 +143,15 @@ uses
 procedure WriteLog(const nEvent: string);
 begin
   gMG.FLogManager.AddLog(TPlugManager, '插件管理器', nEvent);
+end;
+
+//Date: 2021-07-12
+//Desc: 初始化模块信息
+procedure TPlugModuleInfo.Init();
+var nInit: TPlugModuleInfo;
+begin
+  FillChar(nInit, SizeOf(TPlugModuleInfo), #0);
+  Self := nInit;
 end;
 
 constructor TPlugEventWorkerBase.Create;
@@ -337,7 +349,6 @@ end;
 //Desc: 获取nModule的描述
 function TPlugManager.GetModuleInfo(const nModule: string): TPlugModuleInfo;
 var nIdx: Integer;
-    nInit: TPlugModuleInfo;
 begin
   SyncEnter;
   try
@@ -347,8 +358,7 @@ begin
       if Result.FModuleID = nModule then Exit;
     end;
 
-    FillChar(nInit, SizeOf(nInit), #0);
-    Result := nInit;
+    Result.Init();
     //default
   finally
     SyncLeave;

@@ -158,6 +158,9 @@ type
     FAutoDelete   : Boolean;                     //执行完毕后删除
     FAutoStatus   : Boolean;                     //自动切换状态
     FWorkStatus   : TThreadWorkerStatus;         //当前工作状态
+  public
+    procedure Init(const nName: string = '');
+    {*初始化*}
   end;
 
   PThreadWorker = ^TThreadWorker;
@@ -526,32 +529,41 @@ begin
   end;
 end;
 
+//Date: 2021-07-12
+//Parm: 对象名称
+//Desc: 初始化工作对象
+procedure TThreadWorkerConfig.Init(const nName: string);
+var nInit: TThreadWorkerConfig;
+begin
+  FillChar(nInit, SizeOf(TThreadWorkerConfig), #0);
+  Self := nInit;
+
+  if nName <> '' then
+    FWorkerName := nName;
+  //xxxxx
+
+  FCallTimes := INFINITE;
+  //不限次数
+  FCallMaxTake := cThreadMaxRunTake;
+  //最大运行耗时
+  FFirstInit := True;
+  //首次运行时初始化
+  FCoInitialize := False;
+  //默认不执行COM初始化
+  FAutoDelete := False;
+  //默认不自动删除
+  FAutoStatus := False;
+  //不自动切换工作状态
+  FWorkStatus := twsNormal;
+  //默认状态: 正常运行
+end;
+
 //Date: 2019-01-09
 //Parm: 配置项
 //Desc: 初始化nConfig
 procedure TThreadPoolManager.WorkerInit(var nWorker: TThreadWorkerConfig);
-var nInit: TThreadWorkerConfig;
 begin
-  FillChar(nInit, SizeOf(nInit), #0);
-  nWorker := nInit;
-
-  with nWorker do
-  begin
-    FCallTimes := INFINITE;
-    //不限次数
-    FCallMaxTake := cThreadMaxRunTake;
-    //最大运行耗时
-    FFirstInit := True;
-    //首次运行时初始化
-    FCoInitialize := False;
-    //默认不执行COM初始化
-    FAutoDelete := False;
-    //默认不自动删除
-    FAutoStatus := False;
-    //不自动切换工作状态
-    FWorkStatus := twsNormal;
-    //默认状态: 正常运行
-  end;
+  nWorker.Init();
 end;
 
 //Date: 2019-01-09

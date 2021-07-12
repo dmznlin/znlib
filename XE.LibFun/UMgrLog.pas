@@ -28,6 +28,9 @@ type
     FType    : TLogType;           //日志类型
     FTime    : TDateTime;          //日志时间
     FEvent   : string;             //日志内容
+  public
+    procedure Init();
+    {*初始化*}
   end;
 
   TLogManager = class;
@@ -98,8 +101,6 @@ type
     {*延迟执行*}
     procedure RunBeforApplicationHalt; override;
     {*关联执行*}
-    procedure InitItem(var nItem: TLogItem);
-    {*初始化*}
     procedure AddLog(const nItem: PLogItem); overload;
     procedure AddLog(const nEvent: string;
      const nType: TLogType = ltNull); overload;
@@ -137,6 +138,18 @@ implementation
 
 uses
   UManagerGroup, ULibFun;
+
+//Date: 2021-07-12
+//Desc: 初始化日志项
+procedure TLogItem.Init();
+var nInit: TLogItem;
+begin
+  FillChar(nInit, SizeOf(TLogItem), #0);
+  Self := nInit;
+
+  FLogTag := [];
+  FTime := Now();
+end;
 
 constructor TLogManager.Create;
 begin
@@ -251,18 +264,6 @@ begin
   else nList.Clear;
 end;
 
-//Date: 2019-01-24
-//Parm: 日志项
-//Desc: 初始化nItem
-procedure TLogManager.InitItem(var nItem: TLogItem);
-var nInit: TLogItem;
-begin
-  FillChar(nInit, SizeOf(TLogItem), #0);
-  nItem := nInit;
-  nItem.FLogTag := [];
-  nItem.FTime := Now();
-end;
-
 //Desc: 添加日志项
 procedure TLogManager.AddLog(const nItem: PLogItem);
 var nP: PLogItem;
@@ -291,6 +292,7 @@ procedure TLogManager.AddLog(const nObj: TClass; const nDesc, nEvent: string;
   const nType: TLogType);
 var nItem: TLogItem;
 begin
+  nItem.Init();
   with nItem do
   begin
     FWriter.FOjbect := nObj;
@@ -298,7 +300,6 @@ begin
 
     FType := nType;
     FLogTag := [ltWriteFile];
-    nItem.FTime := Now();
     FEvent := nEvent;
   end;
 

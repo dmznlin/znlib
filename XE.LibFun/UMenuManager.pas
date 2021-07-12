@@ -106,6 +106,9 @@ type
     FType         : TMenuItemType;                       //菜单类型
     FDeploy       : TApplicationHelper.TDeployTypes;     //部署类型
     FSubItems     : TList;                               //子菜单列表
+  public
+    procedure Init();
+    {*初始化*}
   end;
 
   TMenuItems = array of TMenuItem;                       //菜单列表
@@ -169,7 +172,6 @@ type
     procedure ClearMenuData(const nList: TList; const nFree: Boolean = False);
     {*菜单数据*}
     function BuildMenuSQL(const nMenu: PMenuItem): string;
-    procedure InitMenu(const nMenu: PMenuItem);
     procedure AddMenu(const nMenu: PMenuItem);
     procedure DeleteMenu(const nMenu: PMenuItem);
     {*菜单项*}
@@ -245,6 +247,19 @@ begin
   end;
 end;
 
+//Date: 2021-07-12
+//Desc: 初始化菜单项
+procedure TMenuItem.Init();
+var nInit: TMenuItem;
+begin
+  FillChar(nInit, SizeOf(TMenuItem), #0);
+  Self := nInit;
+
+  FImgIndex := -1;
+  FNewOrder := 0;
+  FType     := mtItem;
+end;
+
 //------------------------------------------------------------------------------
 //Date: 2020-04-24
 //Parm: 菜单标识
@@ -303,7 +318,6 @@ function TMenuEntity.AddM(const nID, nTitle: string; const nAction: TMenuAction;
   const nActionData: string; nDeploy: TApplicationHelper.TDeployTypes): PMenuEntity;
 var nStr: string;
     nIdx: Integer;
-    nInit: TMenuItem;
 begin
   Result := @Self;
   //return self address
@@ -325,12 +339,9 @@ begin
     nDeploy := FDefaultDeploy;
   //use default
 
-  FillChar(nInit, SizeOf(TMenuItem), #0);
-  //default item
-
   nIdx := Length(FItems);
   SetLength(FItems, nIdx + 1);
-  FItems[nIdx] := nInit;
+  FItems[nIdx].Init;
 
   with FItems[nIdx] do
   begin
@@ -619,23 +630,6 @@ begin
   end;
 end;
 
-//Date: 2021-06-02
-//Parm: 菜单数据
-//Desc: 初始化nMenu
-procedure TMenuManager.InitMenu(const nMenu: PMenuItem);
-var nInit: TMenuItem;
-begin
-  FillChar(nInit, SizeOf(TMenuItem), #0);
-  nMenu^ := nInit;
-
-  with nMenu^ do
-  begin
-    FImgIndex := -1;
-    FNewOrder := 0;
-    FType     := mtItem;
-  end;
-end;
-
 //Date: 2021-05-27
 //Parm: 菜单数据
 //Desc: 新增 或 覆盖nMenu菜单
@@ -847,7 +841,6 @@ procedure TMenuManager.GetMenus(const nDeploy: TApplicationHelper.TDeployType;
   const nProg, nEntity, nLang: string; const nList: TList; const nUser: string);
 var nStr: string;
     nQuery: TDataSet;
-    nDefItem: TMenuItem;
     nType: TMenuItemType;
     nItem,nPItem: PMenuItem;
     nDPType: TApplicationHelper.TDeployTypes;
@@ -926,8 +919,8 @@ begin
     with nQuery do
     if RecordCount > 0 then
     begin
-      FillChar(nDefItem, SizeOf(TMenuItem), #0);
-      First; //go to first
+      First;
+      //go to first
 
       while not Eof do
       try
@@ -961,7 +954,7 @@ begin
           nItem.FSubItems := nil;
         end;
 
-        nItem^ := nDefItem; //init
+        nItem.Init; //init
         with nItem^ do
         begin
           FType         := nType;
