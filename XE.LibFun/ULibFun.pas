@@ -246,7 +246,8 @@ type
     //按条件选择字符串
     class function Enum2Str<T>(const nEnum: T): string; static;
     class function Str2Enum<T>(const nEnum: string): T; static;
-    class procedure EnumItems<T>(const nList: TStrings); static;
+    class procedure EnumItems<T>(const nList: TStrings;
+      const nSerial: Boolean = False); static;
     //获取枚举类型字符串描述
     class function Set2Str<T,ST>(const nSet: ST): string; static;
     class function Str2Set<T,ST>(const nSet: string): ST; static;
@@ -2024,10 +2025,12 @@ begin
 end;
 
 //Date: 2020-04-21
-//Parm: 列表
+//Parm: 列表;显示序号
 //Desc: 将T的所有项名称存入nList
-class procedure TStringHelper.EnumItems<T>(const nList: TStrings);
+class procedure TStringHelper.EnumItems<T>(const nList: TStrings;
+  const nSerial: Boolean);
 var nStr: string;
+    nID: Integer;
     nType: TRttiType;
     nTEnum: TRttiEnumerationType;
 begin
@@ -2039,10 +2042,19 @@ begin
       raise Exception.Create('TStringHelper.EnumItems: Invalid EnumType.');
     //xxxxx
 
+    nID := 0;
     nTEnum := nType as TRttiEnumerationType;
     for nStr in nTEnum.GetNames do
-      nList.Add(nStr);
-    //xxxxx
+    begin
+      if nSerial then
+      begin
+        nList.Add(IntToStr(nID) + '.' + nStr);
+        Inc(nID);
+      end else
+      begin
+        nList.Add(nStr);
+      end;
+    end;
   finally
     Free;
   end;
