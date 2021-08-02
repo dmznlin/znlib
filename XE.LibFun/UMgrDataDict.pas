@@ -86,6 +86,7 @@ type
     FIndex    : integer;                                //顺序
     FLocked   : Boolean;                                //锁定
     FMSelect  : Boolean;                                //多选
+    FQuery    : Boolean;                                //可查询
     FVisible  : Boolean;                                //可见
     FDBItem   : TDictDBItem;                            //数据库
     FFormat   : TDictFormatItem;                        //格式化
@@ -187,6 +188,7 @@ begin
       AddF('D_Index',       'integer',                '标题顺序').
       AddF('D_Locked',      'smallint',               '字段锁定').
       AddF('D_MSelect',     'smallint',               '支持多选').
+      AddF('D_Query',       'smallint',               '支持查询').
       AddF('D_Visible',     'smallint',               '是否可见').
       AddF('D_LangID',      'varchar(5)',             '语言标识').
       //normal
@@ -487,6 +489,7 @@ begin
       SF('D_Index', FIndex, sfVal),
       SF('D_Locked', BoolToStr(FLocked), sfVal),
       SF('D_MSelect', BoolToStr(FMSelect), sfVal),
+      SF('D_Query', BoolToStr(FQuery), sfVal),
       SF('D_Visible', BoolToStr(FVisible), sfVal),
       SF('D_LangID', nEntity.FLang),
       //normal
@@ -730,6 +733,7 @@ begin
           FIndex    := FieldByName('D_Index').AsInteger;
           FLocked   := StrToBool(FieldByName('D_Locked').AsString);
           FMSelect  := StrToBool(FieldByName('D_MSelect').AsString);
+          FQuery    := StrToBool(FieldByName('D_Query').AsString);
           FVisible  := StrToBool(FieldByName('D_Visible').AsString);
           //normal
           FDBItem.FTable := FieldByName('D_DBTable').AsString;

@@ -92,6 +92,7 @@ type
     FMenuID       : string;                              //菜单标识
     FPMenu        : string;                              //上级菜单
     FTitle        : string;                              //菜单标题
+    FTitlePy      : string;                              //标题拼音
     FAction       : TMenuAction;                         //菜单动作
     FActionData   : string;                              //动作数据
     FFlag         : string;                              //附加参数(下划线..)
@@ -965,6 +966,7 @@ begin
           FMenuID       := FieldByName('M_MenuID').AsString;
           FPMenu        := FieldByName('M_PMenu').AsString;
           FTitle        := FieldByName('M_Title').AsString;
+          FTitlePy      := TStringHelper.GetPinYin(FTitle);
 
           nStr          := FieldByName('M_Action').AsString;
           FAction       := TStringHelper.Str2Enum<TMenuAction>(nStr);
