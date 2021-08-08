@@ -2,6 +2,13 @@
   作者: dmzn@163.com 2021-06-08
   描述: 数据字典管理器
 
+  备注:
+  *.字典项:TDictItem
+    *.FLocked: 固定该列,不参与水平滚动
+    *.FMSelect: 允许多选,表格添加复选列(有复选框)
+    *.FQuery: 该列支持查询,自动添加查询文本框
+    *.FQDefault: 默认查询条件,如日期,默认为查询当天
+
   使用方法:
   1.添加Builder
     procedure SytemDictBuilder(const nList: TList);
@@ -87,6 +94,7 @@ type
     FLocked   : Boolean;                                //锁定
     FMSelect  : Boolean;                                //多选
     FQuery    : Boolean;                                //可查询
+    FQDefault : Boolean;                                //默认条件
     FVisible  : Boolean;                                //可见
     FDBItem   : TDictDBItem;                            //数据库
     FFormat   : TDictFormatItem;                        //格式化
@@ -189,6 +197,7 @@ begin
       AddF('D_Locked',      'smallint',               '字段锁定').
       AddF('D_MSelect',     'smallint',               '支持多选').
       AddF('D_Query',       'smallint',               '支持查询').
+      AddF('D_QryDefault',  'smallint',               '默认查询').
       AddF('D_Visible',     'smallint',               '是否可见').
       AddF('D_LangID',      'varchar(5)',             '语言标识').
       //normal
@@ -490,6 +499,7 @@ begin
       SF('D_Locked', BoolToStr(FLocked), sfVal),
       SF('D_MSelect', BoolToStr(FMSelect), sfVal),
       SF('D_Query', BoolToStr(FQuery), sfVal),
+      SF('D_QryDefault', BoolToStr(FQDefault), sfVal),
       SF('D_Visible', BoolToStr(FVisible), sfVal),
       SF('D_LangID', nEntity.FLang),
       //normal
@@ -734,6 +744,7 @@ begin
           FLocked   := StrToBool(FieldByName('D_Locked').AsString);
           FMSelect  := StrToBool(FieldByName('D_MSelect').AsString);
           FQuery    := StrToBool(FieldByName('D_Query').AsString);
+          FQDefault := StrToBool(FieldByName('D_QryDefault').AsString);
           FVisible  := StrToBool(FieldByName('D_Visible').AsString);
           //normal
           FDBItem.FTable := FieldByName('D_DBTable').AsString;

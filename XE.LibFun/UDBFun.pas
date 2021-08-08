@@ -60,6 +60,8 @@ type
     class function AddUser(const nUser: PUserData): string; static;
     class function DelUser(const nAccount: string): string; static;
     {*用户数据*}
+    class function Field2Str(const nField: TFieldType): string; static;
+    {*字段类型*}
   end;
 
 implementation
@@ -468,6 +470,21 @@ begin
     end;
   finally
     gMG.FDBManager.ReleaseDBQuery(nQuery);
+  end;
+end;
+
+//Date: 2021-08-08
+//Parm: 字段类型
+//Desc: 返回nField的描述
+class function TDBCommand.Field2Str(const nField: TFieldType): string;
+begin
+  Result := '';
+  //default
+
+  case nField of
+   ftDate       : Result := '日期';
+   ftTime       : Result := '时间';
+   ftDateTime   : Result := '日期时间';
   end;
 end;
 
