@@ -1,109 +1,434 @@
 {*******************************************************************************
-  作者: dmzn@163.com 2019-02-22
+  作者: dmzn@163.com 2021-08-15
   描述: 参数配置管理器
-
-  备注:
-  *.参数文档结构:
-    <description>参数结构描述</description>
-    <parameters>参数数据</parameters>
-  *.
 *******************************************************************************}
 unit UParameters;
 
 interface
 
 uses
-  System.Classes, System.SysUtils, NativeXml, UBaseObject;
+  System.Classes, System.SysUtils, System.Generics.Defaults, Data.DB,
+  UBaseObject;
 
 type
-  TParamFieldType = (ptSub, ptAttribute);
-  //类型: 属性节点;子节点
+  TParamDataType = (dtStr, dtInt, dtFlt, dtDateTime);
+  //data type
+  TParamDataTypes = set of TParamDataType;
 
-  TParamFieldValue = (pdString, pdInt, pdFloat);
-  //数据类型: 字符;整数;浮点
+  TParamEffectType = (etLower, etHigher);
+  //effect type
 
-  TParamDataEncode = (peNone, peBase64);
-  //数据编码: 无;Base64
+const
+  sParamDataType: array[TParamDataType] of string = ('字符', '整数', '浮点',
+    '日期');
+  //data type desc
 
-  PParamFieldData = ^TParamFieldData;
-  TParamFieldData = record
-    FName     : string;                       //数据名称
-    FValue    : string;                       //取值
-    FEncode   : TParamDataEncode;             //编码方式
+  sParamEffectType:array[TParamEffectType] of string = ('下级生效', '上级生效');
+  //effect type desc
+
+type
+  TParamData<T> = record
+    FData    : T;                                  //数据
+    FDesc    : string;                             //描述
+    FDefault : Boolean;                            //默认值
   end;
-  TParamFieldDatas = array of TParamFieldData;
 
-  PParamFieldItem = ^TParamFieldItem;
-  TParamFieldItem = record
-    FName     : string;                       //参数项名
-    FDesc     : string;                       //项描述
-    FFrom     : string;                       //若不为空,则取其它参数项
-    FData     : string;                       //固定值
-    FType     : TParamFieldType;              //项类型(存为XML时体现)
-    FValue    : TParamFieldValue;             //值类型
-    FValueS   : string;                       //字符串
-    FValueI   : Integer;                      //整数值
-    FValueF   : Double;                       //浮点值
+  TParamDataItem = record
+    Str: array of TParamData<String>;              //字符值
+    Int: array of TParamData<Integer>;             //整数值
+    Flt: array of TParamData<Double>;              //浮点值
+    Date: array of TParamData<TDateTime>;          //日期值
+  public
+    function IsValid(const nType: TParamDataType;
+      const nNum: Integer = 1): Boolean;
+    {*验证数据有效*}
+    procedure AddS(const nStr: string; const nDesc: string = '';
+      const nDef: Boolean = False);
+    procedure AddI(const nInt: Integer; const nDesc: string = '';
+      const nDef: Boolean = False);
+    procedure AddF(const nFlt: Double; const nDesc: string = '';
+      const nDef: Boolean = False);
+    procedure AddD(const nDate: TDateTime; const nDesc: string = '';
+      const nDef: Boolean = False);
+    {*添加参数值*}
   end;
-  TParamFieldItems = array of TParamFieldItem;
 
   PParamItem = ^TParamItem;
   TParamItem = record
-    FID       : string;                       //参数标识
-    FName     : string;                       //参数名称
-    FRoot     : string;                       //节点名(存为XML时体现)
-    FDetail   : string;                       //子节点(存为XML时体现)
-    FEnable   : Boolean;                      //是否有效
-    FHasUsed  : Boolean;                      //是否使用
-    FFields   : TParamFieldItems;             //参数明细项
+    FRecord      : string;                         //记录标识
+    FGroup       : string;                         //参数分组
+    FGrpName     : string;                         //分组名称
+    FID          : string;                         //参数标识
+    FName        : string;                         //参数名称
+    FValue       : TParamDataItem;                 //参数值
+    FOptions     : TParamDataItem;                 //可选值
+    FOptionOnly  : TParamDataTypes;                //只使用可选
+    FOwner       : string;                         //拥有者id
+    FEffect      : TParamEffectType;               //生效方式
+  private
+  public
+    function Init(const nGroup,nName: string): PParamItem;
+    {*初始化*}
+    function SetGroup(const nGroup,nName: string): PParamItem;
+    function SetEffect(const nEffect: TParamEffectType): PParamItem;
+    function SetOptionOnly(const nOnly: TParamDataTypes): PParamItem;
+    {*设置属性*}
+    function DefValue<T>(const nItems: array of TParamData<T>;
+      const nDefault: T): T;
+    {*获取默认值*}
+    function AddS(const nStr: string; const nDesc: string = '';
+      const nDef: Boolean = False): PParamItem;
+    function AddI(const nInt: Integer; const nDesc: string = '';
+      const nDef: Boolean = False): PParamItem;
+    function AddF(const nFlt: Double; const nDesc: string = '';
+      const nDef: Boolean = False): PParamItem;
+    function AddD(const nDate: TDateTime; const nDesc: string = '';
+      const nDef: Boolean = False): PParamItem;
+    {*添加参数值*}
   end;
   TParamItems = array of TParamItem;
 
+  TParamItemBuilder = procedure (const nList: TList);
+  //for external-system fill param info
+
   TParameterManager = class(TManagerBase)
-  protected
-    procedure ParseTemplate(const nXML: TNativeXml);
-    {*解析模板*}
-    procedure CombineParameterWithTemplate(const nParam,nTemplate: Integer);
-    {*合并数据*}
   public
-    Parameters: TParamItems;
-    Template: TParamItems;
-    TemplateData: TParamFieldDatas;
-    {*模板&参数*}
+    const
+      sTable_SysDict = 'Sys_Dict';                 //参数配置
+      sTable_DictExt = 'Sys_DictExt';              //扩展数据
+  private
+    FDefaultItem: TParamItem;
+    {*默认配置*}
+    FBuilders: array of TParamItemBuilder;
+    {*参数配置信息*}
+  protected
+    function FindParam(const nGroup, nID: string;
+      const nList: TList): PParamItem;
+    {*检索数据*}
+  public
     constructor Create;
+    destructor Destroy; override;
     {*创建释放*}
     class procedure RegistMe(const nReg: Boolean); override;
     {*注册管理器*}
-    procedure LoadTemplate(const nData: string);
-    procedure LoadTemplateFromFile(const nFile: string);
-    {*载入模板*}
-    function FindTemplate(const nID: string): Integer;
-    function FindTemplateData(const nName: string): Integer;
-    function FindParameters(const nID: string): Integer;
-    {*检索数据*}
-    procedure LoadParameters(const nData: string);
-    procedure LoadParametersFromFile(const nFile: string);
-    procedure SaveParametersToFile(const nFile: string);
-    {*读写参数*}
-    procedure AddParamItem(const nID,nName,nTemplete: string);
-    procedure DelParamItem(const nID: string);
-    {*增减参数*}
+    procedure RunAfterRegistAllManager; override;
+    {*延迟执行*}
+    function Default: PParamItem;
+    {*默认配置*}
+    procedure AddBuilder(const nBuilder: TParamItemBuilder);
+    function AddParam(const nID,nName: string; const nList: TList): PParamItem;
+    {*添加数据*}
+    procedure GetParamData(const nList: TList);
+    procedure ClearParamData(const nList: TList; const nFree: Boolean = False);
+    {*参数数据*}
+    procedure BuildSQL(const nParam: PParamItem; const nEditor: string;
+      const nList: TStrings);
+    procedure InitParameters(const nOwner,nEditor: string;
+      const nMemo: TStrings = nil);
+    {*初始化参数*}
+    procedure GetStatus(const nList: TStrings;
+      const nFriendly: Boolean = True); override;
+    {*获取状态*}
   end;
 
 implementation
 
 uses
-  UManagerGroup, ULibFun;
+  UManagerGroup, UDBManager, UDBFun, ULibFun;
 
+procedure WriteLog(const nEvent: string; const nMemo: TStrings = nil);
+begin
+  if Assigned(nMemo) then
+    nMemo.Add(TDateTimeHelper.Time2Str(Now(), True, True) + #9 + nEvent);
+  gMG.FLogManager.AddLog(TParameterManager, '参数管理器', nEvent);
+end;
+
+//Desc: 添加管理器所需表
+procedure AddParameterTables(const nList: TList);
+begin
+  with gDBManager,TSQLBuilder,TParameterManager do
+  begin
+    AddTable(sTable_SysDict, nList, dtMSSQL).
+      AddF('R_ID',          sField_SQLServer_AutoInc, '记录编号').
+      AddF('D_Record',      'varchar(32)',            '记录标识').
+      AddF('D_Group',       'varchar(32)',            '所属分组').
+      AddF('D_GrpName',     'varchar(80)',            '分组名称').
+      AddF('D_ID',          'varchar(32)',            '参数标识').
+      AddF('D_Name',        'varchar(80)',            '参数名称').
+      AddF('D_Str',         'varchar(200)',           '字符值').
+      AddF('D_Int',         'integer',                '整数值').
+      AddF('D_Double',      sField_SQLServer_Decimal, '浮点值').
+      AddF('D_Date',        'DateTime',               '日期值').
+      AddF('D_Effect',      'varchar(16)',            '生效方式').
+      AddF('D_Owner',       'varchar(32)',            '所属组织').
+      AddF('D_Editor',      'varchar(32)',            '修改人').
+      AddF('D_EditTime',    'DateTime',               '修改时间').
+      //for field
+      AddI('idx_id',        'D_Group ASC,D_ID ASC').
+      AddI('idx_owner',     'D_Owner ASC');
+      //for index
+
+    AddTable(sTable_DictExt, nList, dtMSSQL).
+      AddF('R_ID',          sField_SQLServer_AutoInc, '记录标识').
+      AddF('V_ID',          'varchar(16)',            '参数标识').
+      AddF('V_Desc',        'varchar(80)',            '参数描述').
+      AddF('V_Str',         'varchar(200)',           '字符值').
+      AddF('V_Int',         'integer',                '整数值').
+      AddF('V_Double',      sField_SQLServer_Decimal, '浮点值').
+      AddF('V_Date',        'DateTime',               '日期值').
+      //for field
+      AddI('idx_id',        'V_ID ASC');
+      //for index
+  end;
+end;
+
+//------------------------------------------------------------------------------
+//Date: 2021-08-16
+//Parm: 分组;分组名称
+//Desc: 初始化参数项
+function TParamItem.Init(const nGroup,nName: string): PParamItem;
+var nInit: TParamItem;
+begin
+  FillChar(nInit, SizeOf(TParamItem), #0);
+  Self := nInit;
+  Result := @Self;
+
+  FGroup   := nGroup;
+  FGrpName := nName;
+  FEffect  := etLower;
+  FOptionOnly := [];
+end;
+
+//Date: 2021-08-16
+//Parm: 分组;分组名称
+//Desc: 设置分组
+function TParamItem.SetGroup(const nGroup,nName: string): PParamItem;
+begin
+  Result := @Self;
+  FGroup := nGroup;
+  FGrpName := nName;
+end;
+
+//Date: 2021-08-16
+//Parm: 生效方式
+//Desc: 设置生效方式
+function TParamItem.SetEffect(const nEffect: TParamEffectType): PParamItem;
+begin
+  Result := @Self;
+  FEffect := nEffect;
+end;
+
+//Date: 2021-08-16
+//Parm: 只使用可选数据的类型
+//Desc: 设置nOnly指定的类型只使用FOptions里的数据,只能选择不能输入.
+function TParamItem.SetOptionOnly(const nOnly: TParamDataTypes): PParamItem;
+begin
+  Result := @Self;
+  FOptionOnly := nOnly;
+end;
+
+//Date: 2021-08-16
+//Parm: 字符串;描述;默认
+//Desc: 新增字符串值
+function TParamItem.AddS(const nStr,nDesc: string;
+  const nDef: Boolean): PParamItem;
+begin
+  Result := @Self;
+  //return self address
+  FOptions.AddS(nStr, nDesc, nDef);
+end;
+
+procedure TParamDataItem.AddS(const nStr, nDesc: string; const nDef: Boolean);
+var nIdx: Integer;
+begin
+  for nIdx := Low(Str) to High(Str) do
+   if CompareText(nStr, Str[nIdx].FData) = 0 then
+   begin
+     if nDef then
+       Str[nIdx].FDefault := True;
+     //xxxxx
+
+     if nDesc <> '' then
+       Str[nIdx].FDesc := nDesc;
+     Exit;
+   end;
+
+  nIdx := Length(Str);
+  SetLength(Str, nIdx + 1);
+
+  with Str[nIdx] do
+  begin
+    FData := nStr;
+    FDesc := nDesc;
+    FDefault := nDef;
+  end;
+end;
+
+//Date: 2021-08-16
+//Parm: 整数;描述;默认
+//Desc: 新增整数值
+function TParamItem.AddI(const nInt: Integer; const nDesc: string;
+  const nDef: Boolean): PParamItem;
+begin
+  Result := @Self;
+  //return self address
+  FOptions.AddI(nInt, nDesc, nDef);
+end;
+
+procedure TParamDataItem.AddI(const nInt: Integer; const nDesc: string;
+  const nDef: Boolean);
+var nIdx: Integer;
+begin
+  for nIdx := Low(Int) to High(Int) do
+   if nInt = Int[nIdx].FData then
+   begin
+     if nDef then
+       Int[nIdx].FDefault := True;
+     //xxxxx
+
+     if nDesc <> '' then
+       Int[nIdx].FDesc := nDesc;
+     Exit;
+   end;
+
+  nIdx := Length(Int);
+  SetLength(Int, nIdx + 1);
+
+  with Int[nIdx] do
+  begin
+    FData := nInt;
+    FDesc := nDesc;
+    FDefault := nDef;
+  end;
+end;
+
+//Date: 2021-08-16
+//Parm: 浮点;描述;默认
+//Desc: 新增浮点值
+function TParamItem.AddF(const nFlt: Double; const nDesc: string;
+  const nDef: Boolean): PParamItem;
+begin
+  Result := @Self;
+  //return self address
+  FOptions.AddF(nFlt, nDesc, nDef);
+end;
+
+procedure TParamDataItem.AddF(const nFlt: Double; const nDesc: string;
+  const nDef: Boolean);
+var nIdx: Integer;
+begin
+  for nIdx := Low(Flt) to High(Flt) do
+   if nFlt = Flt[nIdx].FData then
+   begin
+     if nDef then
+       Flt[nIdx].FDefault := True;
+     //xxxxx
+
+     if nDesc <> '' then
+       Flt[nIdx].FDesc := nDesc;
+     Exit;
+   end;
+
+  nIdx := Length(Flt);
+  SetLength(Flt, nIdx + 1);
+
+  with Flt[nIdx] do
+  begin
+    FData := nFlt;
+    FDesc := nDesc;
+    FDefault := nDef;
+  end;
+end;
+
+//Date: 2021-08-16
+//Parm: 日期;描述;默认
+//Desc: 新增日期时间值
+function TParamItem.AddD(const nDate: TDateTime; const nDesc: string;
+  const nDef: Boolean): PParamItem;
+begin
+  Result := @Self;
+  //return self address
+  FOptions.AddD(nDate, nDesc, nDef);
+end;
+
+procedure TParamDataItem.AddD(const nDate: TDateTime; const nDesc: string;
+  const nDef: Boolean);
+var nIdx: Integer;
+begin
+  for nIdx := Low(Date) to High(Date) do
+   if nDate = Date[nIdx].FData then
+   begin
+     if nDef then
+        Date[nIdx].FDefault := True;
+     //xxxxx
+
+     if nDesc <> '' then
+       Date[nIdx].FDesc := nDesc;
+     Exit;
+   end;
+
+  nIdx := Length(Date);
+  SetLength(Date, nIdx + 1);
+
+  with Date[nIdx] do
+  begin
+    FData := nDate;
+    FDesc := nDesc;
+    FDefault := nDef;
+  end;
+end;
+
+//Date: 2021-08-16
+//Parm: 参数类型;有效值个数
+//Desc: 检测nType参数组内是否有nNum个有效值
+function TParamDataItem.IsValid(const nType: TParamDataType;
+  const nNum: Integer): Boolean;
+begin
+  Result := nNum < 1;
+  if Result then Exit;
+  //check input param
+
+  case nType of
+   dtStr      : Result := Length(Str) >= nNum;
+   dtInt      : Result := Length(Int) >= nNum;
+   dtFlt      : Result := Length(Flt) >= nNum;
+   dtDateTime : Result := Length(Date) >= nNum;
+  end;
+end;
+
+//Date: 2021-08-18
+//Parm: 数组;默认值
+//Desc: 在nItems中检索默认值
+function TParamItem.DefValue<T>(const nItems: array of TParamData<T>;
+  const nDefault: T): T;
+var nIdx: Integer;
+begin
+  for nIdx := Low(nItems) to High(nItems) do
+   if nItems[nIdx].FDefault then
+   begin
+     Result := nItems[nIdx].FData;
+     Exit;
+   end;
+
+  Result := nDefault;
+  //return default
+end;
+
+//------------------------------------------------------------------------------
 constructor TParameterManager.Create;
 begin
   inherited;
-  SetLength(Parameters, 0);
-  SetLength(Template, 0);
-  SetLength(TemplateData, 0);
+  SetLength(FBuilders, 0);
+  FDefaultItem.Init('', '');
 end;
 
-//Date: 2019-02-25
+destructor TParameterManager.Destroy;
+begin
+
+  inherited;
+end;
+
+//Date: 2021-08-15
 //Parm: 是否注册
 //Desc: 向系统注册管理器对象
 class procedure TParameterManager.RegistMe(const nReg: Boolean);
@@ -122,315 +447,311 @@ begin
   end;
 end;
 
-//Date: 2019-02-25
-//Parm: 模板数据
-//Desc: 解析模板数据
-procedure TParameterManager.LoadTemplate(const nData: string);
-var nXML: TNativeXml;
-    nStream: TStringStream;
+procedure TParameterManager.RunAfterRegistAllManager;
 begin
-  nXML := nil;
-  nStream := nil;
-  try
-    nStream := TStringStream.Create;
-    nStream.WriteString(nData);
-
-    nXML := TNativeXml.Create(nil);
-    nXML.LoadFromStream(nStream);
-    ParseTemplate(nXML);
-  finally
-    nStream.Free;
-    nXML.Free;
-  end;
+  gMG.CheckSupport('TParameterManager', ['TDBManager']);
+  //检查支持
+  gDBManager.AddTableBuilder(AddParameterTables);
 end;
 
-//Date: 2019-02-25
-//Parm: 模板文件
-//Desc: 载入模板文件
-procedure TParameterManager.LoadTemplateFromFile(const nFile: string);
-var nXML: TNativeXml;
+//Date: 2021-08-15
+//Parm: 配置方法
+//Desc: 新增参数项配置方法
+procedure TParameterManager.AddBuilder(const nBuilder: TParamItemBuilder);
+var nIdx: Integer;
 begin
-  nXML := nil;
-  try
-    nXML := TNativeXml.Create(nil);
-    nXML.LoadFromFile(nFile);
-    ParseTemplate(nXML);
-  finally
-    nXML.Free;
-  end;
+  for nIdx := Low(FBuilders) to High(FBuilders) do
+    if @FBuilders[nIdx] = @nBuilder then Exit;
+  //has exists
+
+  nIdx := Length(FBuilders);
+  SetLength(FBuilders, nIdx + 1);
+  FBuilders[nIdx] := nBuilder;
 end;
 
-//Date: 2019-02-25
-//Parm: XML对象
-//Desc: 解析模板数据
-procedure TParameterManager.ParseTemplate(const nXML: TNativeXml);
-var nStr: string;
-    nIdxA,nIdxB,nIntA,nIntB: Integer;
-    nRoot,nNode,nField: TXmlNode;
+//Date: 2021-08-16
+//Desc: 默认
+function TParameterManager.Default: PParamItem;
 begin
-  SetLength(Template, 0);
-  SetLength(TemplateData, 0);
-  nRoot := nXML.Root.NodeByNameR('Params');
+  Result := @FDefaultItem;
+end;
 
-  for nIdxA := 0 to nRoot.NodeCount-1 do
+//Date: 2021-08-16
+//Parm: 分组;标识
+//Desc: 检索nGroup.nID参数项
+function TParameterManager.FindParam(const nGroup, nID: string;
+  const nList: TList): PParamItem;
+var nIdx: Integer;
+    nPI: PParamItem;
+begin
+  Result := nil;
+  for nIdx := nList.Count - 1 downto 0 do
   begin
-    nNode := nRoot.Nodes[nIdxA];
-    if CompareText(string(nNode.Name), 'ParamItem') <> 0 then Continue;
-
-    nIntA := Length(Template);
-    SetLength(Template, nIntA + 1);
-    with Template[nIntA] do
+    nPI := nList[nIdx];
+    if (CompareText(nID, nPI.FID) = 0) and
+       (CompareText(nGroup, nPI.FGroup) = 0) then
     begin
-      SetLength(FFields, 0);
-      FID     := string(nNode.AttributeValueByName['Name']);
-      FName   := string(nNode.AttributeValueByName['DESC']);
-      FRoot   := FID;
-      FDetail := string(nNode.AttributeValueByName['Detail']);
-
-      for nIdxB := 0 to nNode.NodeCount-1 do
-      begin
-        nField := nNode.Nodes[nIdxB];
-        if CompareText(string(nField.Name), 'Field') <> 0 then Continue;
-
-        nIntB := Length(FFields);
-        SetLength(FFields, nIntB + 1);
-        with FFields[nIntB] do
-        begin
-          FName := string(nField.AttributeValueByName['Name']);
-          FDesc := string(nField.AttributeValueByName['Desc']);
-          FFrom := string(nField.AttributeValueByName['From']);
-          FData := string(nField.AttributeValueByName['Data']);
-
-          nStr := string(nField.AttributeValueByName['Type']);
-          if CompareText(nStr, 'attribution') = 0 then
-               FType := ptAttribute
-          else FType := ptSub;
-
-          nStr := string(nField.AttributeValueByName['Value']);
-          if CompareText(nStr, 'integer') = 0 then
-            FValue := pdInt
-          else if CompareText(nStr, 'float') = 0 then
-            FValue := pdFloat
-          else FValue := pdString;
-        end;
-      end;
-    end;
-  end;
-
-  nRoot := nXML.Root.NodeByNameR('FieldData');
-  for nIdxA := nRoot.NodeCount-1 downto 0 do
-  begin
-    nNode := nRoot.Nodes[nIdxA];
-    nIntA := Length(TemplateData);
-    SetLength(TemplateData, nIntA + 1);
-
-    with TemplateData[nIntA] do
-    begin
-      FName := string(nNode.AttributeValueByName['Name']);
-      FValue := nNode.ValueUnicode;
-
-      nStr := string(nNode.AttributeValueByName['Encode']);
-      if CompareText(nStr, 'Base64') = 0 then
-           FEncode := peBase64
-      else FEncode := peNone;
+      Result := nPI;
+      Break;
     end;
   end;
 end;
 
-//Date: 2019-02-28
-//Parm: 模板标识
-//Desc: 检索模板
-function TParameterManager.FindTemplate(const nID: string): Integer;
-var nIdx: Integer;
-begin
-  Result := -1;
-  for nIdx := Low(Template) to High(Template) do
-   if CompareText(nID, Template[nIdx].FID) = 0 then
-   begin
-     Result := nIdx;
-     Break;
-   end;
-end;
-
-//Date: 2019-03-01
-//Parm: 模板数据
-//Desc: 检索模板数据
-function TParameterManager.FindTemplateData(const nName: string): Integer;
-var nIdx: Integer;
-begin
-  Result := -1;
-  for nIdx := Low(TemplateData) to High(TemplateData) do
-   if CompareText(nName, TemplateData[nIdx].FName) = 0 then
-   begin
-     Result := nIdx;
-     Break;
-   end;
-end;
-
-//Date: 2019-02-28
-//Parm: 数据标识
-//Desc: 检索数据
-function TParameterManager.FindParameters(const nID: string): Integer;
-var nIdx: Integer;
-begin
-  Result := -1;
-  for nIdx := Low(Parameters) to High(Parameters) do
-   if CompareText(nID, Parameters[nIdx].FID) = 0 then
-   begin
-     Result := nIdx;
-     Break;
-   end;
-end;
-
-procedure TParameterManager.LoadParameters(const nData: string);
-begin
-
-end;
-
-procedure TParameterManager.LoadParametersFromFile(const nFile: string);
-begin
-
-end;
-
-//Date: 2019-04-12
-//Parm: 文件路径
-//Desc: 将当前参数写入nFile文件
-procedure TParameterManager.SaveParametersToFile(const nFile: string);
-var nStr: string;
-    i,j,nIdx: Integer;
-    nXML: TNativeXml;
-    nNode,nTmp: TXmlNode;
-begin
-  nXML := TNativeXml.Create(nil);
-  with nXML do
-  try
-    Clear;
-    XmlFormat := xfReadable;
-
-    Charset := 'utf-8';
-    VersionString := '1.0';
-    Root.Name := 'Params';
-
-    for nIdx := Low(Parameters) to High(Parameters) do
-      Parameters[nIdx].FHasUsed := False;
-    //init status
-
-    for nIdx := Low(Parameters) to High(Parameters) do
-    with Parameters[nIdx] do
-    begin
-      if FHasUsed then Continue;      
-      nNode := Root.NodeNew(FRoot);
-      //type node
-
-      for i := nIdx to High(Parameters) do
-      begin
-        if Parameters[i].FRoot <> FRoot then Continue;
-        Parameters[i].FHasUsed := True;
-        nTmp := nNode.NodeNew(FDetail); //type detail
-
-        for j := Low(FFields) to High(FFields) do
-        begin
-          case FFields[j].FValue of
-           pdString : nStr := FFields[j].FValueS;
-           pdInt    : nStr := FFields[j].FValueI.ToString;
-           pdFloat  : nStr := FFields[j].FValueF.ToString;
-          end;
-
-          if FFields[j].FName = 'ID' then
-            nStr := Parameters[i].FID;
-          if FFields[j].FName = 'Name' then
-            nStr := Parameters[i].FName;
-          //xxxxx
-
-          case FFields[j].FType of
-           ptSub :
-            with nTmp.NodeNew('Field') do
-            begin
-              AttributeValueByName['Name'] := FFields[j].FName;
-              AttributeValueByName['Value'] := nStr;
-            end;
-           ptAttribute : nTmp.AttributeValueByName[FFields[j].FName] := nStr;
-          end;
-        end;
-      end;
-    end;
-
-    SaveToFile(nFile);
-  finally
-    nXML.Free;
-  end;
-end;
-
-//Date: 2019-02-28
-//Parm: 标识;名称;模板标识
+//Date: 2021-08-16
+//Parm: 分组;标识;名称
 //Desc: 添加参数项
-procedure TParameterManager.AddParamItem(const nID, nName, nTemplete: string);
-var nIdx,nInt: Integer;
+function TParameterManager.AddParam(const nID, nName: string;
+  const nList: TList): PParamItem;
 begin
-  nIdx := FindTemplate(nTemplete);
-  if nIdx < 0 then
-    raise Exception.Create(Format('节点类型为[ %s ]不存在.', [nTemplete]));
-  //xxxxx
-
-  nInt := FindParameters(nID);
-  if nInt < 0 then
+  Result := FindParam(FDefaultItem.FGroup, nID, nList);
+  if not Assigned(Result) then
   begin
-    nInt := Length(Parameters);
-    SetLength(Parameters, nInt + 1);
-  end else
-  begin
-    if Parameters[nInt].FRoot <> Template[nIdx].FRoot then
-      raise Exception.Create(Format('节点[ %s ]已存在.', [nID]));
-    //xxxxx
-  end;
+    New(Result);
+    nList.Add(Result);
+    Result.Init(FDefaultItem.FGroup, FDefaultItem.FGrpName);
 
-  with Parameters[nInt] do
-  begin
-    FID := nID;
-    FName := nName;
-    FEnable := True;
-    FRoot := Template[nIdx].FRoot;
-    FDetail := Template[nIdx].FDetail;
-  end;
-
-  CombineParameterWithTemplate(nInt, nIdx);
-  //合并模板数据
-end;
-
-//Date: 2019-02-28
-//Parm: 数据索引;模板索引
-//Desc: 依据nTemplate生成nParam的数据
-procedure TParameterManager.CombineParameterWithTemplate(const nParam,
-  nTemplate: Integer);
-var i,nIdx: Integer;
-    nFields: TParamFieldItems;
-begin
-  with Parameters[nParam] do
-  begin
-    nFields := Template[nTemplate].FFields;
-    for nIdx := Low(nFields) to High(nFields) do
-     for i := Low(FFields) to High(FFields) do
-      if FFields[i].FName = nFields[nIdx].FName then
-      begin
-        nFields[nIdx] := FFields[i];
-        Break;
-      end;
-    //xxxxx
-
-    FFields := nFields;
+    with Result^ do
+    begin
+      FID          := nID;
+      FName        := nName;
+      FOptionOnly  := FDefaultItem.FOptionOnly;
+      FEffect      := FDefaultItem.FEffect;
+    end;
   end;
 end;
 
-//Date: 2019-03-01
-//Parm: 标识
-//Desc: 删除nID参数
-procedure TParameterManager.DelParamItem(const nID: string);
+//Date: 2021-08-16
+//Parm: 列表
+//Desc: 获取所有的参数配置项
+procedure TParameterManager.GetParamData(const nList: TList);
 var nIdx: Integer;
 begin
-  nIdx := FindParameters(nID);
-  if nIdx >= 0 then
-    Parameters[nIdx].FEnable := False;
+  nList.Clear;
+  //init first
+
+  for nIdx := Low(FBuilders) to High(FBuilders) do
+    FBuilders[nIdx](nList);
   //xxxxx
+end;
+
+//Parm: 列表;是否释放
+//Desc: 清理nList参数配置列表
+procedure TParameterManager.ClearParamData(const nList: TList;
+  const nFree: Boolean);
+var nIdx: Integer;
+begin
+  if Assigned(nList) then
+  begin
+    for nIdx := nList.Count - 1 downto 0 do
+      Dispose(PParamItem(nList[nIdx]));
+    //xxxxx
+
+    if nFree then
+         nList.Free
+    else nList.Clear;
+  end;
+end;
+
+//Date: 2021-08-16
+//Parm: 参数项;修改人
+//Desc: 构建nEntity.FItems[nIdx]的insert,update语句,存入nList中
+procedure TParameterManager.BuildSQL(const nParam: PParamItem;
+  const nEditor: string; const nList: TStrings);
+var nStr,nID: string;
+    nIdx: Integer;
+    nBool: Boolean;
+begin
+  with nParam^, TSQLBuilder,TDateTimeHelper,TStringHelper do
+  begin
+    nBool := FRecord = '';
+    if nBool then
+      nID := TDBCommand.SnowflakeID();
+    //记录序列号
+
+    nStr := MakeSQLByStr([
+      SF('D_Group',    FGroup),
+      SF('D_GrpName',  FGrpName),
+      SF('D_ID',       FID),
+      SF('D_Name',     FName),
+      SF('D_Effect',   Enum2Str(FEffect)),
+      SF('D_Owner',    FOwner),
+      SF('D_Editor',   nEditor),
+      SF('D_EditTime', sField_SQLServer_Now, sfVal),
+
+      SF_IF([SF('D_Record', nID), ''], nBool),
+      SF_IF([
+        SF('D_Str', DefValue<string>(FOptions.Str, '')),
+        SF('D_Str', DefValue<string>(FValue.Str, ''))], nBool),
+      SF_IF([
+        SF('D_Int', DefValue<Integer>(FOptions.Int, 0), sfVal),
+        SF('D_Int', DefValue<Integer>(FValue.Int, 0), sfVal)], nBool),
+      SF_IF([
+        SF('D_Double', DefValue<Double>(FOptions.Flt, 0), sfVal),
+        SF('D_Double', DefValue<Double>(FValue.Flt, 0), sfVal)], nBool),
+      SF_IF([
+        SF('D_Date', DateTime2Str(DefValue<TDateTime>(FOptions.Date, 0))),
+        SF('D_Date', DateTime2Str(DefValue<TDateTime>(FValue.Date, 0)))], nBool)
+    ], sTable_SysDict, SF('R_ID', FRecord, sfVal), FRecord = '');
+
+    nList.Add(nStr);
+    //参数默认值
+    if nBool then Exit;
+
+    nStr := 'Delete From %s Where V_ID=''%s''';
+    nStr := Format(nStr, [sTable_DictExt, FRecord]);
+    nList.Add(nStr); //clear extend parameters
+
+    nBool := False;
+    for nIdx := Low(FValue.Str) to High(FValue.Str) do
+    with FValue.Str[nIdx] do
+    begin
+      if FDefault then //第一个默认值已存放主表
+      begin
+        if nBool then
+             Continue
+        else nBool := True;
+      end;
+
+      nStr := MakeSQLByStr([
+        SF('V_ID', FRecord),
+        SF('V_Desc', FDesc),
+        SF('V_Str', FData)], sTable_DictExt, '', True);
+      nList.Add(nStr);
+    end;
+
+    nBool := False;
+    for nIdx := Low(FValue.Int) to High(FValue.Int) do
+    with FValue.Int[nIdx] do
+    begin
+      if FDefault then
+      begin
+        if nBool then
+             Continue
+        else nBool := True;
+      end;
+
+      nStr := MakeSQLByStr([
+        SF('V_ID', FRecord),
+        SF('V_Desc', FDesc),
+        SF('V_Int', FData, sfVal)], sTable_DictExt, '', True);
+      nList.Add(nStr);
+    end;
+
+    nBool := False;
+    for nIdx := Low(FValue.Flt) to High(FValue.Flt) do
+    with FValue.Flt[nIdx] do
+    begin
+      if FDefault then
+      begin
+        if nBool then
+             Continue
+        else nBool := True;
+      end;
+
+      nStr := MakeSQLByStr([
+        SF('V_ID', FRecord),
+        SF('V_Desc', FDesc),
+        SF('V_Double', FData, sfVal)], sTable_DictExt, '', True);
+      nList.Add(nStr);
+    end;
+
+    nBool := False;
+    for nIdx := Low(FValue.Date) to High(FValue.Date) do
+    with FValue.Date[nIdx] do
+    begin
+      if FDefault then
+      begin
+        if nBool then
+             Continue
+        else nBool := True;
+      end;
+
+      nStr := MakeSQLByStr([
+        SF('V_ID', FRecord),
+        SF('V_Desc', FDesc),
+        SF('V_Date', DateTime2Str(FData))], sTable_DictExt, '', True);
+      nList.Add(nStr);
+    end;
+  end;
+end;
+
+//Date: 2021-08-17
+//Parm: 参数拥有者;修改人id
+//Desc: 初始化nOwner的所有参数项
+procedure TParameterManager.InitParameters(const nOwner,nEditor: string;
+  const nMemo: TStrings);
+var nStr: string;
+    nIdx: Integer;
+    nParams: TList;
+    nQuery: TDataSet;
+    nPItem: PParamItem;
+    nListA,nListB: TStrings;
+begin
+  nListA := nil;
+  nListB := nil;
+  nParams := nil;
+  nQuery := nil; //init
+
+  with gDBManager do
+  try
+    nListA := gMG.FObjectPool.Lock(TStrings) as TStrings;
+    nListA.Clear;
+    nListB := gMG.FObjectPool.Lock(TStrings) as TStrings;
+    nListB.Clear;
+
+    nQuery := LockDBQuery();
+    nStr := 'Select D_Group,D_ID From %s Where D_Owner=''%s''';
+    nStr := Format(nStr, [sTable_SysDict, nOwner]);
+
+    with DBQuery(nStr, nQuery) do
+    if RecordCount > 0 then
+    begin
+      First;
+      while not Eof do
+      begin
+        nStr := FieldByName('D_Group').AsString + '.' +
+                FieldByName('D_ID').AsString;
+        nListA.Add(nStr);
+        Next;
+      end;
+    end;
+
+    nParams := gMG.FObjectPool.Lock(TList) as TList;
+    nParams.Clear;
+    GetParamData(nParams); //get param data
+
+    UParameters.WriteLog('::: 创建配置参数 :::', nMemo);
+    for nIdx := 0 to nParams.Count -1 do
+    begin
+      nPItem := nParams[nIdx];
+      nStr := nPItem.FGroup + '.' + nPItem.FID;
+      if nListA.IndexOf(nStr) < 0 then
+      begin
+        nPItem.FOwner := nOwner;
+        BuildSQL(nPItem, nEditor, nListB);
+        UParameters.WriteLog('已创建: ' + nStr, nMemo);
+      end;
+    end;
+
+    if nListB.Count > 0 then
+      DBExecute(nListB);
+    //xxxxx
+  finally
+    gMG.FObjectPool.Release(nListA);
+    gMG.FObjectPool.Release(nListB);
+    gDBManager.ReleaseDBQuery(nQuery);
+
+    ClearParamData(nParams);
+    gMG.FObjectPool.Release(nParams);
+    //param list
+  end;
+end;
+
+procedure TParameterManager.GetStatus(const nList: TStrings;
+  const nFriendly: Boolean);
+begin
+  inherited;
+
 end;
 
 end.

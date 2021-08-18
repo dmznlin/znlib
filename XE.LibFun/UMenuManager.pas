@@ -181,7 +181,7 @@ type
       const nList: TList; const nUser: string = '');
     procedure ClearMenus(const nList: TList; const nFree: Boolean = False);
     {*菜单信息*}
-    function InitMenus(const nMemo: TStrings = nil): Boolean;
+    procedure InitMenus(const nMemo: TStrings = nil);
     {*初始化数据*}
     procedure GetStatus(const nList: TStrings;
       const nFriendly: Boolean = True); override;
@@ -707,20 +707,14 @@ end;
 //Date: 2020-04-24
 //Parm: 输出
 //Desc: 初始化数据库中的菜单数据
-function TMenuManager.InitMenus(const nMemo: TStrings): Boolean;
+procedure TMenuManager.InitMenus(const nMemo: TStrings);
 var nStr: string;
     i,j,nIdx: Integer;
     nMenus: TList;
-    nListA,nListB: TStrings;
-
     nQuery: TDataSet;
     nEntity: PMenuEntity;
+    nListA,nListB: TStrings;
 begin
-  Result := False;
-  if Assigned(nMemo) then
-    nMemo.Clear;
-  //xxxxx
-
   nListA := nil;
   nListB := nil;
   nMenus := nil;
@@ -762,8 +756,8 @@ begin
     end;
 
     nMenus := gMG.FObjectPool.Lock(TList) as TList;
-    GetMenuData(nMenus);
-    //get menus data
+    nMenus.Clear;
+    GetMenuData(nMenus); //get menus data
 
     UMenuManager.WriteLog('::: 创建菜单数据 :::', nMemo);
     for nIdx := 0 to nMenus.Count -1 do
@@ -801,7 +795,7 @@ begin
 
     if nListB.Count > 0 then
       DBExecute(nListB);
-    //save
+    //xxxxx
   finally
     gMG.FObjectPool.Release(nListA);
     gMG.FObjectPool.Release(nListB);

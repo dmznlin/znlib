@@ -157,8 +157,7 @@ type
     procedure AddDict(const nEntity: PDictEntity; const nIdx: Integer = 0);
     procedure DelDict(const nEntity: PDictEntity; const nIdx: Integer = 0);
     {*字典项*}
-    function InitDictData(const nLang: string;
-      const nMemo: TStrings = nil): Boolean;
+    procedure InitDictData(const nLang: string; const nMemo: TStrings = nil);
     {*初始化数据*}
     procedure GetStatus(const nList: TStrings;
       const nFriendly: Boolean = True); override;
@@ -527,21 +526,15 @@ end;
 //Date: 2021-06-18
 //Parm: 语言;输出
 //Desc: 初始化数据库中的字典数据
-function TDataDictManager.InitDictData(const nLang: string;
-  const nMemo: TStrings): Boolean;
+procedure TDataDictManager.InitDictData(const nLang: string;
+  const nMemo: TStrings);
 var nStr: string;
     i,nIdx: Integer;
     nDicts: TList;
-    nListA,nListB: TStrings;
-
     nQuery: TDataSet;
     nEntity: PDictEntity;
+    nListA,nListB: TStrings;
 begin
-  Result := False;
-  if Assigned(nMemo) then
-    nMemo.Clear;
-  //xxxxx
-
   nListA := nil;
   nListB := nil;
   nDicts := nil;
@@ -549,13 +542,12 @@ begin
 
   with gDBManager do
   try
-    nQuery := LockDBQuery();
-
     nListA := gMG.FObjectPool.Lock(TStrings) as TStrings;
     nListA.Clear;
     nListB := gMG.FObjectPool.Lock(TStrings) as TStrings;
     nListB.Clear;
 
+    nQuery := LockDBQuery();
     nStr := 'Select D_Entity,D_LangID,D_Title,D_DBField From %s ' +
             'Where D_LangID=''%s''';
     nStr := Format(nStr, [sTable_DataDict, nLang]);
@@ -576,8 +568,8 @@ begin
     end;
 
     nDicts := gMG.FObjectPool.Lock(TList) as TList;
-    GetDictData(nDicts);
-    //get dict data
+    nDicts.Clear;
+    GetDictData(nDicts); //get dict data
 
     UMgrDataDict.WriteLog('::: 创建字典数据 :::', nMemo);
     for nIdx := 0 to nDicts.Count -1 do
@@ -610,7 +602,7 @@ begin
 
     if nListB.Count > 0 then
       DBExecute(nListB);
-    //save
+    //xxxxx
   finally
     gMG.FObjectPool.Release(nListA);
     gMG.FObjectPool.Release(nListB);
@@ -618,7 +610,7 @@ begin
 
     ClearDictData(nDicts);
     gMG.FObjectPool.Release(nDicts);
-    //menu list
+    //dict list
   end;
 end;
 

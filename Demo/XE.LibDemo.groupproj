@@ -21,6 +21,9 @@
         <Projects Include="MQTT\MQTT.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="Params\Params.dproj">
+            <Dependencies/>
+        </Projects>
     </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Default.Personality.12</Borland.Personality>
@@ -83,14 +86,23 @@
     <Target Name="MQTT:Make">
         <MSBuild Projects="MQTT\MQTT.dproj" Targets="Make"/>
     </Target>
+    <Target Name="Params">
+        <MSBuild Projects="Params\Params.dproj"/>
+    </Target>
+    <Target Name="Params:Clean">
+        <MSBuild Projects="Params\Params.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="Params:Make">
+        <MSBuild Projects="Params\Params.dproj" Targets="Make"/>
+    </Target>
     <Target Name="Build">
-        <CallTarget Targets="DBPool;HighTimer;ThreadPool;SerialID;DataDict;MQTT"/>
+        <CallTarget Targets="DBPool;HighTimer;ThreadPool;SerialID;DataDict;MQTT;Params"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="DBPool:Clean;HighTimer:Clean;ThreadPool:Clean;SerialID:Clean;DataDict:Clean;MQTT:Clean"/>
+        <CallTarget Targets="DBPool:Clean;HighTimer:Clean;ThreadPool:Clean;SerialID:Clean;DataDict:Clean;MQTT:Clean;Params:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="DBPool:Make;HighTimer:Make;ThreadPool:Make;SerialID:Make;DataDict:Make;MQTT:Make"/>
+        <CallTarget Targets="DBPool:Make;HighTimer:Make;ThreadPool:Make;SerialID:Make;DataDict:Make;MQTT:Make;Params:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

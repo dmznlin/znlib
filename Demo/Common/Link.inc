@@ -27,7 +27,10 @@
 //启用数据库管理器
 
 {$DEFINE DataDictManager}
-//启用数据库管理器
+//启用数据字典管理器
+
+{$DEFINE AutoParams}
+//启用参数管理器
 
 {$DEFINE MQTTMessager}
 //启用MQTT消息中心

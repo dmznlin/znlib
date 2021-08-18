@@ -645,12 +645,17 @@ begin
 
   with FIndexes[nInt] do
   begin
+    nIdx := Pos('(', nIndex);
+    if (nIdx > 0) and (nIdx < Pos(')', nIndex)) then //完整索引标记: ()
+         FData := nIndex
+    else FData := 'CREATE INDEX $IDX ON $TBS(' + nIndex + ')';
+
     FName := nName;
     with TStringHelper do
-      FData := MacroValue(nIndex, [MI(sDBIndex, nName)]);
+      FData := MacroValue(FData, [MI(sDBIndex, nName)]);
     FFitDB := nDBType;
 
-    FParmI := Pos(sDBTables, nIndex);
+    FParmI := Pos(sDBTables, FData);
     FParmB := FParmI > 0;
   end;
 end;

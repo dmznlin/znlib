@@ -55,6 +55,8 @@
 {$ENDIF}
 
 {$IFDEF AutoParams}
+  {$DEFINE LogManager}
+  //启用日志管理器
   {$DEFINE EnableParamManager}
   //启用参数管理器
 {$ENDIF}
