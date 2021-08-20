@@ -16,6 +16,9 @@ type
     Memo1: TMemo;
     procedure Button1Click(Sender: TObject);
     procedure FormCreate(Sender: TObject);
+    procedure Button2Click(Sender: TObject);
+    procedure Button3Click(Sender: TObject);
+    procedure Button4Click(Sender: TObject);
   private
     { Private declarations }
   public
@@ -64,6 +67,7 @@ end;
 
 procedure TfFormMain.FormCreate(Sender: TObject);
 begin
+  gMG.FLogManager.StartService();
   gMG.FParamsManager.AddBuilder(SystemParams);
 end;
 
@@ -74,5 +78,32 @@ begin
 end;
 
 
+procedure TfFormMain.Button2Click(Sender: TObject);
+var nP: TParamItem;
+begin
+  nP.Init('System', 'name').FID := sParam3;
+  nP.FOwner := 'dmzn';
+  nP.FRecord := '031B583720021000';
+
+  nP.FValue.AddS('a');
+  nP.FValue.AddS('b');
+  nP.FValue.AddS('c');
+  nP.FValue.AddI(3);
+  nP.FValue.AddF(1.2);
+  nP.FValue.AddD(Now);
+  gMG.FParamsManager.SaveParam(@nP, 'admin');
+end;
+
+procedure TfFormMain.Button3Click(Sender: TObject);
+var nP: TParamItem;
+begin
+  nP.Init('system', 'name');
+  gMG.FParamsManager.DeleteParam(@nP);
+end;
+
+procedure TfFormMain.Button4Click(Sender: TObject);
+begin
+  gMG.GetManagersStatus(Memo1.Lines);
+end;
 
 end.

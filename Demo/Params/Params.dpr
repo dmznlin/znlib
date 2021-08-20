@@ -1,6 +1,7 @@
 program Params;
 
 uses
+  FastMM4,
   Vcl.Forms,
   UFormMain in 'UFormMain.pas' {fFormMain};
 

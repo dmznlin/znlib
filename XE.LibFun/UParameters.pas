@@ -61,7 +61,6 @@ type
     FID          : string;                         //参数标识
     FName        : string;                         //参数名称
     FValue       : TParamDataItem;                 //参数值
-    FOptions     : TParamDataItem;                 //可选值
     FOptionOnly  : TParamDataTypes;                //只使用可选
     FOwner       : string;                         //拥有者id
     FEffect      : TParamEffectType;               //生效方式
@@ -97,14 +96,12 @@ type
       sTable_SysDict = 'Sys_Dict';                 //参数配置
       sTable_DictExt = 'Sys_DictExt';              //扩展数据
   private
+    FParamOptions: TList;
+    {*参数项列表*}
     FDefaultItem: TParamItem;
     {*默认配置*}
     FBuilders: array of TParamItemBuilder;
     {*参数配置信息*}
-  protected
-    function FindParam(const nGroup, nID: string;
-      const nList: TList): PParamItem;
-    {*检索数据*}
   public
     constructor Create;
     destructor Destroy; override;
@@ -118,6 +115,8 @@ type
     procedure AddBuilder(const nBuilder: TParamItemBuilder);
     function AddParam(const nID,nName: string; const nList: TList): PParamItem;
     {*添加数据*}
+    function FindParam(const nGroup,nID: string; nList: TList=nil): PParamItem;
+    {*检索数据*}
     procedure GetParamData(const nList: TList);
     procedure ClearParamData(const nList: TList; const nFree: Boolean = False);
     {*参数数据*}
@@ -126,9 +125,18 @@ type
     procedure InitParameters(const nOwner,nEditor: string;
       const nMemo: TStrings = nil);
     {*初始化参数*}
+    procedure SaveParam(const nParam: PParamItem; const nEditor: string);
+    procedure DeleteParam(const nParam: PParamItem);
+    {*保存参数项*}
+    function GetParam(const nGroup, nID: string; const nOwner: TArray<string>;
+      var nParam: TParamItem): Boolean;
+    function GetParam2(const nRecord: string; var nParam: TParamItem): Boolean;
+    {*获取参数项*}
     procedure GetStatus(const nList: TStrings;
       const nFriendly: Boolean = True); override;
     {*获取状态*}
+    property ParamItems: TList read FParamOptions;
+    {*属性相关*}
   end;
 
 implementation
@@ -165,13 +173,15 @@ begin
       AddF('D_EditTime',    'DateTime',               '修改时间').
       //for field
       AddI('idx_id',        'D_Group ASC,D_ID ASC').
+      AddI('idx_record',    'D_Record ASC').
       AddI('idx_owner',     'D_Owner ASC');
       //for index
 
     AddTable(sTable_DictExt, nList, dtMSSQL).
       AddF('R_ID',          sField_SQLServer_AutoInc, '记录标识').
-      AddF('V_ID',          'varchar(16)',            '参数标识').
+      AddF('V_ID',          'varchar(32)',            '参数标识').
       AddF('V_Desc',        'varchar(80)',            '参数描述').
+      AddF('V_Type',        'varchar(16)',            '数据类型').
       AddF('V_Str',         'varchar(200)',           '字符值').
       AddF('V_Int',         'integer',                '整数值').
       AddF('V_Double',      sField_SQLServer_Decimal, '浮点值').
@@ -235,7 +245,7 @@ function TParamItem.AddS(const nStr,nDesc: string;
 begin
   Result := @Self;
   //return self address
-  FOptions.AddS(nStr, nDesc, nDef);
+  FValue.AddS(nStr, nDesc, nDef);
 end;
 
 procedure TParamDataItem.AddS(const nStr, nDesc: string; const nDef: Boolean);
@@ -272,7 +282,7 @@ function TParamItem.AddI(const nInt: Integer; const nDesc: string;
 begin
   Result := @Self;
   //return self address
-  FOptions.AddI(nInt, nDesc, nDef);
+  FValue.AddI(nInt, nDesc, nDef);
 end;
 
 procedure TParamDataItem.AddI(const nInt: Integer; const nDesc: string;
@@ -310,7 +320,7 @@ function TParamItem.AddF(const nFlt: Double; const nDesc: string;
 begin
   Result := @Self;
   //return self address
-  FOptions.AddF(nFlt, nDesc, nDef);
+  FValue.AddF(nFlt, nDesc, nDef);
 end;
 
 procedure TParamDataItem.AddF(const nFlt: Double; const nDesc: string;
@@ -348,7 +358,7 @@ function TParamItem.AddD(const nDate: TDateTime; const nDesc: string;
 begin
   Result := @Self;
   //return self address
-  FOptions.AddD(nDate, nDesc, nDef);
+  FValue.AddD(nDate, nDesc, nDef);
 end;
 
 procedure TParamDataItem.AddD(const nDate: TDateTime; const nDesc: string;
@@ -420,11 +430,14 @@ begin
   inherited;
   SetLength(FBuilders, 0);
   FDefaultItem.Init('', '');
+
+  FParamOptions := TList.Create;
+  //参数项列表
 end;
 
 destructor TParameterManager.Destroy;
 begin
-
+  ClearParamData(FParamOptions, True);
   inherited;
 end;
 
@@ -467,6 +480,10 @@ begin
   nIdx := Length(FBuilders);
   SetLength(FBuilders, nIdx + 1);
   FBuilders[nIdx] := nBuilder;
+
+  if Assigned(FParamOptions) then
+    nBuilder(FParamOptions);
+  //xxxxx
 end;
 
 //Date: 2021-08-16
@@ -480,11 +497,15 @@ end;
 //Parm: 分组;标识
 //Desc: 检索nGroup.nID参数项
 function TParameterManager.FindParam(const nGroup, nID: string;
-  const nList: TList): PParamItem;
+  nList: TList): PParamItem;
 var nIdx: Integer;
     nPI: PParamItem;
 begin
   Result := nil;
+  if not Assigned(nList) then
+    nList := FParamOptions;
+  //xxxxx
+
   for nIdx := nList.Count - 1 downto 0 do
   begin
     nPI := nList[nIdx];
@@ -568,7 +589,7 @@ begin
       nID := TDBCommand.SnowflakeID();
     //记录序列号
 
-    nStr := MakeSQLByStr([
+    nStr := MakeSQLByStr([SF_IF([SF('D_Record', nID), ''], nBool),
       SF('D_Group',    FGroup),
       SF('D_GrpName',  FGrpName),
       SF('D_ID',       FID),
@@ -578,20 +599,11 @@ begin
       SF('D_Editor',   nEditor),
       SF('D_EditTime', sField_SQLServer_Now, sfVal),
 
-      SF_IF([SF('D_Record', nID), ''], nBool),
-      SF_IF([
-        SF('D_Str', DefValue<string>(FOptions.Str, '')),
-        SF('D_Str', DefValue<string>(FValue.Str, ''))], nBool),
-      SF_IF([
-        SF('D_Int', DefValue<Integer>(FOptions.Int, 0), sfVal),
-        SF('D_Int', DefValue<Integer>(FValue.Int, 0), sfVal)], nBool),
-      SF_IF([
-        SF('D_Double', DefValue<Double>(FOptions.Flt, 0), sfVal),
-        SF('D_Double', DefValue<Double>(FValue.Flt, 0), sfVal)], nBool),
-      SF_IF([
-        SF('D_Date', DateTime2Str(DefValue<TDateTime>(FOptions.Date, 0))),
-        SF('D_Date', DateTime2Str(DefValue<TDateTime>(FValue.Date, 0)))], nBool)
-    ], sTable_SysDict, SF('R_ID', FRecord, sfVal), FRecord = '');
+      SF('D_Str',      DefValue<string>(FValue.Str, '')),
+      SF('D_Int',      DefValue<Integer>(FValue.Int, 0), sfVal),
+      SF('D_Double',   DefValue<Double>(FValue.Flt, 0), sfVal),
+      SF('D_Date',     DateTime2Str(DefValue<TDateTime>(FValue.Date, 0)))
+    ], sTable_SysDict, SF('D_Record', FRecord), nBool);
 
     nList.Add(nStr);
     //参数默认值
@@ -601,76 +613,83 @@ begin
     nStr := Format(nStr, [sTable_DictExt, FRecord]);
     nList.Add(nStr); //clear extend parameters
 
-    nBool := False;
-    for nIdx := Low(FValue.Str) to High(FValue.Str) do
-    with FValue.Str[nIdx] do
+    with FValue do
     begin
-      if FDefault then //第一个默认值已存放主表
+      nBool := False;
+      for nIdx := Low(Str) to High(Str) do
       begin
-        if nBool then
-             Continue
-        else nBool := True;
+        if Str[nIdx].FDefault then //第一个默认值已存放主表
+        begin
+          if nBool then
+               Continue
+          else nBool := True;
+        end;
+
+        nStr := MakeSQLByStr([
+          SF('V_ID', FRecord),
+          SF('V_Desc', Str[nIdx].FDesc),
+          SF('V_Type', Enum2Str(dtStr)),
+          SF('V_Str', Str[nIdx].FData)
+          ], sTable_DictExt, '', True);
+        nList.Add(nStr);
       end;
 
-      nStr := MakeSQLByStr([
-        SF('V_ID', FRecord),
-        SF('V_Desc', FDesc),
-        SF('V_Str', FData)], sTable_DictExt, '', True);
-      nList.Add(nStr);
-    end;
-
-    nBool := False;
-    for nIdx := Low(FValue.Int) to High(FValue.Int) do
-    with FValue.Int[nIdx] do
-    begin
-      if FDefault then
+      nBool := False;
+      for nIdx := Low(Int) to High(Int) do
       begin
-        if nBool then
-             Continue
-        else nBool := True;
+        if Int[nIdx].FDefault then
+        begin
+          if nBool then
+               Continue
+          else nBool := True;
+        end;
+
+        nStr := MakeSQLByStr([
+          SF('V_ID', FRecord),
+          SF('V_Desc', Int[nIdx].FDesc),
+          SF('V_Type', Enum2Str(dtInt)),
+          SF('V_Int', Int[nIdx].FData, sfVal)
+          ], sTable_DictExt, '', True);
+        nList.Add(nStr);
       end;
 
-      nStr := MakeSQLByStr([
-        SF('V_ID', FRecord),
-        SF('V_Desc', FDesc),
-        SF('V_Int', FData, sfVal)], sTable_DictExt, '', True);
-      nList.Add(nStr);
-    end;
-
-    nBool := False;
-    for nIdx := Low(FValue.Flt) to High(FValue.Flt) do
-    with FValue.Flt[nIdx] do
-    begin
-      if FDefault then
+      nBool := False;
+      for nIdx := Low(Flt) to High(Flt) do
       begin
-        if nBool then
-             Continue
-        else nBool := True;
+        if Flt[nIdx].FDefault then
+        begin
+          if nBool then
+               Continue
+          else nBool := True;
+        end;
+
+        nStr := MakeSQLByStr([
+          SF('V_ID', FRecord),
+          SF('V_Desc', Flt[nIdx].FDesc),
+          SF('V_Type', Enum2Str(dtFlt)),
+          SF('V_Double', Flt[nIdx].FData, sfVal)
+          ], sTable_DictExt, '', True);
+        nList.Add(nStr);
       end;
 
-      nStr := MakeSQLByStr([
-        SF('V_ID', FRecord),
-        SF('V_Desc', FDesc),
-        SF('V_Double', FData, sfVal)], sTable_DictExt, '', True);
-      nList.Add(nStr);
-    end;
-
-    nBool := False;
-    for nIdx := Low(FValue.Date) to High(FValue.Date) do
-    with FValue.Date[nIdx] do
-    begin
-      if FDefault then
+      nBool := False;
+      for nIdx := Low(Date) to High(Date) do
       begin
-        if nBool then
-             Continue
-        else nBool := True;
-      end;
+        if Date[nIdx].FDefault then
+        begin
+          if nBool then
+               Continue
+          else nBool := True;
+        end;
 
-      nStr := MakeSQLByStr([
-        SF('V_ID', FRecord),
-        SF('V_Desc', FDesc),
-        SF('V_Date', DateTime2Str(FData))], sTable_DictExt, '', True);
-      nList.Add(nStr);
+        nStr := MakeSQLByStr([
+          SF('V_ID', FRecord),
+          SF('V_Desc', Date[nIdx].FDesc),
+          SF('V_Type', Enum2Str(dtDateTime)),
+          SF('V_Date', DateTime2Str(Date[nIdx].FData))
+          ], sTable_DictExt, '', True);
+        nList.Add(nStr);
+      end;
     end;
   end;
 end;
@@ -682,14 +701,12 @@ procedure TParameterManager.InitParameters(const nOwner,nEditor: string;
   const nMemo: TStrings);
 var nStr: string;
     nIdx: Integer;
-    nParams: TList;
     nQuery: TDataSet;
     nPItem: PParamItem;
     nListA,nListB: TStrings;
 begin
   nListA := nil;
   nListB := nil;
-  nParams := nil;
   nQuery := nil; //init
 
   with gDBManager do
@@ -716,14 +733,10 @@ begin
       end;
     end;
 
-    nParams := gMG.FObjectPool.Lock(TList) as TList;
-    nParams.Clear;
-    GetParamData(nParams); //get param data
-
     UParameters.WriteLog('::: 创建配置参数 :::', nMemo);
-    for nIdx := 0 to nParams.Count -1 do
+    for nIdx := 0 to FParamOptions.Count -1 do
     begin
-      nPItem := nParams[nIdx];
+      nPItem := FParamOptions[nIdx];
       nStr := nPItem.FGroup + '.' + nPItem.FID;
       if nListA.IndexOf(nStr) < 0 then
       begin
@@ -740,18 +753,140 @@ begin
     gMG.FObjectPool.Release(nListA);
     gMG.FObjectPool.Release(nListB);
     gDBManager.ReleaseDBQuery(nQuery);
-
-    ClearParamData(nParams);
-    gMG.FObjectPool.Release(nParams);
-    //param list
   end;
+end;
+
+//Date: 2021-08-19
+//Parm: 参数项;编辑人
+//Desc: 保存nParam到数据库
+procedure TParameterManager.SaveParam(const nParam: PParamItem;
+  const nEditor: string);
+var nStr: string;
+    nList: TStrings;
+    nQuery: TDataSet;
+begin
+  if (nParam.FGroup = '') or (nParam.FID = '') or (nParam.FOwner = '') then
+  begin
+    nStr := 'UParameters.SaveParam: Fields(FGroup,FID,FOwner) Is Null.';
+    WriteLog(nStr);
+    Exit;
+  end;
+
+  nList := nil;
+  nQuery := nil;
+  try
+    if nParam.FRecord = '' then
+    begin
+      nStr := 'Select D_Record From %s ' +
+              'Where D_Group=''%s'' And D_ID=''%s'' And D_Owner=''%s''';
+      nStr := Format(nStr, [sTable_SysDict, nParam.FGroup, nParam.FID,
+              nParam.FOwner]);
+      //xxxxx
+
+      nQuery := gDBManager.DBQuery(nStr);
+      if nQuery.RecordCount > 0 then
+        nParam.FRecord := nQuery.Fields[0].AsString;
+      //get old record,try to override
+    end;
+
+    nList := gMG.FObjectPool.Lock(TStrings) as TStrings;
+    nList.Clear;
+    BuildSQL(nParam, nEditor, nList);
+
+    if nList.Count > 0 then
+      gDBManager.DBExecute(nList);
+    //xxxxx
+  finally
+    gMG.FObjectPool.Release(nList);
+    gDBManager.ReleaseDBQuery(nQuery);
+  end;
+end;
+
+//Date: 2021-08-19
+//Parm: 参数项
+//Desc: 删除nParam
+procedure TParameterManager.DeleteParam(const nParam: PParamItem);
+var nStr: string;
+    nList: TStrings;
+begin
+  if nParam.FRecord = '' then
+  begin
+    nStr := 'UParameters.DeleteParam: Fields(FRecord) Is Null.';
+    WriteLog(nStr);
+    Exit;
+  end;
+
+  nList := nil;
+  try
+    nList := gMG.FObjectPool.Lock(TStrings) as TStrings;
+    nList.Clear;
+
+    nStr := 'Delete From %s Where D_Record=''%s''';
+    nStr := Format(nStr, [sTable_SysDict, nParam.FRecord]);
+    nList.Add(nStr);
+
+    nStr := 'Delete From %s Where V_ID=''%s''';
+    nStr := Format(nStr, [sTable_DictExt, nParam.FRecord]);
+    nList.Add(nStr);
+
+    if nList.Count > 0 then
+      gDBManager.DBExecute(nList);
+    //xxxxx
+  finally
+    gMG.FObjectPool.Release(nList);
+  end;
+end;
+
+//Date: 2021-08-20
+//Parm: 记录编号
+//Desc: 获取nRecord的参数数据
+function TParameterManager.GetParam2(const nRecord: string;
+  var nParam: TParamItem): Boolean;
+var nStr: string;
+begin
+
+end;
+
+//Date: 2021-08-20
+//Parm: 分组;标识;拥有者架构(从低到高)
+//Desc: 获取nOwner的参数nGroup.nID数据,存入nParam中
+function TParameterManager.GetParam(const nGroup, nID: string;
+  const nOwner: TArray<string>; var nParam: TParamItem): Boolean;
+begin
+
 end;
 
 procedure TParameterManager.GetStatus(const nList: TStrings;
   const nFriendly: Boolean);
+var nIdx: Integer;
+    nParam: PParamItem;
 begin
-  inherited;
+  with TObjectStatusHelper do
+  try
+    SyncEnter;
+    inherited GetStatus(nList, nFriendly);
 
+    if not nFriendly then
+    begin
+      nList.Add('NumBuilder=' + Length(FBuilders).ToString);
+      nList.Add('NumParam=' + FParamOptions.Count.ToString);
+      Exit;
+    end;
+
+    nList.Add(FixData('NumBuilder:', Length(FBuilders).ToString));
+    nList.Add(FixData('NumParam:', FParamOptions.Count.ToString));
+
+    for nIdx := 0 to FParamOptions.Count-1 do
+    begin
+      nParam := FParamOptions[nIdx];
+      nList.Add(FixData(Format('ParamItem %d:', [nIdx + 1]),
+        Format('[ %s.%s ]%s.%s', [nParam.FGroup, nParam.FID,
+        nParam.FGrpName, nParam.FName])));
+      //xxxxx
+    end;
+  finally
+    SyncLeave;
+  end;
 end;
 
 end.
