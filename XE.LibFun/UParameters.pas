@@ -1,14 +1,67 @@
 {*******************************************************************************
   作者: dmzn@163.com 2021-08-15
   描述: 参数配置管理器
+
+  备注:
+  *.参数项:TParamItem
+    *.FGroup: 参数分组
+    *.FID: 参数标识.同一个分组内FID不能重复,不同分组FID可以相同.
+    *.FOptionOnly: 指定在设置某些类型的参数时,不能自由输入,只能选择.
+    *.FOwner: 参数对应的组织架构标识.
+    *.FEffect: 参数生效方式,参考一下"组织架构与参数项的关系"的解释.
+  *.每一项参数由 FOwner.FGroup.FID 唯一性约束,即: 每个FOwner有
+    唯一的参数项(FGroup.FID)
+
+  *.组织架构与参数项的关系,以集团、区域、工厂三级架构为例:
+    1.组织架构中的每一级,都可以拥有一组参数(1:1),或者不配置参数(0:1).
+    2.组织架构中上一级,决定相同的参数(相同Group、ID)如何生效.例如:
+      a.集团配置下级生效(etLower),则无论区域如何配置,工厂都以自己的参数为准.
+      b.集团配置上级生效(etHigher),则无论区域、工厂如何配置,都以集团为准.
+      c.若集团未配置,则区域配置下级生效(etLower),工厂以自己的参数为准.
+      d.若集团未配置,则区域配置上级生效(etHigher),工厂以区域的参数为准.
+    3.若上一级没有配置参数,则以本级的参数为准.
+    4.若本级没有配置参数,则以默认值为准.
+
+  使用方法:
+  1.添加Builder
+    procedure SystemParams(const nList: TList);
+    begin
+      gMG.FParamsManager.Default.Init('System', '系统通用参数').
+        SetEffect(etLower).
+        SetOptionOnly([dtStr]);
+      //设置参数默认值
+
+      gMG.FParamsManager.AddParam('001', '第一参数', nList).
+        AddS('a1', '', True).
+        AddI(11, '', True).
+        AddF(11.1);
+      //first
+
+      gMG.FParamsManager.AddParam('002', '第二参数', nList).
+        AddS('a2', '', True).
+        AddI(22, '', True).
+        AddF(22.2);
+      //second
+    end;
+
+    gMG.FParamsManager.AddBuilder(SystemParams);
+    //添加至管理器
+
+  2.初始化参数项
+    gMG.FParamsManager.InitParameters('Owner01', 'admin');
+    //初始化Owner01的参数项
+
+  3.获取参数项
+    var nP: TParamItem;
+    gMG.FParamsManager.GetParam('system', '001', ['Owner01'], nP)
+    //获取组织架构中Owner01在分组system中编号为001参数项
 *******************************************************************************}
 unit UParameters;
 
 interface
 
 uses
-  System.Classes, System.SysUtils, System.Generics.Defaults, Data.DB,
-  UBaseObject;
+  System.Classes, System.SysUtils, Data.DB, UBaseObject;
 
 type
   TParamDataType = (dtStr, dtInt, dtFlt, dtDateTime);
@@ -19,6 +72,9 @@ type
   //effect type
 
 const
+  cParamDefaultValue = High(Word);
+  //value for return
+
   sParamDataType: array[TParamDataType] of string = ('字符', '整数', '浮点',
     '日期');
   //data type desc
@@ -55,6 +111,7 @@ type
 
   PParamItem = ^TParamItem;
   TParamItem = record
+    FEnabled     : Boolean;                        //状态标记
     FRecord      : string;                         //记录标识
     FGroup       : string;                         //参数分组
     FGrpName     : string;                         //分组名称
@@ -68,7 +125,7 @@ type
   public
     function Init(const nGroup,nName: string): PParamItem;
     {*初始化*}
-    function SetGroup(const nGroup,nName: string): PParamItem;
+    function SetGroup(nGroup,nName: string): PParamItem;
     function SetEffect(const nEffect: TParamEffectType): PParamItem;
     function SetOptionOnly(const nOnly: TParamDataTypes): PParamItem;
     {*设置属性*}
@@ -95,6 +152,8 @@ type
     const
       sTable_SysDict = 'Sys_Dict';                 //参数配置
       sTable_DictExt = 'Sys_DictExt';              //扩展数据
+      sParamDefGroup = 'SysParam';                 //默认分组
+      sParamDefGName = '系统配置';                 //默认名称
   private
     FParamOptions: TList;
     {*参数项列表*}
@@ -130,8 +189,12 @@ type
     {*保存参数项*}
     function GetParam(const nGroup, nID: string; const nOwner: TArray<string>;
       var nParam: TParamItem): Boolean;
-    function GetParam2(const nRecord: string; var nParam: TParamItem): Boolean;
+    function GetParam2(const nRecord: string; var nParam: TParamItem;
+      nQuery: TDataSet = nil): Boolean;
     {*获取参数项*}
+    procedure LoadFromFile(const nFile: string);
+    procedure SaveToFile(const nFile: string);
+    {*文件持久化*}
     procedure GetStatus(const nList: TStrings;
       const nFriendly: Boolean = True); override;
     {*获取状态*}
@@ -142,7 +205,7 @@ type
 implementation
 
 uses
-  UManagerGroup, UDBManager, UDBFun, ULibFun;
+  UManagerGroup, UDBManager, UDBFun, NativeXml, ULibFun;
 
 procedure WriteLog(const nEvent: string; const nMemo: TStrings = nil);
 begin
@@ -203,19 +266,28 @@ begin
   Self := nInit;
   Result := @Self;
 
-  FGroup   := nGroup;
-  FGrpName := nName;
+  FEnabled := True;
   FEffect  := etLower;
   FOptionOnly := [];
+  SetGroup(nGroup, nName);
 end;
 
 //Date: 2021-08-16
 //Parm: 分组;分组名称
 //Desc: 设置分组
-function TParamItem.SetGroup(const nGroup,nName: string): PParamItem;
+function TParamItem.SetGroup(nGroup,nName: string): PParamItem;
 begin
   Result := @Self;
+  //return self address
+
+  nGroup := Trim(nGroup);
+  if nGroup = '' then
+    nGroup := TParameterManager.sParamDefGroup;
   FGroup := nGroup;
+
+  nName := Trim(nName);
+  if nName = '' then
+    nName := TParameterManager.sParamDefGName;
   FGrpName := nName;
 end;
 
@@ -525,19 +597,23 @@ function TParameterManager.AddParam(const nID, nName: string;
   const nList: TList): PParamItem;
 begin
   Result := FindParam(FDefaultItem.FGroup, nID, nList);
-  if not Assigned(Result) then
+  if Assigned(Result) then
   begin
-    New(Result);
-    nList.Add(Result);
-    Result.Init(FDefaultItem.FGroup, FDefaultItem.FGrpName);
+    if nName <> '' then
+      Result.FName := nName;
+    Exit;
+  end;
 
-    with Result^ do
-    begin
-      FID          := nID;
-      FName        := nName;
-      FOptionOnly  := FDefaultItem.FOptionOnly;
-      FEffect      := FDefaultItem.FEffect;
-    end;
+  New(Result);
+  nList.Add(Result);
+  Result.Init(FDefaultItem.FGroup, FDefaultItem.FGrpName);
+
+  with Result^ do
+  begin
+    FID          := nID;
+    FName        := nName;
+    FOptionOnly  := FDefaultItem.FOptionOnly;
+    FEffect      := FDefaultItem.FEffect;
   end;
 end;
 
@@ -600,8 +676,8 @@ begin
       SF('D_EditTime', sField_SQLServer_Now, sfVal),
 
       SF('D_Str',      DefValue<string>(FValue.Str, '')),
-      SF('D_Int',      DefValue<Integer>(FValue.Int, 0), sfVal),
-      SF('D_Double',   DefValue<Double>(FValue.Flt, 0), sfVal),
+      SF('D_Int',      DefValue<Integer>(FValue.Int, cParamDefaultValue), sfVal),
+      SF('D_Double',   DefValue<Double>(FValue.Flt, cParamDefaultValue), sfVal),
       SF('D_Date',     DateTime2Str(DefValue<TDateTime>(FValue.Date, 0)))
     ], sTable_SysDict, SF('D_Record', FRecord), nBool);
 
@@ -841,10 +917,91 @@ end;
 //Parm: 记录编号
 //Desc: 获取nRecord的参数数据
 function TParameterManager.GetParam2(const nRecord: string;
-  var nParam: TParamItem): Boolean;
+  var nParam: TParamItem; nQuery: TDataSet): Boolean;
 var nStr: string;
+    nBool: Boolean;
+    nType: TParamDataType;
 begin
+  Result := False;
+  nParam.Init('', '');
+  nBool := Assigned(nQuery);
+  try
+    if not nBool then
+    begin
+      nStr := 'Select * From %s Where D_Record=''%s''';
+      nStr := Format(nStr, [sTable_SysDict, nRecord]);
+      nQuery := gDBManager.DBQuery(nStr);
 
+      if nQuery.RecordCount < 1 then
+      begin
+        nStr := Format('编号为[ %s ]的记录不存在', [nRecord]);
+        WriteLog(nStr);
+        Exit;
+      end;
+    end;
+
+    with nQuery, nParam do
+    begin
+      FRecord  := FieldByName('D_Record').AsString;
+      FGroup   := FieldByName('D_Group').AsString;
+      FGrpName := FieldByName('D_GrpName').AsString;
+      FID      := FieldByName('D_ID').AsString;
+      FName    := FieldByName('D_Name').AsString;
+      FOwner   := FieldByName('D_Owner').AsString;
+
+      nStr     := FieldByName('D_Effect').AsString;
+      FEffect  := TStringHelper.Str2Enum<TParamEffectType>(nStr);
+
+      if FieldByName('D_Str').AsString <> '' then
+        FValue.AddS(FieldByName('D_Str').AsString, '', True);
+      //xxxxx
+
+      if FieldByName('D_Int').AsInteger <> cParamDefaultValue then
+        FValue.AddI(FieldByName('D_Int').AsInteger, '', True);
+      //xxxxx
+
+      if FieldByName('D_Double').AsFloat <> cParamDefaultValue then
+        FValue.AddF(FieldByName('D_Double').AsFloat, '', True);
+      //xxxxx
+
+      if FieldByName('D_Date').AsDateTime > 0 then
+        FValue.AddD(FieldByName('D_Date').AsDateTime, '', True);
+      //xxxxx
+    end;
+
+    nStr := 'Select * From %s Where V_ID=''%s''';
+    nStr := Format(nStr, [sTable_DictExt, nParam.FRecord]);
+    gDBManager.DBQuery(nStr, nQuery);
+
+    with nQuery, nParam, TStringHelper do
+    if RecordCount > 0 then    
+    begin
+      First;
+      //xxxxx
+      
+      while not Eof do
+      begin
+        nStr := FieldByName('V_Type').AsString;
+        nType := TStringHelper.Str2Enum<TParamDataType>(nStr);
+        nStr := FieldByName('V_Desc').AsString;
+        
+        case nType of
+         dtStr : FValue.AddS(FieldByName('V_Str').AsString, nStr);
+         dtInt : FValue.AddI(FieldByName('V_Int').AsInteger, nStr);
+         dtFlt : FValue.AddF(FieldByName('V_Double').AsFloat, nStr);
+         dtDateTime : FValue.AddD(FieldByName('V_Date').AsDateTime, nStr);
+        end;
+      
+        Next;
+      end;
+    end;
+
+    Result := True;
+  finally
+    if not nBool then
+      gDBManager.ReleaseDBQuery(nQuery);
+    //xxxxx
+  end;
 end;
 
 //Date: 2021-08-20
@@ -852,8 +1009,326 @@ end;
 //Desc: 获取nOwner的参数nGroup.nID数据,存入nParam中
 function TParameterManager.GetParam(const nGroup, nID: string;
   const nOwner: TArray<string>; var nParam: TParamItem): Boolean;
+var nStr,nSQL: string;
+    nBool: Boolean;
+    nIdx,nLow: Integer;
+    nQuery: TDataSet;
+    nEffect: TParamEffectType;
 begin
+  Result := False;
+  nParam.Init('', '');
+  //init first
 
+  nSQL := '';
+  for nIdx := Low(nOwner) to High(nOwner) do
+  begin
+    nStr := Trim(nOwner[nIdx]);
+    if nStr <> '' then
+    begin
+      nStr := TSQLBuilder.SQM(nStr);
+      //'str','str'
+
+      if nSQL = '' then
+           nSQL := nStr
+      else nSQL := nSQL + ',' + nStr;
+    end; //owner list
+  end;
+
+  if nSQL = '' then
+  begin
+    WriteLog('UParameters.GetParam: Owner Is Null');
+    Exit;
+  end;
+
+  nQuery := nil;
+  try
+    nStr := 'Select * From %s ' +
+            'Where D_Group=''%s'' And D_ID=''%s'' And D_Owner In (%s)';
+    nStr := Format(nStr, [sTable_SysDict, nGroup, nID, nSQL]);
+
+    nQuery := gDBManager.DBQuery(nStr);
+    if nQuery.RecordCount < 1 then
+    begin
+      nStr := Format('参数项[ %s.%s(%s) ]不存在', [nGroup, nID, nSQL]);
+      WriteLog(nStr);
+      Exit;
+    end;
+
+    {---------------------------------------------------------------------------
+     *.组织架构和参数的生效方式,请参考单元头说明.
+     *.nOwner中的层级顺序为: 本级,上级..,最上级
+     *.调用时本级ID必须设置,可以不设置上级
+    ---------------------------------------------------------------------------}
+    nBool := False;
+    nLow := Low(nOwner); //本级id
+
+    for nIdx := High(nOwner) downto nLow do //倒序检索
+    begin
+      nQuery.First;
+      //cursor first
+      while not nQuery.Eof do
+      begin
+        nStr := nQuery.FieldByName('D_Owner').AsString;
+        if CompareText(nStr, nOwner[nIdx]) = 0 then
+        begin
+          nStr := nQuery.FieldByName('D_Effect').AsString;
+          nEffect := TStringHelper.Str2Enum<TParamEffectType>(nStr);
+
+          if (nEffect = etHigher) or (nIdx = nLow) then
+          begin
+            nStr := nQuery.FieldByName('D_Record').AsString;
+            Result := GetParam2(nStr, nParam, nQuery);
+            Exit; //上级生效,直接取上级参数
+          end;
+
+          nBool := True; //找到上级
+          Break;
+        end;
+
+        nQuery.Next;
+        //cursor next
+      end;
+
+      if nBool then
+        Break;
+      //xxxxx
+    end;
+
+    nQuery.First;
+    //cursor first  
+    while not nQuery.Eof do
+    begin
+      nStr := nQuery.FieldByName('D_Owner').AsString;
+      if CompareText(nStr, nOwner[nLow]) = 0 then
+      begin
+        nStr := nQuery.FieldByName('D_Record').AsString;
+        Result := GetParam2(nStr, nParam, nQuery);
+        Exit;
+      end;
+
+      nQuery.Next;
+      //cursor next
+    end;
+  finally
+    gDBManager.ReleaseDBQuery(nQuery);
+  end;
+end;
+
+//Date: 2021-08-23
+//Parm: 存储节点;参数项;读取 or 写入
+//Desc: 处理nRoot节点的参数项数据
+procedure ParamWithXML(const nRoot: TXmlNode; const nParam: PParamItem;
+  const nLoad: Boolean);
+var nStr: string;
+    nIdx,nInt: Integer;
+    nNode: TXmlNode;
+    nDT: TParamDataType;
+begin
+  if nLoad then
+  begin
+    nStr := nRoot.AttributeValueByName['effect'];
+    nParam.SetEffect(TStringHelper.Str2Enum<TParamEffectType>(nStr));
+
+    nStr := nRoot.AttributeValueByName['options'];
+    nParam.SetOptionOnly(TStringHelper.Str2Set<TParamDataType,
+      TParamDataTypes>(nStr));
+    //xxxxx
+
+    nInt := nRoot.NodeCount - 1;
+    for nIdx := 0 to nInt do
+    begin
+      nNode := nRoot.Nodes[nIdx];
+      if CompareText('data', nNode.Name) <> 0 then Continue;
+      //must be data node
+
+      nDT := TStringHelper.Str2Enum<TParamDataType>(
+        nNode.AttributeValueByName['type']);
+      //xxxxx
+
+      case nDT of
+       dtStr:
+        nParam.AddS(nNode.AttributeValueByName['value'],
+                    nNode.AttributeValueByName['desc'],
+          StrToBool(nNode.AttributeValueByName['default']));
+       dtInt:
+        nParam.AddI(StrToInt(
+                    nNode.AttributeValueByName['value']),
+                    nNode.AttributeValueByName['desc'],
+          StrToBool(nNode.AttributeValueByName['default']));
+       dtFlt:
+        nParam.AddF(StrToFloat(
+                    nNode.AttributeValueByName['value']),
+                    nNode.AttributeValueByName['desc'],
+          StrToBool(nNode.AttributeValueByName['default']));
+       dtDateTime:
+        nParam.AddD(TDateTimeHelper.Str2DateTime(
+                    nNode.AttributeValueByName['value']),
+                    nNode.AttributeValueByName['desc'],
+          StrToBool(nNode.AttributeValueByName['default']));
+      end;
+    end;
+
+    Exit;
+  end;
+
+  with nParam.FValue do
+  begin
+    nRoot.AttributeAdd('id', nParam.FID);
+    nRoot.AttributeAdd('name', nParam.FName);
+    nRoot.AttributeAdd('effect', TStringHelper.Enum2Str(nParam.FEffect));
+
+    nRoot.AttributeAdd('options', TStringHelper.Set2Str<TParamDataType,
+      TParamDataTypes>(nParam.FOptionOnly));
+    //xxxxx
+
+    for nIdx := Low(Str) to High(Str) do
+    with nRoot.NodeNew('data') do
+    begin
+      AttributeAdd('type', TStringHelper.Enum2Str<TParamDataType>(dtStr));
+      AttributeAdd('value', Str[nIdx].FData);       
+      AttributeAdd('default', BoolToStr(Str[nIdx].FDefault, True));
+      AttributeAdd('desc', Str[nIdx].FDesc);
+    end;
+
+    for nIdx := Low(Int) to High(Int) do
+    with nRoot.NodeNew('data') do
+    begin
+      AttributeAdd('type', TStringHelper.Enum2Str<TParamDataType>(dtint));
+      AttributeAdd('value', IntToStr(Int[nIdx].FData));       
+      AttributeAdd('default', BoolToStr(Int[nIdx].FDefault, True));
+      AttributeAdd('desc', Int[nIdx].FDesc);
+    end;
+
+    for nIdx := Low(Flt) to High(Flt) do
+    with nRoot.NodeNew('data') do
+    begin
+      AttributeAdd('type', TStringHelper.Enum2Str<TParamDataType>(dtFlt));
+      AttributeAdd('value', FloatToStr(Flt[nIdx].FData));       
+      AttributeAdd('default', BoolToStr(Flt[nIdx].FDefault, True));
+      AttributeAdd('desc', Flt[nIdx].FDesc);
+    end;
+
+    for nIdx := Low(Date) to High(Date) do
+    with nRoot.NodeNew('data') do
+    begin
+      AttributeAdd('type', TStringHelper.Enum2Str<TParamDataType>(dtDateTime));
+      AttributeAdd('value', TDateTimeHelper.DateTime2Str(Date[nIdx].FData));       
+      AttributeAdd('default', BoolToStr(Date[nIdx].FDefault, True));
+      AttributeAdd('desc', Date[nIdx].FDesc);
+    end;
+  end;
+end;
+
+//Date: 2021-08-23
+//Parm: 参数文件
+//Desc: 从nFile中加载外置参数
+procedure TParameterManager.LoadFromFile(const nFile: string);
+var nIdx,j: Integer;
+    nParam: PParamItem;
+    nXML: TNativeXml;
+    nRoot,nNode: TXmlNode;
+begin
+  if not FileExists(nFile) then Exit;
+  //invalid file
+
+  nXML := TNativeXml.Create(nil);
+  try
+    nXML.LoadFromFile(nFile);
+    for nIdx := nXML.Root.NodeCount - 1 downto 0 do
+    begin
+      nRoot := nXML.Root.Nodes[nIdx];
+      if CompareText('paramGroup', nRoot.Name) <> 0 then Continue;
+      //must be group node
+
+      FDefaultItem.SetGroup(nRoot.AttributeValueByName['id'],
+                            nRoot.AttributeValueByName['name']);
+      //set group property
+
+      for j := nRoot.NodeCount-1 downto 0 do
+      begin
+        nNode := nRoot.Nodes[j];
+        if CompareText('param', nNode.Name) = 0 then
+        begin
+          nParam := AddParam(nNode.AttributeValueByName['id'],
+                             nNode.AttributeValueByName['name'], FParamOptions);
+          //add new param
+
+          ParamWithXML(nNode, nParam, True);
+          //load param data
+        end;
+      end;
+    end;
+  finally
+    nXML.Free;
+  end;
+end;
+
+//Date: 2021-08-23
+//Parm: 参数文件
+//Desc: 保存参数配置到nFile中
+procedure TParameterManager.SaveToFile(const nFile: string);
+var nIdx,j: Integer;
+    nXML: TNativeXml;
+    nNode: TXmlNode;
+    nParam,nPNext: PParamItem;
+
+    //Desc: 重置状态
+    procedure ResetStatus();
+    var i: Integer;
+    begin
+      for i := FParamOptions.Count-1 downto 0 do
+        PParamItem(FParamOptions[i]).FEnabled := True;
+      //xxxxx
+    end;
+begin
+  nXML := TNativeXml.Create(nil);
+  try
+    with nXML do
+    begin
+      Charset := 'utf-8';
+      VersionString := '1.0';
+      XmlFormat := xfReadable;      
+
+      Root.Name := 'parameters';
+      Root.AttributeAdd('author', TApplicationHelper.GetCPUIDStr());
+      Root.AttributeAdd('date', TDateTimeHelper.DateTime2Str(Now()));
+    end;
+
+    ResetStatus();
+    //init status
+
+    for nIdx := FParamOptions.Count-1 downto 0 do
+    begin
+      nParam := FParamOptions[nIdx];
+      if not nParam.FEnabled then Continue;
+
+      nNode := nXML.Root.NodeNew('paramGroup');
+      nNode.AttributeAdd('id', nParam.FGroup);
+      nNode.AttributeAdd('name', nParam.FGrpName);
+
+      ParamWithXML(nNode.NodeNew('param'), nParam, False);
+      //write xml
+      nParam.FEnabled := False; //written flag
+
+      for j := nIdx-1 downto 0 do
+      begin
+        nPNext := FParamOptions[j];
+        if (nPNext.FEnabled) and
+           (CompareText(nPNext.FGroup, nParam.FGroup) = 0) then //相同分组
+        begin
+          ParamWithXML(nNode.NodeNew('param'), nPNext, False);
+          //write xml
+          nPNext.FEnabled := False; //written flag
+        end;
+      end;
+    end;
+
+    nXML.SaveToFile(nFile);
+    //save data
+  finally
+    nXML.Free;
+    ResetStatus();
+  end;
 end;
 
 procedure TParameterManager.GetStatus(const nList: TStrings;
@@ -879,7 +1354,7 @@ begin
     for nIdx := 0 to FParamOptions.Count-1 do
     begin
       nParam := FParamOptions[nIdx];
-      nList.Add(FixData(Format('ParamItem %d:', [nIdx + 1]),
+      nList.Add(FixData(Format('Param %d:', [nIdx + 1]),
         Format('[ %s.%s ]%s.%s', [nParam.FGroup, nParam.FID,
         nParam.FGrpName, nParam.FName])));
       //xxxxx

@@ -14,11 +14,19 @@ type
     Button3: TButton;
     Button4: TButton;
     Memo1: TMemo;
+    Button5: TButton;
+    Button6: TButton;
+    Button7: TButton;
+    Button8: TButton;
     procedure Button1Click(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
     procedure Button4Click(Sender: TObject);
+    procedure Button5Click(Sender: TObject);
+    procedure Button6Click(Sender: TObject);
+    procedure Button7Click(Sender: TObject);
+    procedure Button8Click(Sender: TObject);
   private
     { Private declarations }
   public
@@ -32,12 +40,13 @@ implementation
 
 {$R *.dfm}
 uses
-  UManagerGroup, UParameters;
+  UManagerGroup, UParameters, ULibFun;
 
 const
   sParam1 = '0001';
   sParam2 = '0002';
   sParam3 = '0003';
+  sOwner  = 'dmzn';
 
 procedure SystemParams(const nList: TList);
 begin
@@ -74,7 +83,7 @@ end;
 procedure TfFormMain.Button1Click(Sender: TObject);
 begin
   gMG.FDBManager.InitDB('MAIN', Memo1.Lines);
-  gMG.FParamsManager.InitParameters('dmzn', 'admin', Memo1.Lines);
+  gMG.FParamsManager.InitParameters(sOwner, 'admin', Memo1.Lines);
 end;
 
 
@@ -104,6 +113,32 @@ end;
 procedure TfFormMain.Button4Click(Sender: TObject);
 begin
   gMG.GetManagersStatus(Memo1.Lines);
+end;
+
+procedure TfFormMain.Button5Click(Sender: TObject);
+var nP: TParamItem;
+begin
+  if gMG.FParamsManager.GetParam('system', sParam1, [sOwner], nP) then
+    Memo1.Lines.Add(nP.FGroup + '.' + nP.FGrpName + '.' + nP.FName);
+  //xxxxx
+end;
+
+procedure TfFormMain.Button6Click(Sender: TObject);
+var nP: TParamItem;
+begin
+  if gMG.FParamsManager.GetParam2('031B919A99821000', nP) then
+    Memo1.Lines.Add(nP.FGroup + '.' + nP.FGrpName + '.' + nP.FName);
+  //xxxxx
+end;
+
+procedure TfFormMain.Button7Click(Sender: TObject);
+begin
+  gMG.FParamsManager.LoadFromFile(TApplicationHelper.gPath + 'params.xml');
+end;
+
+procedure TfFormMain.Button8Click(Sender: TObject);
+begin
+  gMG.FParamsManager.SaveToFile(TApplicationHelper.gPath + 'params.xml');
 end;
 
 end.
