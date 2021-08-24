@@ -24,7 +24,6 @@ object fFormMain: TfFormMain
     Align = alTop
     BevelOuter = bvNone
     TabOrder = 0
-    ExplicitWidth = 649
     object Button1: TButton
       Left = 8
       Top = 10
@@ -112,6 +111,5 @@ object fFormMain: TfFormMain
     ParentFont = False
     ScrollBars = ssVertical
     TabOrder = 1
-    ExplicitWidth = 649
   end
 end

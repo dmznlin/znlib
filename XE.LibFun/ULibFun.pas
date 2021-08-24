@@ -22,33 +22,68 @@ type
   ///<summary>命令调用时传递数据的结构</summary>
   PCommandParam = ^TCommandParam;
   TCommandParam = record
+  public
+    type
+      TParamType = (ptStr, ptInt, ptFlt, ptPtr, ptObj, ptDate);
+      TParamTypes = set of TParamType;
+      {*参数类型*}
+      PParamExtend = ^TParamExtend;
+      TParamExtend = record
+        FType     : TParamType;                          //类型
+        FIndex    : Integer;                             //索引
+        FDesc     : string;                              //描述
+        FDefault  : Boolean;                             //默认值
+      end;{*参数扩展*}
+  public
     Command: Integer;                                    //命令
     Str: array of string;                                //字符
     Int: array of Integer;                               //整数
     Flt: array of Double;                                //浮点
     Ptr: array of Pointer;                               //指针
     Obj: array of TObject;                               //对象
+    Dat: array of TDateTime;                             //时间
+    Ext: array of TParamExtend;                          //扩展数据
   private
-    type
-      TParamType = (ptStr, ptInt, ptFlt, ptPtr, ptObj);
-      {*参数类型*}
+    FAllowRepeat: Boolean;
+    {*允许数据重复*}
+    procedure AddExt(const nType: TParamType; const nIdx: Integer;
+      const nDesc: string; const nDef: Boolean);
     function AddNew(const nType: TParamType; const nNum: Integer = 1): Integer;
     {*新增数据*}
   public
     function Init(const nCmd: Integer = -1): PCommandParam;
     {*初始化*}
-    function AddS(const nS: string): PCommandParam; overload;
-    function AddI(const nI: Integer): PCommandParam; overload;
-    function AddF(const nF: Double): PCommandParam; overload;
-    function AddP(const nP: Pointer): PCommandParam; overload;
-    function AddO(const nO: TObject): PCommandParam; overload;
+    procedure AllowRepeat(const nAllowed: Boolean);
+    {*是否允许重复*}
+    function AddS(const nS: string; const nDesc: string = '';
+      const nDef: Boolean = False): PCommandParam; overload;
+    function AddI(const nI: Integer; const nDesc: string = '';
+      const nDef: Boolean = False): PCommandParam; overload;
+    function AddF(const nF: Double; const nDesc: string = '';
+      const nDef: Boolean = False): PCommandParam; overload;
+    function AddP(const nP: Pointer; const nDesc: string = '';
+      const nDef: Boolean = False): PCommandParam; overload;
+    function AddO(const nO: TObject; const nDesc: string = '';
+      const nDef: Boolean = False): PCommandParam; overload;
+    function AddD(const nD: TDateTime; const nDesc: string = '';
+      const nDef: Boolean = False): PCommandParam; overload;
     {*添加单个数据*}
     function AddS(const nS: array of string): PCommandParam; overload;
     function AddI(const nI: array of Integer): PCommandParam; overload;
     function AddF(const nF: array of Double): PCommandParam; overload;
     function AddP(const nP: array of Pointer): PCommandParam; overload;
     function AddO(const nO: array of TObject): PCommandParam; overload;
+    function AddD(const nD: array of TDateTime): PCommandParam; overload;
     {*添加多个数据*}
+    function GetExt(const nType: TParamType; const nIdx: Integer):PParamExtend;
+    {*检索数据*}
+    function DefaultS(const nDef: string = ''): string;
+    function DefaultI(const nDef: Integer = 0): Integer;
+    function DefaultF(const nDef: Double = 0): Double;
+    function DefaultP(const nDef: Pointer = nil): Pointer;
+    function DefaultO(const nDef: TObject = nil): TObject;
+    function DefaultD(const nDef: TDateTime = 0): TDateTime;
+    {*获取默认值*}
     function IsValid(const nType: TParamType; const nNum: Integer = 1): Boolean;
     {*验证数据有效*}
   end;
@@ -394,12 +429,20 @@ function TCommandParam.Init(const nCmd: Integer): PCommandParam;
 var nInit: TCommandParam;
 begin
   FillChar(nInit, SizeOf(TCommandParam), #0);
-  if nCmd >= 0 then
-    nInit.Command := nCmd;
-  //xxxxx
-
   Self := nInit;
   Result := @Self;
+
+  if nCmd >= 0 then
+    Command := nCmd;
+  FAllowRepeat := True;
+end;
+
+//Date: 2021-08-24
+//Parm: 是否允许
+//Desc: 设置是否允许数据重复
+procedure TCommandParam.AllowRepeat(const nAllowed: Boolean);
+begin
+  FAllowRepeat := nAllowed;
 end;
 
 //Date: 2021-07-06
@@ -437,6 +480,11 @@ begin
       Result := Length(Obj);
       SetLength(Obj, Result + nNum);
     end;
+   ptDate:
+    begin
+      Result := Length(Dat);
+      SetLength(Dat, Result + nNum);
+    end;
   end;
 
   if Result < 0 then
@@ -444,13 +492,84 @@ begin
   //xxxxx
 end;
 
+//Date: 2021-08-24
+//Parm: 参数类型;索引;描述;默认值
+//Desc: 添加nType.nIdx的扩展数据
+procedure TCommandParam.AddExt(const nType: TParamType; const nIdx: Integer;
+  const nDesc: string; const nDef: Boolean);
+var nInt: Integer;
+    nExt: PParamExtend;
+begin
+  if nDef or (nDesc <> '') then //valid data
+  begin
+    nExt := GetExt(nType, nIdx);
+    if Assigned(nExt) then
+    begin
+      if nDef then
+        nExt.FDefault := True;
+      //xxxxx
+
+      if nDesc <> '' then
+        nExt.FDesc := nDesc;
+      Exit;
+    end;
+
+    nInt := Length(Ext);
+    SetLength(Ext, nInt + 1);
+    //add extend
+
+    with Ext[nInt] do
+    begin
+      FType    := nType;
+      FIndex   := nIdx;
+      FDesc    := nDesc;
+      FDefault := nDef;
+    end;
+  end;
+end;
+
+//Date: 2021-08-24
+//Parm: 参数类型;索引
+//Desc: 获取nType.nIdx的扩展数据
+function TCommandParam.GetExt(const nType: TParamType;
+  const nIdx: Integer): PParamExtend;
+var nI: Integer;
+begin
+  for nI := Low(Ext) to High(Ext) do
+   with Ext[nI] do
+    if (nType = FType) and (nIdx = FIndex) then
+    begin
+      Result := @Ext[nI];
+      Exit;
+    end;
+  //xxxxx
+
+  Result := nil;
+end;
+
 //Date: 2021-07-06
 //Parm: 字符串
 //Desc: 添加nS到结构
-function TCommandParam.AddS(const nS: string): PCommandParam;
+function TCommandParam.AddS(const nS, nDesc: string;
+  const nDef: Boolean): PCommandParam;
+var nIdx: Integer;
 begin
-  Str[AddNew(ptStr)] := nS;
   Result := @Self;
+  //return self address
+
+  if not FAllowRepeat then
+  begin
+    for nIdx := Low(Str) to High(Str) do
+     if CompareText(nS, Str[nIdx]) = 0 then
+     begin
+       AddExt(ptStr, nIdx, nDesc, nDef);
+       Exit;
+     end;
+  end;
+
+  nIdx := AddNew(ptStr);
+  Str[nIdx] := nS;
+  AddExt(ptStr, nIdx, nDesc, nDef);
 end;
 
 //Date: 2021-07-06
@@ -465,13 +584,47 @@ begin
   Result := @Self;
 end;
 
+//Date: 2021-08-24
+//Parm: 默认字符串
+//Desc: 获取默认字符串
+function TCommandParam.DefaultS(const nDef: string): string;
+var nIdx: Integer;
+begin
+  for nIdx := Low(Ext) to High(Ext) do
+   with Ext[nIdx] do
+    if (FType = ptStr) and FDefault then
+    begin
+      Result := Str[FIndex];
+      Exit;
+    end;
+  //xxxxx
+
+  Result := nDef;
+end;
+
 //Date: 2021-07-06
 //Parm: 整数
 //Desc: 添加nI到结构
-function TCommandParam.AddI(const nI: Integer): PCommandParam;
+function TCommandParam.AddI(const nI: Integer; const nDesc: string;
+  const nDef: Boolean): PCommandParam;
+var nIdx: Integer;
 begin
-  Int[AddNew(ptInt)] := nI;
   Result := @Self;
+  //return self address
+
+  if not FAllowRepeat then
+  begin
+    for nIdx := Low(Int) to High(Int) do
+     if nI = Int[nIdx] then
+     begin
+       AddExt(ptInt, nIdx, nDesc, nDef);
+       Exit;
+     end;
+  end;
+
+  nIdx := AddNew(ptInt);
+  Int[nIdx] := nI;
+  AddExt(ptInt, nIdx, nDesc, nDef);
 end;
 
 //Date: 2021-07-06
@@ -486,13 +639,47 @@ begin
   Result := @Self;
 end;
 
+//Date: 2021-08-24
+//Parm: 默认整数
+//Desc: 获取默认整数值
+function TCommandParam.DefaultI(const nDef: Integer): Integer;
+var nIdx: Integer;
+begin
+  for nIdx := Low(Ext) to High(Ext) do
+   with Ext[nIdx] do
+    if (FType = ptInt) and FDefault then
+    begin
+      Result := Int[FIndex];
+      Exit;
+    end;
+  //xxxxx
+
+  Result := nDef;
+end;
+
 //Date: 2021-07-06
 //Parm: 浮点
 //Desc: 添加nF到结构
-function TCommandParam.AddF(const nF: Double): PCommandParam;
+function TCommandParam.AddF(const nF: Double; const nDesc: string;
+  const nDef: Boolean): PCommandParam;
+var nIdx: Integer;
 begin
-  Flt[AddNew(ptFlt)] := nF;
   Result := @Self;
+  //return self address
+
+  if not FAllowRepeat then
+  begin
+    for nIdx := Low(Flt) to High(Flt) do
+     if nF = Flt[nIdx] then
+     begin
+       AddExt(ptFlt, nIdx, nDesc, nDef);
+       Exit;
+     end;
+  end;
+
+  nIdx := AddNew(ptFlt);
+  Flt[nIdx] := nF;
+  AddExt(ptFlt, nIdx, nDesc, nDef);
 end;
 
 //Date: 2021-07-06
@@ -507,13 +694,47 @@ begin
   Result := @Self;
 end;
 
+//Date: 2021-08-24
+//Parm: 默认浮点
+//Desc: 获取默认浮点值
+function TCommandParam.DefaultF(const nDef: Double): Double;
+var nIdx: Integer;
+begin
+  for nIdx := Low(Ext) to High(Ext) do
+   with Ext[nIdx] do
+    if (FType = ptFlt) and FDefault then
+    begin
+      Result := Flt[FIndex];
+      Exit;
+    end;
+  //xxxxx
+
+  Result := nDef;
+end;
+
 //Date: 2021-07-06
 //Parm: 指针
 //Desc: 添加nP到结构
-function TCommandParam.AddP(const nP: Pointer): PCommandParam;
+function TCommandParam.AddP(const nP: Pointer; const nDesc: string;
+  const nDef: Boolean): PCommandParam;
+var nIdx: Integer;
 begin
-  Ptr[AddNew(ptPtr)] := nP;
   Result := @Self;
+  //return self address
+
+  if not FAllowRepeat then
+  begin
+    for nIdx := Low(Ptr) to High(Ptr) do
+     if nP = Ptr[nIdx] then
+     begin
+       AddExt(ptPtr, nIdx, nDesc, nDef);
+       Exit;
+     end;
+  end;
+
+  nIdx := AddNew(ptPtr);
+  Ptr[nIdx] := nP;
+  AddExt(ptPtr, nIdx, nDesc, nDef);
 end;
 
 //Date: 2021-07-06
@@ -528,13 +749,47 @@ begin
   Result := @Self;
 end;
 
+//Date: 2021-08-24
+//Parm: 默认指针
+//Desc: 获取默认指针
+function TCommandParam.DefaultP(const nDef: Pointer): Pointer;
+var nIdx: Integer;
+begin
+  for nIdx := Low(Ext) to High(Ext) do
+   with Ext[nIdx] do
+    if (FType = ptPtr) and FDefault then
+    begin
+      Result := Ptr[FIndex];
+      Exit;
+    end;
+  //xxxxx
+
+  Result := nDef;
+end;
+
 //Date: 2021-07-06
 //Parm: 对象
 //Desc: 添加nO到结构
-function TCommandParam.AddO(const nO: TObject): PCommandParam;
+function TCommandParam.AddO(const nO: TObject; const nDesc: string;
+  const nDef: Boolean): PCommandParam;
+var nIdx: Integer;
 begin
-  Obj[AddNew(ptObj)] := nO;
   Result := @Self;
+  //return self address
+
+  if not FAllowRepeat then
+  begin
+    for nIdx := Low(Obj) to High(Obj) do
+     if nO = Obj[nIdx] then
+     begin
+       AddExt(ptObj, nIdx, nDesc, nDef);
+       Exit;
+     end;
+  end;
+
+  nIdx := AddNew(ptObj);
+  Obj[nIdx] := nO;
+  AddExt(ptObj, nIdx, nDesc, nDef);
 end;
 
 //Date: 2021-07-06
@@ -547,6 +802,79 @@ begin
   for nIdx := Low(nO) to High(nO) do
     Obj[nIdx + i] := nO[nIdx];
   Result := @Self;
+end;
+
+//Date: 2021-08-24
+//Parm: 默认对象
+//Desc: 获取默认对象
+function TCommandParam.DefaultO(const nDef: TObject): TObject;
+var nIdx: Integer;
+begin
+  for nIdx := Low(Ext) to High(Ext) do
+   with Ext[nIdx] do
+    if (FType = ptObj) and FDefault then
+    begin
+      Result := Obj[FIndex];
+      Exit;
+    end;
+  //xxxxx
+
+  Result := nDef;
+end;
+
+//Date: 2021-08-24
+//Parm: 日期时间
+//Desc: 添加nD到结构
+function TCommandParam.AddD(const nD: TDateTime; const nDesc: string;
+  const nDef: Boolean): PCommandParam;
+var nIdx: Integer;
+begin
+  Result := @Self;
+  //return self address
+
+  if not FAllowRepeat then
+  begin
+    for nIdx := Low(Dat) to High(Dat) do
+     if nD = Dat[nIdx] then
+     begin
+       AddExt(ptDate, nIdx, nDesc, nDef);
+       Exit;
+     end;
+  end;
+
+  nIdx := AddNew(ptDate);
+  Dat[nIdx] := nD;
+  AddExt(ptDate, nIdx, nDesc, nDef);
+end;
+
+//Date: 2021-08-24
+//Parm: 日期数组
+//Desc: 添加nD到结构
+function TCommandParam.AddD(const nD: array of TDateTime): PCommandParam;
+var i,nIdx: Integer;
+begin
+  i := AddNew(ptDate, Length(nD));
+  for nIdx := Low(nD) to High(nD) do
+    Dat[nIdx + i] := nD[nIdx];
+  Result := @Self;
+end;
+
+//Date: 2021-08-24
+//Parm: 默认日期
+//Desc: 获取默认日期
+function TCommandParam.DefaultD(const nDef: TDateTime): TDateTime;
+var nIdx: Integer;
+begin
+  for nIdx := Low(Ext) to High(Ext) do
+   with Ext[nIdx] do
+    if (FType = ptDate) and FDefault then
+    begin
+      Result := Dat[FIndex];
+      Exit;
+    end;
+  //xxxxx
+
+  Result := nDef;
 end;
 
 //Date: 2021-07-07
@@ -565,6 +893,7 @@ begin
    ptFlt: Result := Length(Flt) >= nNum;
    ptPtr: Result := Length(Ptr) >= nNum;
    ptObj: Result := Length(Obj) >= nNum;
+   ptDate:Result := Length(Dat) >= nNum;
   end;
 end;
 

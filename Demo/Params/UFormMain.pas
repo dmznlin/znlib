@@ -52,7 +52,7 @@ procedure SystemParams(const nList: TList);
 begin
   gMG.FParamsManager.Default.Init('System', '系统通用参数').
     SetEffect(etLower).
-    SetOptionOnly([dtStr]);
+    SetOptionOnly([ptStr]);
   //设置参数默认值
 
   gMG.FParamsManager.AddParam(sParam1, '第一参数', nList).

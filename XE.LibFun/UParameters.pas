@@ -28,7 +28,7 @@
     begin
       gMG.FParamsManager.Default.Init('System', '系统通用参数').
         SetEffect(etLower).
-        SetOptionOnly([dtStr]);
+        SetOptionOnly([ptStr]);
       //设置参数默认值
 
       gMG.FParamsManager.AddParam('001', '第一参数', nList).
@@ -61,13 +61,9 @@ unit UParameters;
 interface
 
 uses
-  System.Classes, System.SysUtils, Data.DB, UBaseObject;
+  System.Classes, System.SysUtils, Data.DB, ULibFun, UBaseObject;
 
 type
-  TParamDataType = (dtStr, dtInt, dtFlt, dtDateTime);
-  //data type
-  TParamDataTypes = set of TParamDataType;
-
   TParamEffectType = (etLower, etHigher);
   //effect type
 
@@ -75,40 +71,14 @@ const
   cParamDefaultValue = High(Word);
   //value for return
 
-  sParamDataType: array[TParamDataType] of string = ('字符', '整数', '浮点',
-    '日期');
+  sParamDataType: array[TCommandParam.TParamType] of string = ('字符', '整数',
+    '浮点', '指针', '对象', '日期');
   //data type desc
 
   sParamEffectType:array[TParamEffectType] of string = ('下级生效', '上级生效');
   //effect type desc
 
 type
-  TParamData<T> = record
-    FData    : T;                                  //数据
-    FDesc    : string;                             //描述
-    FDefault : Boolean;                            //默认值
-  end;
-
-  TParamDataItem = record
-    Str: array of TParamData<String>;              //字符值
-    Int: array of TParamData<Integer>;             //整数值
-    Flt: array of TParamData<Double>;              //浮点值
-    Date: array of TParamData<TDateTime>;          //日期值
-  public
-    function IsValid(const nType: TParamDataType;
-      const nNum: Integer = 1): Boolean;
-    {*验证数据有效*}
-    procedure AddS(const nStr: string; const nDesc: string = '';
-      const nDef: Boolean = False);
-    procedure AddI(const nInt: Integer; const nDesc: string = '';
-      const nDef: Boolean = False);
-    procedure AddF(const nFlt: Double; const nDesc: string = '';
-      const nDef: Boolean = False);
-    procedure AddD(const nDate: TDateTime; const nDesc: string = '';
-      const nDef: Boolean = False);
-    {*添加参数值*}
-  end;
-
   PParamItem = ^TParamItem;
   TParamItem = record
     FEnabled     : Boolean;                        //状态标记
@@ -117,8 +87,8 @@ type
     FGrpName     : string;                         //分组名称
     FID          : string;                         //参数标识
     FName        : string;                         //参数名称
-    FValue       : TParamDataItem;                 //参数值
-    FOptionOnly  : TParamDataTypes;                //只使用可选
+    FValue       : TCommandParam;                  //参数值
+    FOptionOnly  : TCommandParam.TParamTypes;      //只使用可选
     FOwner       : string;                         //拥有者id
     FEffect      : TParamEffectType;               //生效方式
   private
@@ -127,11 +97,8 @@ type
     {*初始化*}
     function SetGroup(nGroup,nName: string): PParamItem;
     function SetEffect(const nEffect: TParamEffectType): PParamItem;
-    function SetOptionOnly(const nOnly: TParamDataTypes): PParamItem;
+    function SetOptionOnly(const nOnly: TCommandParam.TParamTypes): PParamItem;
     {*设置属性*}
-    function DefValue<T>(const nItems: array of TParamData<T>;
-      const nDefault: T): T;
-    {*获取默认值*}
     function AddS(const nStr: string; const nDesc: string = '';
       const nDef: Boolean = False): PParamItem;
     function AddI(const nInt: Integer; const nDesc: string = '';
@@ -142,7 +109,6 @@ type
       const nDef: Boolean = False): PParamItem;
     {*添加参数值*}
   end;
-  TParamItems = array of TParamItem;
 
   TParamItemBuilder = procedure (const nList: TList);
   //for external-system fill param info
@@ -150,8 +116,11 @@ type
   TParameterManager = class(TManagerBase)
   public
     const
+      //tables
       sTable_SysDict = 'Sys_Dict';                 //参数配置
       sTable_DictExt = 'Sys_DictExt';              //扩展数据
+
+      //group
       sParamDefGroup = 'SysParam';                 //默认分组
       sParamDefGName = '系统配置';                 //默认名称
   private
@@ -205,7 +174,7 @@ type
 implementation
 
 uses
-  UManagerGroup, UDBManager, UDBFun, NativeXml, ULibFun;
+  UManagerGroup, UDBManager, UDBFun, NativeXml;
 
 procedure WriteLog(const nEvent: string; const nMemo: TStrings = nil);
 begin
@@ -269,7 +238,9 @@ begin
   FEnabled := True;
   FEffect  := etLower;
   FOptionOnly := [];
+
   SetGroup(nGroup, nName);
+  FValue.AllowRepeat(False);
 end;
 
 //Date: 2021-08-16
@@ -303,7 +274,7 @@ end;
 //Date: 2021-08-16
 //Parm: 只使用可选数据的类型
 //Desc: 设置nOnly指定的类型只使用FOptions里的数据,只能选择不能输入.
-function TParamItem.SetOptionOnly(const nOnly: TParamDataTypes): PParamItem;
+function TParamItem.SetOptionOnly(const nOnly: TCommandParam.TParamTypes): PParamItem;
 begin
   Result := @Self;
   FOptionOnly := nOnly;
@@ -320,32 +291,6 @@ begin
   FValue.AddS(nStr, nDesc, nDef);
 end;
 
-procedure TParamDataItem.AddS(const nStr, nDesc: string; const nDef: Boolean);
-var nIdx: Integer;
-begin
-  for nIdx := Low(Str) to High(Str) do
-   if CompareText(nStr, Str[nIdx].FData) = 0 then
-   begin
-     if nDef then
-       Str[nIdx].FDefault := True;
-     //xxxxx
-
-     if nDesc <> '' then
-       Str[nIdx].FDesc := nDesc;
-     Exit;
-   end;
-
-  nIdx := Length(Str);
-  SetLength(Str, nIdx + 1);
-
-  with Str[nIdx] do
-  begin
-    FData := nStr;
-    FDesc := nDesc;
-    FDefault := nDef;
-  end;
-end;
-
 //Date: 2021-08-16
 //Parm: 整数;描述;默认
 //Desc: 新增整数值
@@ -355,33 +300,6 @@ begin
   Result := @Self;
   //return self address
   FValue.AddI(nInt, nDesc, nDef);
-end;
-
-procedure TParamDataItem.AddI(const nInt: Integer; const nDesc: string;
-  const nDef: Boolean);
-var nIdx: Integer;
-begin
-  for nIdx := Low(Int) to High(Int) do
-   if nInt = Int[nIdx].FData then
-   begin
-     if nDef then
-       Int[nIdx].FDefault := True;
-     //xxxxx
-
-     if nDesc <> '' then
-       Int[nIdx].FDesc := nDesc;
-     Exit;
-   end;
-
-  nIdx := Length(Int);
-  SetLength(Int, nIdx + 1);
-
-  with Int[nIdx] do
-  begin
-    FData := nInt;
-    FDesc := nDesc;
-    FDefault := nDef;
-  end;
 end;
 
 //Date: 2021-08-16
@@ -395,33 +313,6 @@ begin
   FValue.AddF(nFlt, nDesc, nDef);
 end;
 
-procedure TParamDataItem.AddF(const nFlt: Double; const nDesc: string;
-  const nDef: Boolean);
-var nIdx: Integer;
-begin
-  for nIdx := Low(Flt) to High(Flt) do
-   if nFlt = Flt[nIdx].FData then
-   begin
-     if nDef then
-       Flt[nIdx].FDefault := True;
-     //xxxxx
-
-     if nDesc <> '' then
-       Flt[nIdx].FDesc := nDesc;
-     Exit;
-   end;
-
-  nIdx := Length(Flt);
-  SetLength(Flt, nIdx + 1);
-
-  with Flt[nIdx] do
-  begin
-    FData := nFlt;
-    FDesc := nDesc;
-    FDefault := nDef;
-  end;
-end;
-
 //Date: 2021-08-16
 //Parm: 日期;描述;默认
 //Desc: 新增日期时间值
@@ -431,69 +322,6 @@ begin
   Result := @Self;
   //return self address
   FValue.AddD(nDate, nDesc, nDef);
-end;
-
-procedure TParamDataItem.AddD(const nDate: TDateTime; const nDesc: string;
-  const nDef: Boolean);
-var nIdx: Integer;
-begin
-  for nIdx := Low(Date) to High(Date) do
-   if nDate = Date[nIdx].FData then
-   begin
-     if nDef then
-        Date[nIdx].FDefault := True;
-     //xxxxx
-
-     if nDesc <> '' then
-       Date[nIdx].FDesc := nDesc;
-     Exit;
-   end;
-
-  nIdx := Length(Date);
-  SetLength(Date, nIdx + 1);
-
-  with Date[nIdx] do
-  begin
-    FData := nDate;
-    FDesc := nDesc;
-    FDefault := nDef;
-  end;
-end;
-
-//Date: 2021-08-16
-//Parm: 参数类型;有效值个数
-//Desc: 检测nType参数组内是否有nNum个有效值
-function TParamDataItem.IsValid(const nType: TParamDataType;
-  const nNum: Integer): Boolean;
-begin
-  Result := nNum < 1;
-  if Result then Exit;
-  //check input param
-
-  case nType of
-   dtStr      : Result := Length(Str) >= nNum;
-   dtInt      : Result := Length(Int) >= nNum;
-   dtFlt      : Result := Length(Flt) >= nNum;
-   dtDateTime : Result := Length(Date) >= nNum;
-  end;
-end;
-
-//Date: 2021-08-18
-//Parm: 数组;默认值
-//Desc: 在nItems中检索默认值
-function TParamItem.DefValue<T>(const nItems: array of TParamData<T>;
-  const nDefault: T): T;
-var nIdx: Integer;
-begin
-  for nIdx := Low(nItems) to High(nItems) do
-   if nItems[nIdx].FDefault then
-   begin
-     Result := nItems[nIdx].FData;
-     Exit;
-   end;
-
-  Result := nDefault;
-  //return default
 end;
 
 //------------------------------------------------------------------------------
@@ -657,6 +485,21 @@ procedure TParameterManager.BuildSQL(const nParam: PParamItem;
 var nStr,nID: string;
     nIdx: Integer;
     nBool: Boolean;
+    nExt: TCommandParam.PParamExtend;
+
+    //Desc: 是否为第一个默认值
+    function IsFirstDefault(): Boolean;
+    begin
+      Result := False;
+      if Assigned(nExt) then
+      begin
+        if nExt.FDefault and (not nBool) then
+        begin
+           nBool := True;
+           Result := True;
+        end else nStr := nExt.FDesc;
+      end else nStr := '';
+    end;
 begin
   with nParam^, TSQLBuilder,TDateTimeHelper,TStringHelper do
   begin
@@ -675,10 +518,10 @@ begin
       SF('D_Editor',   nEditor),
       SF('D_EditTime', sField_SQLServer_Now, sfVal),
 
-      SF('D_Str',      DefValue<string>(FValue.Str, '')),
-      SF('D_Int',      DefValue<Integer>(FValue.Int, cParamDefaultValue), sfVal),
-      SF('D_Double',   DefValue<Double>(FValue.Flt, cParamDefaultValue), sfVal),
-      SF('D_Date',     DateTime2Str(DefValue<TDateTime>(FValue.Date, 0)))
+      SF('D_Str',      FValue.DefaultS()),
+      SF('D_Int',      FValue.DefaultI(cParamDefaultValue), sfVal),
+      SF('D_Double',   FValue.DefaultF(cParamDefaultValue), sfVal),
+      SF('D_Date',     DateTime2Str(FValue.DefaultD()))
     ], sTable_SysDict, SF('D_Record', FRecord), nBool);
 
     nList.Add(nStr);
@@ -694,18 +537,14 @@ begin
       nBool := False;
       for nIdx := Low(Str) to High(Str) do
       begin
-        if Str[nIdx].FDefault then //第一个默认值已存放主表
-        begin
-          if nBool then
-               Continue
-          else nBool := True;
-        end;
+        nExt := GetExt(ptStr, nIdx);
+        if IsFirstDefault() then Continue; //第一个默认值已存放主表
 
         nStr := MakeSQLByStr([
           SF('V_ID', FRecord),
-          SF('V_Desc', Str[nIdx].FDesc),
-          SF('V_Type', Enum2Str(dtStr)),
-          SF('V_Str', Str[nIdx].FData)
+          SF('V_Desc', nStr),
+          SF('V_Type', Enum2Str(ptStr)),
+          SF('V_Str', Str[nIdx])
           ], sTable_DictExt, '', True);
         nList.Add(nStr);
       end;
@@ -713,18 +552,14 @@ begin
       nBool := False;
       for nIdx := Low(Int) to High(Int) do
       begin
-        if Int[nIdx].FDefault then
-        begin
-          if nBool then
-               Continue
-          else nBool := True;
-        end;
+        nExt := GetExt(ptInt, nIdx);
+        if IsFirstDefault() then Continue;
 
         nStr := MakeSQLByStr([
           SF('V_ID', FRecord),
-          SF('V_Desc', Int[nIdx].FDesc),
-          SF('V_Type', Enum2Str(dtInt)),
-          SF('V_Int', Int[nIdx].FData, sfVal)
+          SF('V_Desc', nStr),
+          SF('V_Type', Enum2Str(ptInt)),
+          SF('V_Int', Int[nIdx], sfVal)
           ], sTable_DictExt, '', True);
         nList.Add(nStr);
       end;
@@ -732,37 +567,29 @@ begin
       nBool := False;
       for nIdx := Low(Flt) to High(Flt) do
       begin
-        if Flt[nIdx].FDefault then
-        begin
-          if nBool then
-               Continue
-          else nBool := True;
-        end;
+        nExt := GetExt(ptFlt, nIdx);
+        if IsFirstDefault() then Continue;
 
         nStr := MakeSQLByStr([
           SF('V_ID', FRecord),
-          SF('V_Desc', Flt[nIdx].FDesc),
-          SF('V_Type', Enum2Str(dtFlt)),
-          SF('V_Double', Flt[nIdx].FData, sfVal)
+          SF('V_Desc', nStr),
+          SF('V_Type', Enum2Str(ptFlt)),
+          SF('V_Double', Flt[nIdx], sfVal)
           ], sTable_DictExt, '', True);
         nList.Add(nStr);
       end;
 
       nBool := False;
-      for nIdx := Low(Date) to High(Date) do
+      for nIdx := Low(Dat) to High(Dat) do
       begin
-        if Date[nIdx].FDefault then
-        begin
-          if nBool then
-               Continue
-          else nBool := True;
-        end;
+        nExt := GetExt(ptDate, nIdx);
+        if IsFirstDefault() then Continue;
 
         nStr := MakeSQLByStr([
           SF('V_ID', FRecord),
-          SF('V_Desc', Date[nIdx].FDesc),
-          SF('V_Type', Enum2Str(dtDateTime)),
-          SF('V_Date', DateTime2Str(Date[nIdx].FData))
+          SF('V_Desc', nStr),
+          SF('V_Type', Enum2Str(ptDate)),
+          SF('V_Date', DateTime2Str(Dat[nIdx]))
           ], sTable_DictExt, '', True);
         nList.Add(nStr);
       end;
@@ -920,7 +747,7 @@ function TParameterManager.GetParam2(const nRecord: string;
   var nParam: TParamItem; nQuery: TDataSet): Boolean;
 var nStr: string;
     nBool: Boolean;
-    nType: TParamDataType;
+    nType: TCommandParam.TParamType;
 begin
   Result := False;
   nParam.Init('', '');
@@ -982,14 +809,14 @@ begin
       while not Eof do
       begin
         nStr := FieldByName('V_Type').AsString;
-        nType := TStringHelper.Str2Enum<TParamDataType>(nStr);
+        nType := TStringHelper.Str2Enum<TCommandParam.TParamType>(nStr);
         nStr := FieldByName('V_Desc').AsString;
         
         case nType of
-         dtStr : FValue.AddS(FieldByName('V_Str').AsString, nStr);
-         dtInt : FValue.AddI(FieldByName('V_Int').AsInteger, nStr);
-         dtFlt : FValue.AddF(FieldByName('V_Double').AsFloat, nStr);
-         dtDateTime : FValue.AddD(FieldByName('V_Date').AsDateTime, nStr);
+         ptStr : FValue.AddS(FieldByName('V_Str').AsString, nStr);
+         ptInt : FValue.AddI(FieldByName('V_Int').AsInteger, nStr);
+         ptFlt : FValue.AddF(FieldByName('V_Double').AsFloat, nStr);
+         ptDate: FValue.AddD(FieldByName('V_Date').AsDateTime, nStr);
         end;
       
         Next;
@@ -1122,7 +949,22 @@ procedure ParamWithXML(const nRoot: TXmlNode; const nParam: PParamItem;
 var nStr: string;
     nIdx,nInt: Integer;
     nNode: TXmlNode;
-    nDT: TParamDataType;
+    nType: TCommandParam.TParamType;
+    nExt: TCommandParam.PParamExtend;
+
+    //Desc: 写入扩展信息
+    procedure WriteExtXML();
+    begin
+      if Assigned(nExt) then
+      begin
+        nNode.AttributeAdd('default', BoolToStr(nExt.FDefault, True));
+        nNode.AttributeAdd('desc', nExt.FDesc);
+      end else
+      begin
+        nNode.AttributeAdd('default', BoolToStr(False, True));
+        nNode.AttributeAdd('desc', '');
+      end;
+    end;
 begin
   if nLoad then
   begin
@@ -1130,8 +972,8 @@ begin
     nParam.SetEffect(TStringHelper.Str2Enum<TParamEffectType>(nStr));
 
     nStr := nRoot.AttributeValueByName['options'];
-    nParam.SetOptionOnly(TStringHelper.Str2Set<TParamDataType,
-      TParamDataTypes>(nStr));
+    nParam.SetOptionOnly(TStringHelper.Str2Set<TCommandParam.TParamType,
+      TCommandParam.TParamTypes>(nStr));
     //xxxxx
 
     nInt := nRoot.NodeCount - 1;
@@ -1141,26 +983,26 @@ begin
       if CompareText('data', nNode.Name) <> 0 then Continue;
       //must be data node
 
-      nDT := TStringHelper.Str2Enum<TParamDataType>(
+      nType := TStringHelper.Str2Enum<TCommandParam.TParamType>(
         nNode.AttributeValueByName['type']);
       //xxxxx
 
-      case nDT of
-       dtStr:
+      case nType of
+       ptStr:
         nParam.AddS(nNode.AttributeValueByName['value'],
                     nNode.AttributeValueByName['desc'],
           StrToBool(nNode.AttributeValueByName['default']));
-       dtInt:
+       ptInt:
         nParam.AddI(StrToInt(
                     nNode.AttributeValueByName['value']),
                     nNode.AttributeValueByName['desc'],
           StrToBool(nNode.AttributeValueByName['default']));
-       dtFlt:
+       ptFlt:
         nParam.AddF(StrToFloat(
                     nNode.AttributeValueByName['value']),
                     nNode.AttributeValueByName['desc'],
           StrToBool(nNode.AttributeValueByName['default']));
-       dtDateTime:
+       ptDate:
         nParam.AddD(TDateTimeHelper.Str2DateTime(
                     nNode.AttributeValueByName['value']),
                     nNode.AttributeValueByName['desc'],
@@ -1177,44 +1019,48 @@ begin
     nRoot.AttributeAdd('name', nParam.FName);
     nRoot.AttributeAdd('effect', TStringHelper.Enum2Str(nParam.FEffect));
 
-    nRoot.AttributeAdd('options', TStringHelper.Set2Str<TParamDataType,
-      TParamDataTypes>(nParam.FOptionOnly));
+    nRoot.AttributeAdd('options', TStringHelper.Set2Str<TCommandParam.TParamType,
+      TCommandParam.TParamTypes>(nParam.FOptionOnly));
     //xxxxx
 
     for nIdx := Low(Str) to High(Str) do
-    with nRoot.NodeNew('data') do
     begin
-      AttributeAdd('type', TStringHelper.Enum2Str<TParamDataType>(dtStr));
-      AttributeAdd('value', Str[nIdx].FData);       
-      AttributeAdd('default', BoolToStr(Str[nIdx].FDefault, True));
-      AttributeAdd('desc', Str[nIdx].FDesc);
+      nNode := nRoot.NodeNew('data');
+      nNode.AttributeAdd('type', TStringHelper.Enum2Str(ptStr));
+      nNode.AttributeAdd('value', Str[nIdx]);
+
+      nExt := GetExt(ptStr, nIdx);
+      WriteExtXML();
     end;
 
     for nIdx := Low(Int) to High(Int) do
-    with nRoot.NodeNew('data') do
     begin
-      AttributeAdd('type', TStringHelper.Enum2Str<TParamDataType>(dtint));
-      AttributeAdd('value', IntToStr(Int[nIdx].FData));       
-      AttributeAdd('default', BoolToStr(Int[nIdx].FDefault, True));
-      AttributeAdd('desc', Int[nIdx].FDesc);
+      nNode := nRoot.NodeNew('data');
+      nNode.AttributeAdd('type', TStringHelper.Enum2Str(ptInt));
+      nNode.AttributeAdd('value', IntToStr(Int[nIdx]));
+
+      nExt := GetExt(ptInt, nIdx);
+      WriteExtXML();
     end;
 
     for nIdx := Low(Flt) to High(Flt) do
-    with nRoot.NodeNew('data') do
     begin
-      AttributeAdd('type', TStringHelper.Enum2Str<TParamDataType>(dtFlt));
-      AttributeAdd('value', FloatToStr(Flt[nIdx].FData));       
-      AttributeAdd('default', BoolToStr(Flt[nIdx].FDefault, True));
-      AttributeAdd('desc', Flt[nIdx].FDesc);
+      nNode := nRoot.NodeNew('data');
+      nNode.AttributeAdd('type', TStringHelper.Enum2Str(ptFlt));
+      nNode.AttributeAdd('value', FloatToStr(Flt[nIdx]));
+
+      nExt := GetExt(ptFlt, nIdx);
+      WriteExtXML();
     end;
 
-    for nIdx := Low(Date) to High(Date) do
-    with nRoot.NodeNew('data') do
+    for nIdx := Low(Dat) to High(Dat) do
     begin
-      AttributeAdd('type', TStringHelper.Enum2Str<TParamDataType>(dtDateTime));
-      AttributeAdd('value', TDateTimeHelper.DateTime2Str(Date[nIdx].FData));       
-      AttributeAdd('default', BoolToStr(Date[nIdx].FDefault, True));
-      AttributeAdd('desc', Date[nIdx].FDesc);
+      nNode := nRoot.NodeNew('data');
+      nNode.AttributeAdd('type', TStringHelper.Enum2Str(ptDate));
+      nNode.AttributeAdd('value', TDateTimeHelper.DateTime2Str(Dat[nIdx]));
+
+      nExt := GetExt(ptDate, nIdx);
+      WriteExtXML();
     end;
   end;
 end;
