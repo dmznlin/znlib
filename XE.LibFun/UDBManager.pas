@@ -77,6 +77,9 @@ uses
   UBaseObject;
 
 const
+  //回车换行符
+  sEnt       = #13#10;
+
   //任意表标识
   sDBTables  = '$TBS';
   sDBIndex   = '$IDX';

@@ -9,6 +9,19 @@
     *.FQuery: 该列支持查询,自动添加查询文本框
     *.FQDefault: 默认查询条件,如日期,默认为查询当天
 
+  *.数据库配置: TDictDBItem
+    *.FTable: 字段所在表名称
+    *.FIsKey: 是否为主键
+    *.FWidth: 字段为varchar等类型时,确定字符个数
+    *.FField: 数据集中的字段,用于前端显示
+    *.FFieldQry: 查询时使用的真实字段名称
+    *.FField与FFieldQry有差异的原因:
+      1.多数情况下两者一致,FFieldQry为空.
+      2.对于 select a.Field,b.Field as Field2这样的查询,构建where条件时,需要
+        明确Field字段是a or b,即: FFieldQry = a.Field or b.Field
+      3.对于以上查询, TDictDBItem.FField = Field2 前端才能显示,但where条件中
+        Field2是不存在的,会导致查询异常,需要明确 FFieldQry = b.Field
+
   使用方法:
   1.添加Builder
     procedure SytemDictBuilder(const nList: TList);
@@ -64,8 +77,9 @@ type
   TDictDBItem = record
     FTable    : string;                                 //表名
     FField    : string;                                 //字段
-    FIsKey    : Boolean;                                //主键
+    FFieldQry : string;                                 //查询字段
 
+    FIsKey    : Boolean;                                //主键
     FType     : TFieldType;                             //数据类型
     FWidth    : integer;                                //字段宽度
     FDecimal  : integer;                                //小数位
@@ -110,6 +124,7 @@ type
     FEntity   : string;                                 //实体标记
     FName     : string;                                 //实体名称
     FLang     : string;                                 //语言标识
+    FMemo     : string;                                 //备注信息
     FItems    : TDictItems;                             //字典数据(PDictItem)
   public
     procedure Init(const nFirstItem: Boolean = False);
@@ -202,6 +217,7 @@ begin
       //normal
       AddF('D_DBTable',     'varchar(32)',            '表名称').
       AddF('D_DBField',     'varchar(32)',            '字段名').
+      AddF('D_FieldQry',    'varchar(32)',            '查询字段').
       AddF('D_DBIsKey',     'smallint',               '是否主键').
       AddF('D_DBType',      'smallint',               '数据类型').
       AddF('D_DBWidth',     'smallint',               '字段宽度').
@@ -504,6 +520,7 @@ begin
       //normal
       SF('D_DBTable', FDBItem.FTable),
       SF('D_DBField', FDBItem.FField),
+      SF('D_FieldQry', FDBItem.FFieldQry),
       SF('D_DBIsKey', BoolToStr(FDBItem.FIsKey), sfVal),
       SF('D_DBType', Ord(FDBItem.FType), sfVal),
       SF('D_DBWidth', FDBItem.FWidth, sfVal),
@@ -741,6 +758,7 @@ begin
           //normal
           FDBItem.FTable := FieldByName('D_DBTable').AsString;
           FDBItem.FField := FieldByName('D_DBField').AsString;
+          FDBItem.FFieldQry := FieldByName('D_FieldQry').AsString;
           FDBItem.FIsKey := StrToBool(FieldByName('D_DBIsKey').AsString);
           FDBItem.FType  := TFieldType(FieldByName('D_DBType').AsInteger);
           FDBItem.FWidth := FieldByName('D_DBWidth').AsInteger;
