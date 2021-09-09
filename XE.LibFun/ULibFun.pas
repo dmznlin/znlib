@@ -122,6 +122,8 @@ type
 
         //for server mode
         FPort       : Integer;                           //服务端口
+        FExtRoot    : string;                            //ext路径
+        FUniRoot    : string;                            //uni路径
         FFavicon    : string;                            //收藏夹显示图标
       end;
 
@@ -1367,6 +1369,8 @@ begin
 
       //for server mode
       FPort       := ReadInteger(FProgram, 'ServerPort', 8080);
+      FExtRoot    := ReplaceGlobalPath(ReadString(FProgram, 'ExtRoot', ''));
+      FUniRoot    := ReplaceGlobalPath(ReadString(FProgram, 'UniRoot', ''));
       FFavicon    := ReplaceGlobalPath(ReadString(FProgram, 'Favicon', ''));
 
       if CompareText(FProgram, nStr) = 0 then
