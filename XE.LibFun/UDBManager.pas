@@ -199,23 +199,21 @@ type
     FRecords    : array of TDBData;             //默认记录
     FSameTbs    : array of string;              //同结构表
     {*表属性*}
-    function AddF(const nField,nType,nMemo: string;
-      const nDefVal: string = '';
+  public
+    procedure Init(const nTable: string);
+    {*初始化*}
+    function AddF(nField,nType,nMemo: string; nDefVal: string = '';
       nDBType: TDBType = dtDefault): PDBTable;
     {*增加字段*}
-    function AddI(const nName,nIndex: string;
-      nDBType: TDBType = dtDefault): PDBTable;
+    function AddI(nName,nIndex: string; nDBType: TDBType = dtDefault): PDBTable;
     {*增加索引*}
-    function AddT(const nName,nTrigger: string;
-      nDBType: TDBType = dtDefault): PDBTable;
+    function AddT(nName,nTrigger: string; nDBType: TDBType=dtDefault): PDBTable;
     {*增加触发器*}
-    function AddP(const nName,nProcedure: string;
-      nDBType: TDBType = dtDefault): PDBTable;
+    function AddP(nName,nProcedure: string; nDBType: TDBType=dtDefault): PDBTable;
     {*增加触发器*}
-    function AddR(const nName,nRecord: string;
-      nDBType: TDBType = dtDefault): PDBTable;
+    function AddR(nName,nRecord: string; nDBType: TDBType=dtDefault): PDBTable;
     {*增加初始化记录*}
-    function Copy(const nTable: string): PDBTable;
+    function Copy(nTable: string): PDBTable;
     {*复制表结构*}
   end;
 
@@ -316,7 +314,7 @@ type
     {*读写配置*}
     procedure AddTableBuilder(const nBuilder: TDBTableBuilder);
     procedure AddDB(nConfig: TDBConnConfig; const nUseVar: Boolean = True);
-    function AddTable(const nTable: string; const nList: TList;
+    function AddTable(nTable: string; const nList: TList;
       nDBType: TDBType = dtDefault): PDBTable;
     {*添加数据*}
     procedure GetTables(const nList: TList);
@@ -559,10 +557,26 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+//Date: 2021-09-11
+//Parm: 表名称
+//Desc: 初始化表结构
+procedure TDBTable.Init(const nTable: string);
+var nInit: TDBTable;
+begin
+  FillChar(nInit, SizeOf(TDBTable), #0);
+  Self := nInit;
+  FName := nTable;
+  FDefaultFit := dtMSSQL;
+
+  SetLength(FSameTbs, 1);
+  FSameTbs[0] := nTable;
+  //first table in list
+end;
+
 //Date: 2020-04-16
 //Parm: 字段名;字段类型;字段描述;默认值;适配数据库
 //Desc: 新增一个适配nDBType数据库的表字段
-function TDBTable.AddF(const nField, nType, nMemo, nDefVal: string;
+function TDBTable.AddF(nField, nType, nMemo, nDefVal: string;
   nDBType: TDBType): PDBTable;
 var i,nIdx,nInt: Integer;
 begin
@@ -573,6 +587,7 @@ begin
     nDBType := FDefaultFit;
   //set default
 
+  nField := Trim(nField);
   for nIdx := Low(FFields) to High(FFields) do
   with FFields[nIdx] do
   begin
@@ -622,7 +637,7 @@ end;
 //Date: 2020-04-16
 //Parm: 索引名;索引数据;适配数据库
 //Desc: 新增一个适配nDBType的表索引
-function TDBTable.AddI(const nName,nIndex: string; nDBType: TDBType): PDBTable;
+function TDBTable.AddI(nName,nIndex: string; nDBType: TDBType): PDBTable;
 var nIdx,nInt: Integer;
 begin
   Result := @Self;
@@ -630,7 +645,11 @@ begin
 
   if nDBType = dtDefault then
     nDBType := FDefaultFit;
+  //set default
+
+  nName := Trim(nName);
   nInt := -1;
+  //xxxxx
 
   for nIdx := Low(FIndexes) to High(FIndexes) do
    with FIndexes[nIdx] do
@@ -666,7 +685,7 @@ end;
 //Date: 2020-04-16
 //Parm: 触发器名;触发器数据;适配数据库
 //Desc: 新增一个适配nDBType的表触发器
-function TDBTable.AddT(const nName,nTrigger: string; nDBType: TDBType): PDBTable;
+function TDBTable.AddT(nName,nTrigger: string; nDBType: TDBType): PDBTable;
 var nIdx,nInt: Integer;
 begin
   Result := @Self;
@@ -674,7 +693,11 @@ begin
 
   if nDBType = dtDefault then
     nDBType := FDefaultFit;
+  //set default
+
+  nName := Trim(nName);
   nInt := -1;
+  //xxxxx
 
   for nIdx := Low(FTriggers) to High(FTriggers) do
    with FTriggers[nIdx] do
@@ -705,8 +728,7 @@ end;
 //Date: 2020-04-20
 //Parm: 存储过程名;存储过程脚本;适配数据库
 //Desc: 新增一个适配nDBType的存储过程
-function TDBTable.AddP(const nName, nProcedure: string;
-  nDBType: TDBType): PDBTable;
+function TDBTable.AddP(nName, nProcedure: string; nDBType: TDBType): PDBTable;
 var nIdx,nInt: Integer;
 begin
   Result := @Self;
@@ -714,7 +736,11 @@ begin
 
   if nDBType = dtDefault then
     nDBType := FDefaultFit;
+  //set default
+
+  nName := Trim(nName);
   nInt := -1;
+  //xxxxx
 
   for nIdx := Low(FProcedures) to High(FProcedures) do
    with FProcedures[nIdx] do
@@ -744,7 +770,7 @@ end;
 //Date: 2020-04-21
 //Parm: SQL脚本;适配数据库
 //Desc: 新增一个适配nDBType的SQL
-function TDBTable.AddR(const nName, nRecord: string; nDBType: TDBType): PDBTable;
+function TDBTable.AddR(nName, nRecord: string; nDBType: TDBType): PDBTable;
 var nIdx,nInt: Integer;
 begin
   Result := @Self;
@@ -752,7 +778,11 @@ begin
 
   if nDBType = dtDefault then
     nDBType := FDefaultFit;
+  //set default
+
+  nName := Trim(nName);
   nInt := -1;
+  //xxxxx
 
   for nIdx := Low(FRecords) to High(FRecords) do
    with FRecords[nIdx] do
@@ -782,12 +812,13 @@ end;
 //Date: 2020-04-21
 //Parm: 表名称
 //Desc: 依据当前表结构创建nTable表
-function TDBTable.Copy(const nTable: string): PDBTable;
+function TDBTable.Copy(nTable: string): PDBTable;
 var nIdx: Integer;
 begin
   Result := @Self;
   //return self address
 
+  nTable := Trim(nTable);
   for nIdx := Low(FSameTbs) to High(FSameTbs) do
     if CompareText(nTable, FSameTbs[nIdx]) = 0 then Exit;
   //has exists
@@ -855,25 +886,18 @@ end;
 //Date: 2020-04-16
 //Parm: 表名称;列表
 //Desc: 添加一个表
-function TDBManager.AddTable(const nTable: string; const nList: TList;
+function TDBManager.AddTable(nTable: string; const nList: TList;
   nDBType: TDBType): PDBTable;
 begin
+  nTable := Trim(nTable);
   Result := FindTable(nTable, nList);
+  //xxxxx
+
   if not Assigned(Result) then
   begin
     New(Result);
     nList.Add(Result);
-    Result.FName := nTable;
-
-    SetLength(Result.FFields, 0);
-    SetLength(Result.FRecords, 0);
-    SetLength(Result.FIndexes, 0);
-    SetLength(Result.FTriggers, 0);
-    SetLength(Result.FProcedures, 0);
-
-    SetLength(Result.FSameTbs, 1);
-    Result.FSameTbs[0] := nTable;
-    //first table in list
+    Result.Init(nTable);
   end;
 
   if nDBType = dtDefault then
