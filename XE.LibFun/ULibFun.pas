@@ -170,6 +170,8 @@ type
     //存储窗体信息
     class function ReplaceGlobalPath(const nPath: string): string; static;
     //替换nPath中的$Path宏定义
+    class function RegularPath(const nPath: string): string; static;
+    //使nPath以"\"结尾
     class procedure LoadParameters(var nParam: TAppParam; nIni: TIniFile = nil;
       const nExtend: Boolean = False); static;
     //载入系统配置参数
@@ -1312,6 +1314,18 @@ begin
   else Result := gPath;
 
   Result := StringReplace(nPath, '$Path', Result, [rfReplaceAll, rfIgnoreCase]);
+end;
+
+//Date: 2021-09-24
+//Parm: 文件路径
+//Desc: 使nPath以"\"结尾
+class function TApplicationHelper.RegularPath(const nPath: string): string;
+var nStr: string;
+begin
+  nStr := TStringHelper.CopyRight(nPath, 1);
+  if (nStr = '\') or (nStr = '/') then
+       Result := nPath
+  else Result := nPath + PathDelim;
 end;
 
 //Date: 2021-04-15
