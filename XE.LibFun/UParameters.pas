@@ -171,6 +171,10 @@ type
     {*属性相关*}
   end;
 
+var
+  gParamsManager: TParameterManager = nil;
+  //全局使用
+
 implementation
 
 uses
@@ -358,6 +362,9 @@ begin
     gMG.FParamsManager := nil;
     FreeAndNil(gMG.FManagers[nIdx].FManager);
   end;
+
+  gParamsManager := gMG.FParamsManager;
+  //启用全局变量
 end;
 
 procedure TParameterManager.RunAfterRegistAllManager;
@@ -459,6 +466,7 @@ begin
   //xxxxx
 end;
 
+//Date: 2021-08-16
 //Parm: 列表;是否释放
 //Desc: 清理nList参数配置列表
 procedure TParameterManager.ClearParamData(const nList: TList;

@@ -108,10 +108,6 @@ type
       TDeployTypes = set of TDeployType;
       //部署类型: Desktop-Client,PC-Web,Mobile-Web
 
-      TOrganizationStructure = (osGroup, osArea, osFactory);
-      TOrganizationStructures = set of TOrganizationStructure;
-      //组织架构: 集团,区域,工厂
-
       TProgramConfig = record
         FProgram    : string;                            //程序标识
         FTitleApp   : string;                            //状态栏名称
@@ -189,6 +185,12 @@ type
       //修剪方式:不修剪,左侧,右侧,两侧
       TStringArray = array of string;
       //字符串动态数组
+
+      PItemName = ^TItemName;
+      TItemName = record
+        FItem    : string;                               //项标识
+        FName    : string;                               //项名称
+      end;
 
       PMacroItem = ^TMacroItem;
       TMacroItem = record

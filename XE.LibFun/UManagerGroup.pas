@@ -19,7 +19,8 @@ uses
   {$IFDEF EnableChannelManager}UMgrChannel,{$ENDIF}
   {$IFDEF EnableMQTTMessager}UMosMessager,{$ENDIF}
   {$IFDEF EnableDataDictManager}UMgrDataDict,{$ENDIF}
-  {$IFDEF EnableParamManager}UParameters,{$ENDIF} ULibFun, UWaitItem;
+  {$IFDEF EnableParamManager}UParameters,{$ENDIF}
+  {$IFDEF EnablePopedomManager}UMgrPopedom,{$ENDIF} ULibFun, UWaitItem;
 
 type
   TSimpleLogger = class(TObject)
@@ -87,6 +88,8 @@ type
     //菜单管理器
     {$IFDEF EnableParamManager}FParamsManager: TParameterManager;{$ENDIF}
     //参数管理器
+    {$IFDEF EnablePopedomManager}FPopedomManager: TPopedomManager;{$ENDIF}
+    //权限管理器
     {$IFDEF EnableDataDictManager}FDataDictManager: TDataDictManager;{$ENDIF}
     //数据字典管理器
     {$IFDEF EnableChannelManager}FChannelManager: TChannelManager;{$ENDIF}

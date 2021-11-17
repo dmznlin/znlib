@@ -24,6 +24,9 @@
         <Projects Include="Params\Params.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="Popedom\Popedom.dproj">
+            <Dependencies/>
+        </Projects>
     </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Default.Personality.12</Borland.Personality>
@@ -95,14 +98,23 @@
     <Target Name="Params:Make">
         <MSBuild Projects="Params\Params.dproj" Targets="Make"/>
     </Target>
+    <Target Name="Popedom">
+        <MSBuild Projects="Popedom\Popedom.dproj"/>
+    </Target>
+    <Target Name="Popedom:Clean">
+        <MSBuild Projects="Popedom\Popedom.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="Popedom:Make">
+        <MSBuild Projects="Popedom\Popedom.dproj" Targets="Make"/>
+    </Target>
     <Target Name="Build">
-        <CallTarget Targets="DBPool;HighTimer;ThreadPool;SerialID;DataDict;MQTT;Params"/>
+        <CallTarget Targets="DBPool;HighTimer;ThreadPool;SerialID;DataDict;MQTT;Params;Popedom"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="DBPool:Clean;HighTimer:Clean;ThreadPool:Clean;SerialID:Clean;DataDict:Clean;MQTT:Clean;Params:Clean"/>
+        <CallTarget Targets="DBPool:Clean;HighTimer:Clean;ThreadPool:Clean;SerialID:Clean;DataDict:Clean;MQTT:Clean;Params:Clean;Popedom:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="DBPool:Make;HighTimer:Make;ThreadPool:Make;SerialID:Make;DataDict:Make;MQTT:Make;Params:Make"/>
+        <CallTarget Targets="DBPool:Make;HighTimer:Make;ThreadPool:Make;SerialID:Make;DataDict:Make;MQTT:Make;Params:Make;Popedom:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

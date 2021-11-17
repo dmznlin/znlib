@@ -32,5 +32,8 @@
 {$DEFINE AutoParams}
 //启用参数管理器
 
+{$DEFINE PopedomManager}
+//启用权限管理器
+
 {$DEFINE MQTTMessager}
 //启用MQTT消息中心

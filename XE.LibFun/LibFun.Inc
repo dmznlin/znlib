@@ -61,13 +61,34 @@
   //启用参数管理器
 {$ENDIF}
 
-{$IFDEF TaskMonitor}
+{$IFDEF MenuManager}
   {$DEFINE LogManager}
   //启用日志管理器
-  {$DEFINE ThreadPool}
-  //启用线程池
-  {$DEFINE EnableTaskMonitor}
-  //启用任务监控服务
+  {$DEFINE EnableMenuManager}
+  //启用菜单管理器
+{$ENDIF}
+
+{$IFDEF DataDictManager}
+  {$DEFINE LogManager}
+  //启用日志管理器
+  {$DEFINE EnableDataDictManager}
+  //启用数据字典管理器
+{$ENDIF}
+
+{$IFDEF PopedomManager}
+  {$DEFINE LogManager}
+  //启用日志管理器
+  {$DEFINE EnablePopedomManager}
+  //启用权限管理器
+{$ENDIF}
+
+{$IFDEF MQTTMessager}
+  {$IFDEF MSWin}
+    {$DEFINE LogManager}
+    //启用日志管理器
+    {$DEFINE EnableMQTTMessager}
+    //启用MQTT消息中心
+  {$ENDIF}
 {$ENDIF}
 
 {$IFDEF PlugManager}
@@ -93,27 +114,13 @@
   {$ENDIF}
 {$ENDIF}
 
-{$IFDEF MenuManager}
+{$IFDEF TaskMonitor}
   {$DEFINE LogManager}
   //启用日志管理器
-  {$DEFINE EnableMenuManager}
-  //启用菜单管理器
-{$ENDIF}
-
-{$IFDEF DataDictManager}
-  {$DEFINE LogManager}
-  //启用日志管理器
-  {$DEFINE EnableDataDictManager}
-  //启用数据字典管理器
-{$ENDIF}
-
-{$IFDEF MQTTMessager}
-  {$IFDEF MSWin}
-    {$DEFINE LogManager}
-    //启用日志管理器
-    {$DEFINE EnableMQTTMessager}
-    //启用MQTT消息中心
-  {$ENDIF}
+  {$DEFINE ThreadPool}
+  //启用线程池
+  {$DEFINE EnableTaskMonitor}
+  //启用任务监控服务
 {$ENDIF}
 
 {$IFDEF LogManager}
