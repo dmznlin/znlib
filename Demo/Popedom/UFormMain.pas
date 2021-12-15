@@ -14,10 +14,12 @@ type
     Button3: TButton;
     Button4: TButton;
     Memo1: TMemo;
+    Button5: TButton;
     procedure Button1Click(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure Button2Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
+    procedure Button5Click(Sender: TObject);
   private
     { Private declarations }
   public
@@ -60,7 +62,7 @@ end;
 
 procedure TfFormMain.Button2Click(Sender: TObject);
 begin
-  Memo1.Lines.Add(gPopedomManager.FindTagName(sPopedom_Add));
+  Memo1.Lines.Add(gPopedomManager.FindTagName(sPopedom_View));
   Memo1.Lines.Add(gPopedomManager.FindGroupName(sPopedom_Forms));
 end;
 
@@ -84,6 +86,11 @@ begin
   finally
     gPopedomManager.ClearPopedoms(nList, True);
   end;
+end;
+
+procedure TfFormMain.Button5Click(Sender: TObject);
+begin
+  gPopedomManager.InitPopedoms(Memo1.lines);
 end;
 
 end.

@@ -11,7 +11,7 @@ uses
 
 const
   //popedom tag
-  sPopedom_Read       = 'A';                         //浏览
+  sPopedom_View       = 'A';                         //浏览
   sPopedom_Add        = 'B';                         //添加
   sPopedom_Edit       = 'C';                         //修改
   sPopedom_Delete     = 'D';                         //删除
@@ -20,7 +20,7 @@ const
   sPopedom_Export     = 'G';                         //导出
 
   sPopedom_Tags: array[0..6] of TStringHelper.TItemName = (
-    (FItem: sPopedom_Read;      FName: '浏览'),
+    (FItem: sPopedom_View;      FName: '浏览'),
     (FItem: sPopedom_Add;       FName: '添加'),
     (FItem: sPopedom_Edit;      FName: '修改'),
     (FItem: sPopedom_Delete;    FName: '删除'),
@@ -39,6 +39,9 @@ const
     (FItem: sPopedom_Forms;     FName: '系统窗体(Forms)'),
     (FItem: sPopedom_Frames;    FName: '系统框架(Frames)'));
   //popedom group width name
+
+  cPopedom_UpdateTag  = 10 * 1000;                   //标识更新间隔
+  cPopedom_UpdatePost = 30 * 60 * 1000;              //岗位更新间隔
 
 type
   TPopedomTag = record
@@ -91,6 +94,7 @@ type
       sTable_PopedomTag   = 'Sys_PopedomTag';        //权限标识
       sTable_PopedomGroup = 'Sys_PopedomGroup';      //权限分组
   private
+    FTagUpdate: Cardinal;
     FTags: TPopedomTags;
     {*权限标识*}
     FGroups: TPopedomGroups;
@@ -117,13 +121,15 @@ type
     function AddGroup(const nList: TList; const nGroup:string = '';
       const nName: string = ''): PPopedomGroup;
     {*添加数据*}
-    function FindTagName(const nTag: string): string;
+    function FindTagName(const nTag: string; const nDB: Boolean = True): string;
     function FindGroupName(const nGroup: string): string;
     function FindGroup(const nID: string;const nList: TList=nil): PPopedomGroup;
     {*检索数据*}
     procedure GetPopedoms(const nList: TList);
     procedure ClearPopedoms(const nList: TList; const nFree: Boolean = False);
     {*权限数据*}
+    procedure InitPopedoms(const nMemo: TStrings = nil);
+    {*初始化参数*}
     procedure GetStatus(const nList: TStrings;
       const nFriendly: Boolean = True); override;
     {*获取状态*}
@@ -155,7 +161,7 @@ begin
     AddTable(sTable_PopedomTag, nList, dtMSSQL).
       AddF('R_ID',          sField_SQLServer_AutoInc, '记录编号').
       AddF('T_Tag',         'varchar(32)',            '权限标识').
-      AddF('T_Memo',        'varchar(80)',            '标识描述');
+      AddF('T_Name',        'varchar(80)',            '标识描述');
     //popedom tag
 
     AddTable(sTable_PopedomGroup, nList, dtMSSQL).
@@ -259,7 +265,9 @@ end;
 constructor TPopedomManager.Create;
 begin
   inherited;
+  FTagUpdate := 0;
   SetLength(FTags, 0);
+
   SetLength(FGroups, 0);
   SetLength(FBuffered, 0);
   SetLength(FBuilders, 0);
@@ -316,11 +324,39 @@ begin
 end;
 
 //Date: 2021-11-17
-//Parm: 标识
+//Parm: 标识;检索数据库
 //Desc: 检索nTag的名称
-function TPopedomManager.FindTagName(const nTag: string): string;
-var nIdx: Integer;
+function TPopedomManager.FindTagName(const nTag: string;
+  const nDB: Boolean): string;
+var nStr: string;
+    nIdx: Integer;
+    nQuery: TDataSet;
 begin
+  if nDB then //update from db first
+  begin
+    nQuery := nil;
+    if TDateTimeHelper.GetTickCountDiff(FTagUpdate) > cPopedom_UpdateTag then
+    try
+      FTagUpdate := TDateTimeHelper.GetTickCount();
+      nStr := 'Select T_Tag,T_Name From ' + sTable_PopedomTag;
+      nQuery := gDBManager.DBQuery(nStr);
+
+      with nQuery do
+      if RecordCount > 0 then
+      begin
+        First();
+        while not Eof do
+        begin
+          AddTag(FieldByName('T_Tag').AsString,
+                 FieldByName('T_Name').AsString);
+          Next;
+        end;
+      end;
+    finally
+      gDBManager.ReleaseDBQuery(nQuery);
+    end;
+  end;
+
   for nIdx := Low(FTags) to High(FTags) do
    if CompareText(nTag, FTags[nIdx].FTag) = 0 then
    begin
@@ -490,9 +526,122 @@ begin
   end;
 end;
 
+//Date: 2021-11-30
+//Desc: 初始化权限数据
+procedure TPopedomManager.InitPopedoms(const nMemo: TStrings);
+var nStr: string;
+    nIdx: Integer;
+    nQuery: TDataSet;
+    nListA,nListB: TStrings;
+    nList: TList;
+    nGroup: PPopedomGroup;
+begin
+  nList := nil;
+  nListA := nil;
+  nListB := nil;
+  nQuery := nil; //init
+
+  with gDBManager,TSQLBuilder do
+  try
+    nListA := gMG.FObjectPool.Lock(TStrings) as TStrings;
+    nListA.Clear;
+    nListB := gMG.FObjectPool.Lock(TStrings) as TStrings;
+    nListB.Clear;
+
+    nQuery := LockDBQuery();
+    nStr := 'Select G_ID From ' + sTable_PopedomGroup;
+
+    with DBQuery(nStr, nQuery) do
+    if RecordCount > 0 then
+    begin
+      First;
+      while not Eof do
+      begin
+        nStr := FieldByName('G_ID').AsString;
+        nListA.Add(nStr);
+        Next;
+      end;
+    end;
+
+    nList := gMG.FObjectPool.Lock(TList) as TList;
+    nList.Clear;
+    GetPopedoms(nList);
+
+    UMgrPopedom.WriteLog('::: 创建权限分组 :::', nMemo);
+    for nIdx := 0 to nList.Count -1 do
+    begin
+      nGroup := nList[nIdx];
+      if nListA.IndexOf(nGroup.FGroup) < 0 then
+      begin
+        nStr := MakeSQLByStr([SF('G_ID', nGroup.FGroup),
+          SF('G_Name', nGroup.FName)
+          ], sTable_PopedomGroup, '', True);
+        nListB.Add(nStr);
+
+        nStr := Format('%s.%s', [nGroup.FGroup, nGroup.FName]);
+        UMgrPopedom.WriteLog('已创建: ' + nStr, nMemo);
+      end;
+    end;
+
+    nListA.Clear;
+    nStr := 'Select T_Tag From ' + sTable_PopedomTag;
+
+    with DBQuery(nStr, nQuery) do
+    if RecordCount > 0 then
+    begin
+      First;
+      while not Eof do
+      begin
+        nStr := FieldByName('T_Tag').AsString;
+        nListA.Add(nStr);
+        Next;
+      end;
+    end;
+
+    UMgrPopedom.WriteLog('::: 创建权限标识 :::', nMemo);
+    for nIdx := Low(sPopedom_Tags) to High(sPopedom_Tags) do
+     with sPopedom_Tags[nIdx] do
+      if nListA.IndexOf(FItem) < 0 then
+      begin
+        nStr := MakeSQLByStr([SF('T_Tag', FItem),
+          SF('T_Name', FindTagName(FItem, False))
+          ], sTable_PopedomTag, '', True);
+        nListB.Add(nStr);
+
+        nListA.Add(FItem); //has saved
+        nStr := Format('%s.%s', [FItem, FName]);
+        UMgrPopedom.WriteLog('已创建: ' + nStr, nMemo);
+      end;
+
+    for nIdx := Low(FTags) to High(FTags) do
+     with FTags[nIdx] do
+      if nListA.IndexOf(FTag) < 0 then
+      begin
+        nStr := MakeSQLByStr([SF('T_Tag', FTag),
+          SF('T_Name', FName)
+          ], sTable_PopedomTag, '', True);
+        nListB.Add(nStr);
+
+        nStr := Format('%s.%s', [FTag, FName]);
+        UMgrPopedom.WriteLog('已创建: ' + nStr, nMemo);
+      end;
+
+    if nListB.Count > 0 then
+      DBExecute(nListB);
+    //xxxxx
+  finally
+    gMG.FObjectPool.Release(nListA);
+    gMG.FObjectPool.Release(nListB);
+    gDBManager.ReleaseDBQuery(nQuery);
+
+    ClearPopedoms(nList);
+    gMG.FObjectPool.Release(nList);
+    //popedom list
+  end;
+end;
+
 procedure TPopedomManager.GetStatus(const nList: TStrings;
   const nFriendly: Boolean);
-var nIdx: Integer;
 begin
   with TObjectStatusHelper do
   try

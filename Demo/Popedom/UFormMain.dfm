@@ -52,12 +52,21 @@ object fFormMain: TfFormMain
       OnClick = Button3Click
     end
     object Button4: TButton
-      Left = 251
+      Left = 332
       Top = 10
       Width = 75
       Height = 25
       Caption = 'status'
       TabOrder = 3
+    end
+    object Button5: TButton
+      Left = 251
+      Top = 10
+      Width = 75
+      Height = 25
+      Caption = 'init popedoms'
+      TabOrder = 4
+      OnClick = Button5Click
     end
   end
   object Memo1: TMemo
