@@ -92,9 +92,13 @@ type
   public
     const
       sVerifyCode   = ';Verify:';
+      cVerifyCode   = Length(sVerifyCode);
       //id verify
       sVerifyIgnore = '@@@';
+      cVerifyIgnore = Length(sVerifyIgnore);
       //ignore prefix when verify
+      sConfigMain   = 'Config';
+      //ini main section
       sDefaultKey   = 'sysadmin';
       //the key for encrypt data
       sDefaultLang  = 'cn';
@@ -107,6 +111,11 @@ type
       TDeployType = (Desktop, Web, Mobile, dtAll);
       TDeployTypes = set of TDeployType;
       //部署类型: Desktop-Client,PC-Web,Mobile-Web
+
+      TProgramParam = record
+        FName       : string;                            //参数名称
+        FData       : string;                            //参数数据
+      end;
 
       TProgramConfig = record
         FProgram    : string;                            //程序标识
@@ -121,6 +130,12 @@ type
         FExtRoot    : string;                            //ext路径
         FUniRoot    : string;                            //uni路径
         FFavicon    : string;                            //收藏夹显示图标
+
+        //external parameters
+        FParams     : TArray<TProgramParam>;             //额外配置参数
+      public
+        function GetParam(const nName: string): string;
+        {*检索参数*}
       end;
 
       TAppParam = record
@@ -1115,7 +1130,7 @@ begin
     if (nList.Count > 0) and (Pos(sVerifyCode, nList[0]) = 1) then
     begin
       nStr := nList[0];
-      System.Delete(nStr, 1, Length(sVerifyCode));
+      System.Delete(nStr, 1, cVerifyCode);
 
       nList[0] := nSeed;
       VerifyIgnore(nList, nSeed);
@@ -1335,13 +1350,13 @@ end;
 //Desc: 加载基础配置参数到nParam中
 class procedure TApplicationHelper.LoadParameters(var nParam: TAppParam;
   nIni: TIniFile; const nExtend: Boolean);
-const sMain = 'Config';
 var nStr: string;
-    nIdx: Integer;
+    i,nIdx,nInt: Integer;
     nBool: Boolean;
-    nList: TStrings;
+    nList,nExtParam: TStrings;
 begin
   nList := nil;
+  nExtParam := nil;
   nBool := Assigned(nIni);
 
   if not nBool then
@@ -1350,15 +1365,15 @@ begin
 
   with nParam,nIni do
   try
-    FGroupID := ReadString(sMain, 'GroupID', 'group');       //集团代码
-    FFactory := ReadString(sMain, 'FactoryID', 'factory');   //工厂代码
-    nStr     := ReadString(sMain, 'ProgID', 'runsoft');      //系统代码
+    FGroupID := ReadString(sConfigMain, 'GroupID', 'group');       //集团代码
+    FFactory := ReadString(sConfigMain, 'FactoryID', 'factory');   //工厂代码
+    nStr     := ReadString(sConfigMain, 'ProgID', 'runsoft');      //系统代码
 
     if Trim(nStr) = '' then
       raise Exception.Create('ULibFun.LoadParameters: Invalid "ProgID" Config');
     //xxxxx
 
-    FAdminKey := ReadString(sMain, sVerifyIgnore + 'AdminKey', ''); //管理员密钥
+    FAdminKey := ReadString(sConfigMain, sVerifyIgnore + 'AdminKey', ''); //管理员密钥
     if FAdminKey = '' then
          FAdminKey := sDefaultKey
     else FAdminKey := TEncodeHelper.Decode_3DES(FAdminKey, sDefaultKey);
@@ -1367,8 +1382,12 @@ begin
     TStringHelper.Split(nStr, nList, ',', tpTrim);           //id,id,id
     SetLength(FPrograms, nList.Count);
 
+    if nList.Count > 0 then
+      nExtParam := TStringList.Create;
+    //for external parameters
+
     FActive.FProgram := '';
-    nStr := ReadString(sMain, 'Active', '');                 //默认系统代码
+    nStr := ReadString(sConfigMain, 'Active', '');                 //默认系统代码
 
     for nIdx := 0 to nList.Count - 1 do
     with FPrograms[nIdx] do
@@ -1389,6 +1408,26 @@ begin
       FUniRoot    := ReplaceGlobalPath(ReadString(FProgram, 'UniRoot', ''));
       FFavicon    := ReplaceGlobalPath(ReadString(FProgram, 'Favicon', ''));
 
+      nInt := 0;
+      ReadSection(FProgram, nExtParam);
+      for i := nExtParam.Count-1 downto 0 do
+       if Pos(sVerifyIgnore, nExtParam[i]) > 0 then
+        Inc(nInt);
+      //count parameters number
+
+      SetLength(FParams, nInt);
+      for i := nExtParam.Count-1 downto 0 do
+       if Pos(sVerifyIgnore, nExtParam[i]) > 0 then
+        with FParams[nInt-1] do
+         begin
+           FName := TStringHelper.CopyNoLeft(nExtParam[i], cVerifyIgnore);
+           FData := ReadString(FProgram, nExtParam[i], '');
+
+           Dec(nInt);
+           if nInt < 0 then Break;
+         end;
+      //load parameter data
+
       if CompareText(FProgram, nStr) = 0 then
         FActive := FPrograms[nIdx];
       //set default
@@ -1399,6 +1438,7 @@ begin
     //first as default
   finally
     nList.Free;
+    nExtParam.Free;
     if not nBool then nIni.Free;
   end;
 
@@ -1420,6 +1460,22 @@ begin
     end;
     {$ENDIF}
   end;
+end;
+
+//Date: 2022-02-28
+//Parm: 参数名
+//Desc: 获取nName参数的数据
+function TApplicationHelper.TProgramConfig.GetParam(const nName: string): string;
+var nIdx: Integer;
+begin
+  Result := '';
+  for nIdx := Low(FParams) to High(FParams) do
+   with FParams[nIdx] do
+    if CompareText(nName, FName) = 0 then
+    begin
+      Result := FData;
+      Break;
+    end;
 end;
 
 //------------------------------------------------------------------------------
