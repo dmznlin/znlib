@@ -106,10 +106,6 @@ uses
   {$define MSWINDOWS}
 {$endif D5UP}
 
-{$ifdef D16UP}
-  System.Types,
-{$endif}
-
 {$ifdef MSWINDOWS}
   // unit Windows defines MultiByteToWideChar and GetTimeZoneInformation
   Windows,
@@ -7979,7 +7975,7 @@ end;
 
 function sdUtf8ToWide(const U: Utf8String): UnicodeString;
 begin
-  Result := System.UTF8ToWideString(U);
+  Result := System.UTF8Decode(U);
 end;
 {$else}
 function sdWideToUtf8(const W: UnicodeString): Utf8String;
