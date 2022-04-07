@@ -91,67 +91,82 @@ const
   KeyTag3 = '|  C  |'; //Consumer
   KeyNew  = ':::';
   KeyLen  = Length(KeyNew);
-var nStr,nKey,nPrefix: string;
+var nStr,nKey,nKeys,nType,nTypes: string;
     nIdx,nPos,nLen,nKeyNum,nLineWidth: Integer;
 begin
+  FListA.Clear;
   FListB.Clear;
   nLen := StrToInt(Edit3.Text); //空格对齐个数
   nLineWidth := StrToInt(Edit4.Text); //单行字符数
 
   Edit2.Text := '{*Global configuration properties*}';
   nKeyNum := 0;
-  nKey := '';
+  nKeys := '';
+  nTypes := '';
 
   for nIdx:=0 to Edit1.Lines.Count-1 do
   begin
     nStr := Trim(Edit1.Lines[nIdx]);
     if nStr = '' then Continue;
-    nPrefix := '';
+    nType := '';
 
     nPos := Pos(KeyTag1, nStr);
-    if nPos > 1 then nPrefix := 'B_';
+    if nPos > 1 then nType := 'B';
     //find tag
 
-    if nPrefix = '' then
+    if nType = '' then
     begin
       nPos := Pos(KeyTag2, nStr);
-      if nPos > 1 then nPrefix := 'P_';
+      if nPos > 1 then nType := 'P';
     end;
 
-    if nPrefix = '' then
+    if nType = '' then
     begin
       nPos := Pos(KeyTag3, nStr);
-      if nPos > 1 then nPrefix := 'C_';
+      if nPos > 1 then nType := 'C';
     end;
 
-    if nPrefix = '' then Continue;
+    if nType = '' then Continue;
     //no tag
-    nStr := Trim(Copy(nStr, 1, nPos - 1));
+    if nTypes <> '' then
+    begin
+      if Length(nTypes + ', ' + nType) > nLineWidth then //超长截断
+      begin
+        FListA.Add(nTypes + ',');
+        nTypes := '  ' + nType;
+      end else nTypes := nTypes + ', ' + nType;
+    end else nTypes := nType;
 
-    nPrefix := UpperCase(nPrefix + StringReplace(nStr, '.', '_', [
-      rfReplaceAll, rfIgnoreCase]));
+    nStr := Trim(Copy(nStr, 1, nPos - 1));
+    nKey := UpperCase(StringReplace(nStr, '.', '_', [rfReplaceAll, rfIgnoreCase]));
     //key name
 
     Inc(nKeyNum);
-    if nKey <> '' then
+    if nKeys <> '' then
     begin
-      if Length(nKey + ', ' + nPrefix) > nLineWidth then //超长截断
+      if Length(nKeys + ', ' + nKey) > nLineWidth then //超长截断
       begin
-        FListB.Add(nKey + ',');
-        nKey := '  ' + nPrefix;
-      end else nKey := nKey + ', ' + nPrefix;
-    end else nKey := nPrefix;
+        FListB.Add(nKeys + ',');
+        nKeys := '  ' + nKey;
+      end else nKeys := nKeys + ', ' + nKey;
+    end else nKeys := nKey;
 
-    nPrefix := nPrefix + StringOfChar(' ', nLen - Length(nPrefix));
-    Edit2.Lines.Add(nPrefix + '= ''' + nStr + ''';');
+    nKey := nKey + StringOfChar(' ', nLen - Length(nKey));
+    Edit2.Lines.Add(nKey + '= ''' + nStr + ''';');
   end;
 
-  if nKey <> '' then
-    FListB.Add(nKey);
-  nKey := Format('ConfigKeys: array[1..%d] of string = (%s);', [nKeyNum, FListB.Text]);
+  if nKeys <> '' then
+    FListB.Add(nKeys);
+  nKeys := Format('ConfigKeys: array[1..%d] of string = (%s);', [nKeyNum, FListB.Text]);
+
+  if nTypes <> '' then
+    FListA.Add(nTypes);
+  nTypes := Format('ConfigTypes: array[1..%d] of TKKConfigType = (%s);', [nKeyNum, FListA.Text]);
 
   Edit2.Lines.Add('');
-  Edit2.Lines.Add(nKey);
+  Edit2.Lines.Add(nKeys);
+  Edit2.Lines.Add('');
+  Edit2.Lines.Add(nTypes);
   Edit2.Lines.Add('{*Configuration properties*}');
 end;
 

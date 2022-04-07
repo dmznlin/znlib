@@ -18,6 +18,7 @@ uses
   {$IFDEF EnableThreadPool}UThreadPool,{$ENDIF}
   {$IFDEF EnableChannelManager}UMgrChannel,{$ENDIF}
   {$IFDEF EnableMQTTMessager}UMosMessager,{$ENDIF}
+  {$IFDEF EnableKafkaManager}UKafkaManager,{$ENDIF}
   {$IFDEF EnableDataDictManager}UMgrDataDict,{$ENDIF}
   {$IFDEF EnableParamManager}UParameters,{$ENDIF}
   {$IFDEF EnablePopedomManager}UMgrPopedom,{$ENDIF} ULibFun, UWaitItem;
@@ -81,6 +82,7 @@ type
     {$IFDEF EnableThreadPool}FThreadPool: TThreadPoolManager;{$ENDIF}
     //线程管理器
     {$IFDEF EnableMQTTMessager}FMessageCenter: TMQTTMessager;{$ENDIF}
+    {$IFDEF EnableKafkaManager}FKafkaManager: TKafkaManager;{$ENDIF}
     //消息管理器
     {$IFDEF EnableDBManager}FDBManager: TDBManager;{$ENDIF}
     //数据库管理器

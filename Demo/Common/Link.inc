@@ -37,3 +37,6 @@
 
 {$DEFINE MQTTMessager}
 //启用MQTT消息中心
+
+{$DEFINE KafkaManager}
+//启用Kafka消息中心

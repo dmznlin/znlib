@@ -27,6 +27,9 @@
         <Projects Include="Popedom\Popedom.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="kafka\kafka.dproj">
+            <Dependencies/>
+        </Projects>
     </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Default.Personality.12</Borland.Personality>
@@ -107,14 +110,23 @@
     <Target Name="Popedom:Make">
         <MSBuild Projects="Popedom\Popedom.dproj" Targets="Make"/>
     </Target>
+    <Target Name="kafka">
+        <MSBuild Projects="kafka\kafka.dproj"/>
+    </Target>
+    <Target Name="kafka:Clean">
+        <MSBuild Projects="kafka\kafka.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="kafka:Make">
+        <MSBuild Projects="kafka\kafka.dproj" Targets="Make"/>
+    </Target>
     <Target Name="Build">
-        <CallTarget Targets="DBPool;HighTimer;ThreadPool;SerialID;DataDict;MQTT;Params;Popedom"/>
+        <CallTarget Targets="DBPool;HighTimer;ThreadPool;SerialID;DataDict;MQTT;Params;Popedom;kafka"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="DBPool:Clean;HighTimer:Clean;ThreadPool:Clean;SerialID:Clean;DataDict:Clean;MQTT:Clean;Params:Clean;Popedom:Clean"/>
+        <CallTarget Targets="DBPool:Clean;HighTimer:Clean;ThreadPool:Clean;SerialID:Clean;DataDict:Clean;MQTT:Clean;Params:Clean;Popedom:Clean;kafka:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="DBPool:Make;HighTimer:Make;ThreadPool:Make;SerialID:Make;DataDict:Make;MQTT:Make;Params:Make;Popedom:Make"/>
+        <CallTarget Targets="DBPool:Make;HighTimer:Make;ThreadPool:Make;SerialID:Make;DataDict:Make;MQTT:Make;Params:Make;Popedom:Make;kafka:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

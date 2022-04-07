@@ -91,6 +91,15 @@
   {$ENDIF}
 {$ENDIF}
 
+{$IFDEF KafkaManager}
+  {$IFDEF MSWin}
+    {$DEFINE LogManager}
+    //启用日志管理器
+    {$DEFINE EnableKafkaManager}
+    //启用Kafka消息中心
+  {$ENDIF}
+{$ENDIF}
+
 {$IFDEF PlugManager}
   {$DEFINE LogManager}
   //启用日志管理器

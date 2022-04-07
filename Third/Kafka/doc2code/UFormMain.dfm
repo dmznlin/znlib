@@ -69,7 +69,7 @@ object fFormMain: TfFormMain
       EditLabel.Height = 12
       EditLabel.Caption = #34892#23383#31526#25968':'
       TabOrder = 2
-      Text = '80'
+      Text = '76'
     end
     object Check1: TCheckBox
       Left = 192

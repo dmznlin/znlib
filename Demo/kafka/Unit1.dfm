@@ -31,7 +31,7 @@ object fFormMain: TfFormMain
     TabOrder = 1
     object Btn1: TButton
       Left = 89
-      Top = 14
+      Top = 45
       Width = 75
       Height = 25
       Caption = 'Btn1'
@@ -68,6 +68,24 @@ object fFormMain: TfFormMain
         'bootstrap.servers=123.56.150.117:8082')
       ScrollBars = ssBoth
       TabOrder = 3
+    end
+    object Btn3: TButton
+      Left = 8
+      Top = 45
+      Width = 75
+      Height = 25
+      Caption = 'client'
+      TabOrder = 4
+      OnClick = Btn3Click
+    end
+    object Btn4: TButton
+      Left = 89
+      Top = 14
+      Width = 75
+      Height = 25
+      Caption = 'config'
+      TabOrder = 5
+      OnClick = Btn4Click
     end
   end
 end
