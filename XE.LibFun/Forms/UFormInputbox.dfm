@@ -12,7 +12,7 @@ object fFormInputBox: TfFormInputBox
   Font.Name = #23435#20307
   Font.Style = []
   OldCreateOrder = False
-  Position = poDesktopCenter
+  Position = poMainFormCenter
   PixelsPerInch = 96
   TextHeight = 12
   object BtnOK: TButton

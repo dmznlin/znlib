@@ -187,6 +187,11 @@ type
     class procedure LoadParameters(var nParam: TAppParam; nIni: TIniFile = nil;
       const nExtend: Boolean = False); static;
     //载入系统配置参数
+    class procedure ShowDlg(const nMsg,nTitle: string;
+      const nHwnd: integer = -1); static;
+    class function QueryDlg(const nMsg,nTitle: string;
+      const nHwnd: integer = -1): Boolean; static;
+    //系统消息框
   end;
 
   TStringHelper = class
@@ -1478,6 +1483,45 @@ begin
       Result := FData;
       Break;
     end;
+end;
+
+//Date: 2023-03-01
+//Parm: 内容;标题;句柄
+//Desc: 消息提示框
+class procedure TApplicationHelper.ShowDlg(const nMsg, nTitle: string;
+  const nHwnd: integer);
+var nStr: string;
+    nHandle: THandle;
+begin
+  if nTitle = '' then
+       nStr := '提示'
+  else nStr := nTitle;
+
+  if nHwnd < 0 then
+       nHandle := GetActiveWindow
+  else nHandle := nHwnd;
+
+  Messagebox(nHandle, PChar(nMsg), PChar(nStr), mb_Ok + Mb_IconInformation);
+end;
+
+//Date: 2023-03-01
+//Parm: 内容;标题;句柄
+//Desc: 询问对话框
+class function TApplicationHelper.QueryDlg(const nMsg, nTitle: string;
+  const nHwnd: integer): Boolean;
+var nStr: string;
+    nHandle: THandle;
+begin
+  if nTitle = '' then
+       nStr := '询问'
+  else nStr := nTitle;
+
+  if nHwnd < 0 then
+       nHandle := GetActiveWindow
+  else nHandle := nHwnd;
+
+  Result := Messagebox(nHandle, PChar(nMsg),
+            PChar(nStr), Mb_YesNo + MB_ICONQUESTION) = IDYes;
 end;
 
 //------------------------------------------------------------------------------

@@ -93,7 +93,7 @@ begin
     nList.Free;
   end;
 
-  LabelHint.Height := nNum * (Canvas.TextHeight('»Û') + 2);
+  LabelHint.Height := nNum * (Canvas.TextHeight('»Û') + 5);
   LabelHint.Caption := nStr;
 
   EditValue.Top := LabelHint.Top + LabelHint.Height + 5;
