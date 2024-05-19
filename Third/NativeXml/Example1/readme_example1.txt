@@ -1,1 +1,0 @@
-In order to compile, first place NativeXml.dcu in this project folder. Select the correct version from the subfolders Delphi5, Delphi6, Delphi7.

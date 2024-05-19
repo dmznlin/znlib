@@ -84,6 +84,15 @@ type
   TMQTTOnMessageEvent = procedure (const nTopic,nPayload: string) of object;
   //事件声明
 
+  PMQTTtls = ^TMQTTtls;
+  TMQTTtls = record
+    FUseTLS: Boolean;                        //启用tls
+    FCAFile: string;                         //ca
+    FCAPath: string;                         //ca-dir
+    FCertFile: string;                       //cert
+    FKeyFile: string;                        //key
+  end;
+
   TMQTTClient = class(TObject)
   private
     FServerHost: string;
@@ -96,6 +105,8 @@ type
     FClient: p_mosquitto;
     FClientData: TMQTTClientData;
     {*客户端*}
+    FTls: TMQTTtls;
+    {*TLS设置*}
     FTopics: TMQTTTopicItems;
     FPublishs: TMQTTPublishItems;
     FNowPublish: TMQTTPublishItem;
@@ -112,6 +123,7 @@ type
     FEventMode: TMQTTEventMode;
     FOnConnectEvent: TMQTTOnConnectEvent;
     FOnMessageEvent: TMQTTOnMessageEvent;
+    function GetMQTTtls: PMQTTtls;
     {*事件相关*}
   protected
     procedure DoThreadWork(const nConfig: PThreadWorkerConfig;
@@ -149,6 +161,7 @@ type
     property ClientID: string read FClientID write FClientID;
     property KeepAlive: Integer read FKeepAlive write FKeepAlive;
     property DetailLog: Boolean read FDetailLog write FDetailLog;
+    property TLSConfig: PMQTTtls read GetMQTTtls;
     property OnConnect: TMQTTOnConnect read FOnConnect write FOnConnect;
     property OnMessage: TMQTTOnMessage read FOnMessage write FOnMessage;
     property EventMode: TMQTTEventMode read FEventMode write FEventMode;
@@ -382,6 +395,9 @@ begin
   FServerPort := 1883;
   FServerHost := '127.0.0.1';
 
+  FTls.FUseTLS := False;
+  //默认不使用
+
   FKeepAlive := 600;
   FDetailLog := False;
   FEventMode := emMain;
@@ -440,6 +456,13 @@ begin
   FreeAndNil(FSyncLock);
   SyncPostAbort(Self);
   inherited;
+end;
+
+//Date: 2024-01-31
+//Desc: 配置tls参数
+function TMQTTClient.GetMQTTtls: PMQTTtls;
+begin
+  Result := @FTls;
 end;
 
 //Date: 2019-06-21
@@ -729,6 +752,13 @@ begin
       mosquitto_username_pw_set(FClient, PAnsiChar(AnsiString(FUserName)),
         PAnsiChar(AnsiString(FPassword)));
     //set credentials
+
+    if FTls.FUseTLS then
+      mosquitto_tls_set(FClient, PAnsiChar(AnsiString(FTls.FCAFile)),
+        PAnsiChar(AnsiString(Ftls.FCAPath)),
+        PAnsiChar(AnsiString(Ftls.FCertFile)),
+        PAnsiChar(AnsiString(FTls.FKeyFile)), nil);
+    //set tls
   end;
 
   FSyncLock.Enter;

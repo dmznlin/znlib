@@ -228,6 +228,8 @@ type
     {*创建释放*}
     procedure StopMe;
     {*停止线程*}
+    property Terminated;
+    {*属性相关*}
   end;
 
   TThreadMonitor = class(TThread)
@@ -597,6 +599,7 @@ begin
     nPWorker.FWorker := nWorker^;
     nPWorker.FWorkerID := gMG.FSerialIDManager.GetID;
 
+    Result := nPWorker.FWorkerID;
     nPWorker.FWakeupCall := False;
     //唤醒时,即使未到时间也会被执行
 

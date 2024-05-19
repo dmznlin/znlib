@@ -7,9 +7,9 @@ unit UMosquitto;
 interface
 
 const
-  LIBMOSQUITTO_MAJOR             = 1;
-  LIBMOSQUITTO_MINOR             = 6;
-  LIBMOSQUITTO_REVISION          = 2; //¿â°æ±¾ºÅ
+  LIBMOSQUITTO_MAJOR             = 2;
+  LIBMOSQUITTO_MINOR             = 0;
+  LIBMOSQUITTO_REVISION          = 18; //¿â°æ±¾ºÅ
 
   LIBMOSQUITTO_VERSION_NUMBER    = LIBMOSQUITTO_MAJOR * 1000000 +
     LIBMOSQUITTO_MINOR * 1000 + LIBMOSQUITTO_REVISION;

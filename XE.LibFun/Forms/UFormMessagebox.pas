@@ -45,7 +45,7 @@ begin
   with TfFormMessagebox.Create(Application) do
   begin
     Caption := nTitle;
-    BtnOK.Caption := 'È·¶¨';
+    BtnOK.Visible := False;
     BtnExit.Caption := '¹Ø±Õ';
 
     SetHint(nHint);
