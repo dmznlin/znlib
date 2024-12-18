@@ -187,6 +187,8 @@ type
     class procedure LoadParameters(var nParam: TAppParam; nIni: TIniFile = nil;
       const nExtend: Boolean = False); static;
     //载入系统配置参数
+    class procedure ShowMsg(const nMsg,nTitle: string);
+    //弹出式消息框
     class procedure ShowDlg(const nMsg,nTitle: string;
       const nHwnd: integer = -1); static;
     class function QueryDlg(const nMsg,nTitle: string;
@@ -1484,6 +1486,54 @@ begin
       Break;
     end;
 end;
+
+{$IFDEF WIN32}
+type
+  TPopMsg_Init = procedure (const nApp: TApplication; const nScreen: TScreen;
+    const nBackImg: integer = -1); stdcall;
+  TPopMsg_Free = procedure; stdcall;
+  TPopMsg_ShowMsg = procedure (const nMsg,nTitle: PChar); stdcall;
+
+var
+  gPopMsg_Hwnd: THandle = 0;
+  gPopMsg_Init: TPopMsg_Init = nil;
+  gPopMsg_Free: TPopMsg_Free = nil;
+  gPopMsg_ShowMsg: TPopMsg_ShowMsg = nil;
+  gPopMsg_BackImg: integer = 0;
+
+//Desc: 初始化函数库
+function InitPopMsgLibrary: Boolean;
+var nStr: string;
+begin
+  Result := False;
+  gPopMsg_Hwnd := LoadLibrary('DlgMsgW.dll');
+  if gPopMsg_Hwnd < 32 then Exit;
+
+  @gPopMsg_Init := GetProcAddress(gPopMsg_Hwnd, 'PopMsg_Init');
+  @gPopMsg_Free := GetProcAddress(gPopMsg_Hwnd, 'PopMsg_Free');
+  @gPopMsg_ShowMsg := GetProcAddress(gPopMsg_Hwnd, 'PopMsg_ShowMsg');
+
+  Result := Assigned(gPopMsg_Init) and
+            Assigned(gPopMsg_Free) and
+            Assigned(gPopMsg_ShowMsg);
+  if Result then gPopMsg_Init(nil, nil, gPopMsg_BackImg);
+end;
+
+//Date: 2024-12-17
+//Parm: 内容;标题
+//Desc: 弹出式消息框
+class procedure TApplicationHelper.ShowMsg(const nMsg,nTitle: string);
+begin
+  if not (Assigned(gPopMsg_ShowMsg) or InitPopMsgLibrary) then
+    raise Exception.Create('Load PopMsg Library Error!');
+  gPopMsg_ShowMsg(PChar(nMsg), PChar(nTitle));
+end;
+{$ELSE}
+class procedure TApplicationHelper.ShowMsg(const nMsg,nTitle: string);
+begin
+  ShowDlg(nMsg, nTitle, Application.ActiveFormHandle);
+end;
+{$ENDIF}
 
 //Date: 2023-03-01
 //Parm: 内容;标题;句柄
@@ -3467,8 +3517,19 @@ begin
   end;
 end;
 
+//Date: 2024-12-17
+//Desc: 释放函数库资源
+procedure DisposeLibrary;
+begin
+  {$IFDEF WIN32}
+  if gPopMsg_Hwnd > 0 then
+    FreeLibrary(gPopMsg_Hwnd);
+  //xxxxx
+  {$ENDIF}
+end;
+
 initialization
   InitLibrary();
 finalization
-  //nothing
+  DisposeLibrary();
 end.
