@@ -162,18 +162,22 @@ Type
   End;
 
 Procedure Register;
-Function IsNT4: Boolean;
 
 Implementation
 
+Procedure Register;
+Begin
+  RegisterComponents('Custom', [TMSNPopUp]);
+End;
+
 Function IsNT4: Boolean;
 Var
-  VersionInfo: _OSVERSIONINFOA;
+  VersionInfo: TOSVersionInfo;
 Begin
   Result := False;
 
   VersionInfo.dwOSVersionInfoSize := sizeof(VersionInfo);
-  GetVersionExA(VersionInfo);
+  GetVersionEx(VersionInfo);
 
   If VersionInfo.dwPlatformId = VER_PLATFORM_WIN32_NT Then
    Begin
@@ -181,11 +185,6 @@ Begin
       (VersionInfo.dwMinorVersion = 51)) Then
       Result := True;
    End;
-End;
-
-Procedure Register;
-Begin
-  RegisterComponents('Custom', [TMSNPopUp]);
 End;
 
 // component stuff
@@ -570,12 +569,17 @@ Begin
   Top     := OldTop;
 
   imgGradient.Align := alClient;
-  tileX := imgGradient.Width;
-  tileY := imgGradient.Height;
-
+  r := Rect(imgGradient.Left, imgGradient.Top,
+            imgGradient.Width, imgGradient.Height);
   imgGradient.Align := alNone;
-  imgGradient.Width := tileX;
-  imgGradient.Height := tileY;
+
+  //reset range
+  imgGradient.Left := r.Left;
+  imgGradient.Top := r.Top;
+  imgGradient.Width := r.Right;
+  imgGradient.Height := r.Bottom;
+
+  //for scroll
   pnlBorder.Align   := alNone;
 
   //Jelmer
