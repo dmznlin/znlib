@@ -72,6 +72,8 @@ type
     //创建释放
     class procedure RegistMe(const nReg: Boolean); override;
     //注册管理器
+    procedure RunBeforApplicationHalt; override;
+    //应用退出时执行清空
     function IsExists(const nClass: TClass): Boolean;
     //是否注册
     function NewClass(const nClass: TClass; const nNew: TObjectNewOne;
@@ -149,11 +151,48 @@ begin
 end;
 
 destructor TObjectPoolManager.Destroy;
+begin
+  ClearPool(True);
+  //clear and free
+  inherited;
+end;
+
+//Date: 2017-03-23
+//Parm: 是否注册
+//Desc: 向系统注册管理器对象
+class procedure TObjectPoolManager.RegistMe(const nReg: Boolean);
+var nIdx: Integer;
+begin
+  nIdx := GetMe(TObjectPoolManager);
+  if nReg then
+  begin     
+    if not Assigned(gMG.FManagers[nIdx].FManager) then
+      gMG.FManagers[nIdx].FManager := TObjectPoolManager.Create;
+    gMG.FObjectPool := gMG.FManagers[nIdx].FManager as TObjectPoolManager;
+  end else
+  begin
+    gMG.FObjectPool := nil;
+    FreeAndNil(gMG.FManagers[nIdx].FManager);
+  end;
+end;
+
+//Date: 2024-12-24
+//Desc: 应用退出前清空对象管理器
+procedure TObjectPoolManager.RunBeforApplicationHalt;
+begin
+  ClearPool(True);
+  inherited;
+end;
+
+//Desc: 清理对象池
+procedure TObjectPoolManager.ClearPool(const nFree: Boolean);
 var nInit: Int64;
     nList: TStrings;
+    nIdx,i: Integer;
+    nItem: PObjectPoolItem;
 begin
   SyncEnter;
-  FSrvClosed := cYes; //set close flag  
+  FSrvClosed := cYes; //set close flag
   SyncLeave;
 
   if FNumLocked > 0 then
@@ -181,35 +220,8 @@ begin
       end;
     end;
   end;
-    
-  ClearPool(True);
-  inherited;
-end;
 
-//Date: 2017-03-23
-//Parm: 是否注册
-//Desc: 向系统注册管理器对象
-class procedure TObjectPoolManager.RegistMe(const nReg: Boolean);
-var nIdx: Integer;
-begin
-  nIdx := GetMe(TObjectPoolManager);
-  if nReg then
-  begin     
-    if not Assigned(gMG.FManagers[nIdx].FManager) then
-      gMG.FManagers[nIdx].FManager := TObjectPoolManager.Create;
-    gMG.FObjectPool := gMG.FManagers[nIdx].FManager as TObjectPoolManager;
-  end else
-  begin
-    gMG.FObjectPool := nil;
-    FreeAndNil(gMG.FManagers[nIdx].FManager);
-  end;
-end;
-
-//Desc: 清理对象池
-procedure TObjectPoolManager.ClearPool(const nFree: Boolean);
-var nIdx,i: Integer;
-    nItem: PObjectPoolItem;
-begin
+  //----------------------------------------------------------------------------
   for nIdx := Low(FPool) to High(FPool) do
   with FPool[nIdx] do
   begin
@@ -237,7 +249,7 @@ begin
     end;
   end;
 
-  if nFree then  
+  if nFree then
     SetLength(FPool, 0);
   //clear all
 end;

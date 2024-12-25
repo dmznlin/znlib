@@ -1503,7 +1503,6 @@ var
 
 //Desc: ³õÊ¼»¯º¯Êý¿â
 function InitPopMsgLibrary: Boolean;
-var nStr: string;
 begin
   Result := False;
   gPopMsg_Hwnd := LoadLibrary('DlgMsgW.dll');

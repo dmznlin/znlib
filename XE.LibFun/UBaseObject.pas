@@ -139,6 +139,8 @@ type
     function GetSID: string;
     function GetSerialID: TSerialID;
     //获取标识
+    function RandomID(const nLen: Integer): string;
+    //获取随机标识
     function CompareID(const nA,nB: TSerialID;
       const nRelation: TSerialIDRelation): Boolean;
     //对比标识
@@ -441,7 +443,7 @@ var nIdx: Integer;
 begin
   nIdx := GetMe(TSerialIDManager);
   if nReg then
-  begin     
+  begin
     if not Assigned(gMG.FManagers[nIdx].FManager) then
       gMG.FManagers[nIdx].FManager := TSerialIDManager.Create;
     gMG.FSerialIDManager := gMG.FManagers[nIdx].FManager as TSerialIDManager;
@@ -481,6 +483,28 @@ end;
 function TSerialIDManager.GetSID: string;
 begin
   Result := GetSerialID.FID.ToString;
+end;
+
+//Date: 2024-12-25
+//Parm: 标识长度
+//Desc: 依据时间生成nLen长度的随机标识
+function TSerialIDManager.RandomID(const nLen: Integer): string;
+var nL,nPos: Integer;
+begin
+  Result := TDateTimeHelper.DateTimeSerial(False) + IntToStr(Random(999));
+  Result := TEncodeHelper.EncodeMD5(Result);
+
+  nL := Length(Result);
+  nPos := nL;
+
+  if nL > nLen then
+    nL := nLen;
+  //xxxxx
+
+  nPos := Random(nPos - nL + 1);
+  if nPos < 1 then
+    nPos := 1;
+  Result := Copy(Result, nPos, nL);
 end;
 
 //Date: 2019-01-22
