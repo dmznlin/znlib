@@ -44,3 +44,6 @@ https://github.com/foxitsoftware/DelphiZXingQRCode.git
 
 *.Grijjy Foundation: 对象、记录序列化等基础库
 https://github.com/grijjy/GrijjyFoundation
+
+*.TSimpleGraph: provides a canvas for drawing simple directed graphs
+https://github.com/Khojasteh/simple-graph
