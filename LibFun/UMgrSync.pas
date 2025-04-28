@@ -34,6 +34,8 @@ type
     {*窗口句柄*}
     FMaxRecord: Integer;
     {*最大记录*}
+    FIsBusy: Boolean;
+    {*同步中*}
   protected
     procedure WndProc(var nMsg: TMessage);
     {*消息链*}
@@ -92,6 +94,7 @@ const
 constructor TCustomDataSynchronizer.Create;
 begin
   inherited Create;
+  FIsBusy := False;
   FMaxRecord := cMaxRecord;
 
   FDataList := TList.Create;
@@ -143,31 +146,39 @@ var nList: TList;
     i,nCount: integer;
     nItem: PSyncItemData;
 begin
-  if (nMsg.Msg = WM_NewData) and (nMsg.LParam = WM_LParam) then
-  begin
-    nList := FBuffer.LockList;
-    try
-      nCount := nList.Count - 1;
+  if (nMsg.Msg=WM_NewData) and (nMsg.LParam=WM_LParam) and (not FIsBusy) then
+  try
+    FIsBusy := True;
+    //set tag
+
+    while True do
+    begin
+      nList := FBuffer.LockList;
+      try
+        nCount := nList.Count - 1;
+        for i:=0 to nCount do
+          FDataList.Add(nList[i]);
+        nList.Clear;
+      finally
+        FBuffer.UnlockList;
+      end;
+
+      if FDataList.Count < 1 then Exit;
+      nCount := FDataList.Count - 1;
+
       for i:=0 to nCount do
-        FDataList.Add(nList[i]);
-      nList.Clear;
-    finally
-      FBuffer.UnlockList;
+      try
+        nItem := FDataList[i];
+        DoSync(nItem.FData, nItem.FSize);
+      except
+        //ignor any error
+      end;
+
+      ClearDataList(FDataList);
+      //xxxxx
     end;
-
-    if FDataList.Count < 1 then Exit;
-    nCount := FDataList.Count - 1;
-
-    for i:=0 to nCount do
-    try
-      nItem := FDataList[i];
-      DoSync(nItem.FData, nItem.FSize);
-    except
-      //ignor any error
-    end;
-
-    ClearDataList(FDataList);
-    //xxxxx
+  finally
+    FIsBusy := False;
   end;
 end;
 
