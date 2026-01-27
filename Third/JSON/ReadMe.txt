@@ -2,7 +2,8 @@
 https://github.com/hgourvest/superobject.git
 
 *.修正内容:
-*添加支持delphi10.4的编译条件.
+1.添加支持delphi10.4的编译条件.
+2.添加delphi7优先支持.
 
 *.使用方法:
 1.从github获取完整版本的superobject并添加到Library Path中.
