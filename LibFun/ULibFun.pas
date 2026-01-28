@@ -132,7 +132,8 @@ procedure AddVerifyData(const nFile,nSeed: string);
 function GetCPUIDStr: string;
 //处理器标识
 function IsSystemExpire(const nFile: string): Boolean;
-procedure AddExpireDate(const nFile,nDate: string; const nInit: Boolean);
+procedure AddExpireDate(const nFile,nDate: string; const nInit: Boolean;
+ const nIni: TIniFile = nil);
 //系统日期限制
 
 //------------------------------------------------------------------------------
@@ -1121,10 +1122,16 @@ end;
 //Date: 2017-05-18
 //Parm: 配置文件;日期;是否初始化
 //Desc: 添加过期日期限制
-procedure AddExpireDate(const nFile,nDate: string; const nInit: Boolean);
+procedure AddExpireDate(const nFile,nDate: string; const nInit: Boolean;
+  const nIni: TIniFile);
 var nStr,nEn: string;
+    nCfg: TIniFile;
 begin
-  with TIniFile.Create(nFile) do
+  if Assigned(nIni) then
+       nCfg := nIni
+  else nCfg := TIniFile.Create(nFile);
+
+  with nCfg do
   try
     if nInit then
     begin
@@ -1182,7 +1189,9 @@ begin
       end;
     end;
   finally
-    Free;
+    if not Assigned(nIni) then
+      nCfg.Free;
+    //xxxxx
   end;   
 end;
 
@@ -1191,11 +1200,13 @@ end;
 //Desc: 验证nFile文件配置的日期是否过期
 function IsSystemExpire(const nFile: string): Boolean;
 var nStr,nEn,nLock: string;
+    nIni: TIniFile;
 begin
-  with TIniFile.Create(nFile) do
+  nIni := TIniFile.Create(nFile);
+  with nIni do
   try
     Result := True;
-    AddExpireDate(nFile, '', False);
+    AddExpireDate(nFile, '', False, nIni);
 
     nStr := MD5Print(MD5String('id:' + GetCPUIDStr));
     if nStr <> ReadString('System', 'Local', '') then Exit;
@@ -1216,7 +1227,7 @@ begin
       Result := Str2Date(nStr) <= Str2Date(nEn);
     end;
   finally
-    Free;
+    nIni.Free;
   end;
 end;
 
