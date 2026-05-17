@@ -21,3 +21,6 @@
 
 &.Share
 项目公用资源(Ex: DLL),需加入Path
+
+&.Script
+系统(bat,shell)脚本,用于特定功能
