@@ -273,11 +273,21 @@ function get_kubeasz() {
   # check if kubeasz already existed
   [[ -d "$BASE/roles/kube-node" ]] && { logger warn "kubeasz already existed"; return 0; }
 
+  item="easzlab/kubeasz:$KUBEASZ_VER"
+  if [[ ! -f "$imageDir/kubeasz_$KUBEASZ_VER.tar" ]];then
+    docker pull "easzlab.io.local:5000/$item" && \
+    docker tag "easzlab.io.local:5000/$item" "$item" && \
+    docker save -o "$imageDir/kubeasz_$KUBEASZ_VER.tar" "$item"
+  fi
+
   if [[ ! -f "$imageDir/kubeasz_$KUBEASZ_VER.tar" ]];then
     logger info "downloading kubeasz: $KUBEASZ_VER"
-    docker pull "easzlab/kubeasz:$KUBEASZ_VER" && \
-    docker save -o "$imageDir/kubeasz_$KUBEASZ_VER.tar" "easzlab/kubeasz:$KUBEASZ_VER" || \
+    docker pull "$item" && \
+    docker save -o "$imageDir/kubeasz_$KUBEASZ_VER.tar" "$item" || \
     { logger error "download failed!"; return 1; }
+
+    docker tag "$item" "easzlab.io.local:5000/$item" && \
+    docker push "easzlab.io.local:5000/$item"
   else
     docker load -i "$imageDir/kubeasz_$KUBEASZ_VER.tar"
   fi
@@ -305,7 +315,13 @@ function get_k8s_bin() {
   [[ -f "$BASE/bin/kubelet" ]] && { logger warn "kubernetes binaries existed"; return 0; }
 
   logger info "downloading kubernetes: $K8S_BIN_VER binaries"
-  docker run --rm -v "$BASE/bin":/tmp/out easzlab/kubeasz-k8s-bin:"$K8S_BIN_VER" \
+  item="easzlab/kubeasz-k8s-bin:$K8S_BIN_VER"
+  if ! docker image inspect $item > /dev/null 2>&1; then
+    docker pull "easzlab.io.local:5000/$item" && \
+    docker tag "easzlab.io.local:5000/$item" "$item"
+  fi
+
+  docker run --rm -v "$BASE/bin":/tmp/out $item \
           sh -c "cp -f /k8s/* /tmp/out/"
 }
 
@@ -313,7 +329,13 @@ function get_ext_bin() {
   [[ -f "$BASE/bin/etcdctl" ]] && { logger warn "extra binaries existed"; return 0; }
 
   logger info "downloading extral binaries kubeasz-ext-bin:$EXT_BIN_VER"
-  docker run --rm -v "$BASE/bin":/tmp/out "easzlab/kubeasz-ext-bin:$EXT_BIN_VER" \
+  item="easzlab/kubeasz-ext-bin:$EXT_BIN_VER"
+  if ! docker image inspect $item > /dev/null 2>&1; then
+    docker pull "easzlab.io.local:5000/$item" && \
+    docker tag "easzlab.io.local:5000/$item" "$item"
+  fi
+
+  docker run --rm -v "$BASE/bin":/tmp/out $item \
           sh -c "cp -rf /extra/* /tmp/out/"
 }
 
@@ -611,15 +633,15 @@ function down_and_save_images_orig(){
     image_name="${image_part%:*}"
     image_tag="${image_part##*:}"
     image_file="$imageDir/${image_name}_${image_tag}.tar"
-	
-	from_local=false
+
+    from_local=false
     if [[ ! -f "$image_file" ]];then
       docker pull "easzlab.io.local:5000/${NS}/${image_part}" && \
       docker tag  "easzlab.io.local:5000/${NS}/${image_part}" "$item" && \
       docker save -o "$image_file" "$item" && \
       from_local=true
     fi
-	
+
     if [[ ! -f "$image_file" ]];then
       docker pull "$item" && \
       docker save -o "$image_file" "$item" || \
@@ -659,7 +681,7 @@ function down_and_save_images_with_mirror(){
       docker save -o "$image_file" "$item" && \
       from_local=true
     fi
-	
+
     [[ "$registry" == "docker.io" ]] && item="${REGISTRY_MIRROR}/${repository}"
 
     if [[ ! -f "$image_file" ]];then
@@ -670,12 +692,12 @@ function down_and_save_images_with_mirror(){
       docker load -i "$image_file"
       from_local=true
     fi
-	
+
     if [ "$from_local" == false ]; then
       docker tag "$item" "easzlab.io.local:5000/${NS}/${image_part}"
       docker push "easzlab.io.local:5000/${NS}/${image_part}" || \
       { logger error "push easzlab.io.local:5000/${NS}/${image_part} failed!"; return 1; }
-	fi
+    fi
   done
 }
 
@@ -727,7 +749,7 @@ function download_all() {
   get_kubeasz && \
   get_k8s_bin && \
   get_ext_bin && \
-  start_local_registry && \
+  # start_local_registry && \
   get_default_images
 }
 
