@@ -1,0 +1,109 @@
+#!/bin/bash
+
+# ====================== 使用说明 ======================
+# 作用：检查镜像是否存在 → 不存在则拉取 → 复制到容器 → 自动检测ctr并导入
+# 参数：$1 = 镜像名称(带tag)  $2 = 容器名称
+# 示例：./docker_to_container.sh nginx:alpine my-container
+# ======================================================
+
+# 检查参数数量
+if [ $# -ne 2 ]; then
+    echo -e "\033[31m错误：参数不正确！\033[0m"
+    echo "用法：$0 <镜像名称> <容器名称>"
+    echo "示例：$0 nginx:latest test-container"
+    exit 1
+fi
+
+# 接收参数
+IMAGE_NAME="$1"
+CONTAINER_NAME="$2"
+# 临时镜像文件名（唯一标识）
+TEMP_TAR="temp_image_$(date +%s).tar"
+
+echo -e "\033[32m========== 开始执行任务 ==========\033[0m"
+echo "镜像名称：$IMAGE_NAME"
+echo "目标容器：$CONTAINER_NAME"
+echo "临时文件：$TEMP_TAR"
+echo -e "\033[32m==================================\033[0m"
+
+# ====================== 1. 检查镜像是否已存在 ======================
+echo -e "\n\033[34m[1/5] 检查本地是否已有镜像...\033[0m"
+if docker image inspect "$IMAGE_NAME" >/dev/null 2>&1; then
+    echo -e "\033[32m✅ 镜像已存在，跳过拉取\033[0m"
+else
+    echo -e "\033[33m⚠️  镜像不存在，开始拉取...\033[0m"
+
+    # 构造私有仓库镜像名
+    PRIVATE_IMAGE="docker.runsoft.online:5000/docker.io/${IMAGE_NAME##*/}"
+
+    # 尝试从私有仓库拉取镜像
+    if docker pull "$PRIVATE_IMAGE" 2>/dev/null; then
+        echo "从私有仓库拉取成功: $PRIVATE_IMAGE"
+
+        # 使用 tag 去掉私有仓库地址，保留原镜像名
+        docker tag "$PRIVATE_IMAGE" "$IMAGE_NAME"
+        echo "已标记为本地镜像: $IMAGE_NAME"
+
+        # 删除带私有仓库前缀的镜像
+        docker rmi "$PRIVATE_IMAGE" || true
+    fi
+
+    if ! docker pull "$IMAGE_NAME"; then
+        echo -e "\033[31m错误：镜像拉取失败！\033[0m"
+        exit 1
+    fi
+    echo -e "\033[32m✅ 镜像拉取完成\033[0m"
+fi
+
+# ====================== 2. 保存镜像为tar文件 ======================
+echo -e "\n\033[34m[2/5] 保存镜像为本地文件...\033[0m"
+if ! docker save -o "$TEMP_TAR" "$IMAGE_NAME"; then
+    echo -e "\033[31m错误：镜像保存失败！\033[0m"
+    rm -f "$TEMP_TAR"
+    exit 1
+fi
+
+# ====================== 3. 复制文件到容器 ======================
+echo -e "\n\033[34m[3/5] 复制镜像文件到容器...\033[0m"
+if ! docker cp "$TEMP_TAR" "$CONTAINER_NAME:/tmp/"; then
+    echo -e "\033[31m错误：文件复制到容器失败！\033[0m"
+    rm -f "$TEMP_TAR"
+    exit 1
+fi
+
+# ====================== 4. 容器内执行导入（检测ctr） ======================
+echo -e "\n\033[34m[4/5] 容器内检测ctr并导入镜像...\033[0m"
+
+# 进入容器执行命令
+docker exec "$CONTAINER_NAME" /bin/bash -c "
+cd /tmp
+# 检测是否存在 ctr 命令
+if command -v ctr >/dev/null 2>&1; then
+    echo -e '\033[32m检测到ctr命令，开始导入...\033[0m'
+    ctr -n k8s.io images import $TEMP_TAR
+    IMPORT_RESULT=\$?
+else
+    echo -e '\033[33m未检测到ctr命令，跳过导入\033[0m'
+    IMPORT_RESULT=0
+fi
+
+# 清理容器内临时文件
+rm -f $TEMP_TAR
+exit \$IMPORT_RESULT
+"
+
+# 获取容器内执行结果
+EXEC_RESULT=$?
+
+# ====================== 5. 清理本地临时文件 ======================
+echo -e "\n\033[34m[5/5] 清理本地临时文件...\033[0m"
+rm -f "$TEMP_TAR"
+
+# ====================== 最终结果 ======================
+if [ $EXEC_RESULT -eq 0 ]; then
+    echo -e "\n\033[32m✅ 任务执行完成！\033[0m"
+    exit 0
+else
+    echo -e "\n\033[31m❌ 镜像导入失败！\033[0m"
+    exit 1
+fi

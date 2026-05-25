@@ -7,9 +7,9 @@ TMP_DIR="/tmp/k8s_images"
 # ====================================================
 
 # 1. 校验参数
-if [ $# -ne 1 ]; then
-    echo "【错误】请传入1个参数：完整镜像名称"
-    echo "【用法】bash $0 <镜像名称:标签>"
+if [ $# -lt 1 ]; then
+    echo "【错误】请传入参数：完整镜像名称 是否导入k8s,默认导入"
+    echo "【用法】bash $0 <镜像名称:标签> y/n"
     echo "【示例】bash $0 nginx:latest"
     exit 1
 fi
@@ -23,17 +23,44 @@ TAR_FILE="${TMP_DIR}/$(echo ${IMAGE_NAME} | tr '/' '-').tar"
 # 3. 检查本地Docker镜像，存在则跳过拉取
 echo "========================================"
 echo "【检查】本地 Docker 镜像：${IMAGE_NAME}"
-if docker images -q "${IMAGE_NAME}" | grep -q .; then
+if docker image inspect "${IMAGE_NAME}" > /dev/null 2>&1; then
     echo "【跳过】本地已存在，无需拉取"
 else
     echo "【拉取】开始拉取镜像..."
-    docker pull "${IMAGE_NAME}"
-    if [ $? -ne 0 ]; then
-        echo "【错误】拉取失败！"
-        rm -f "${TAR_FILE}"
-        exit 1
+    # 构造私有仓库镜像名
+    PRIVATE_IMAGE="docker.runsoft.online:5000/docker.io/${IMAGE_NAME##*/}"
+
+    # 尝试从私有仓库拉取镜像
+    if docker pull "$PRIVATE_IMAGE" 2>/dev/null; then
+        echo "从私有仓库拉取成功: $PRIVATE_IMAGE"
+
+        # 使用 tag 去掉私有仓库地址，保留原镜像名
+        docker tag "$PRIVATE_IMAGE" "$IMAGE_NAME"
+        echo "已标记为本地镜像: $IMAGE_NAME"
+
+        # 删除带私有仓库前缀的镜像
+        docker rmi "$PRIVATE_IMAGE" || true
     fi
+
+    if ! docker image inspect "${IMAGE_NAME}" > /dev/null 2>&1; then
+        docker pull "${IMAGE_NAME}"
+        if [ $? -ne 0 ]; then
+		    echo "【错误】拉取失败！"
+		    rm -f "${TAR_FILE}"
+		    exit 1
+        fi
+
+        docker tag "${IMAGE_NAME}" "$PRIVATE_IMAGE" && \
+		docker push "$PRIVATE_IMAGE" && \
+        docker rmi "$PRIVATE_IMAGE"
+    fi
+
     echo "【成功】拉取完成"
+fi
+
+if [ "$2" = "n" ]; then
+    echo "【完成】跳过导出操作！"
+    exit 0
 fi
 
 # 4. 导出镜像

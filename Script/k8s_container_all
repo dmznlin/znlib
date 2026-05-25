@@ -1,0 +1,84 @@
+#!/bin/bash
+
+# 1. 校验参数
+if [ $# -ne 1 ]; then
+    echo "【错误】请传入参数 容器名称"
+    echo "【用法】bash $0 容器名称"
+    echo "【示例】bash $0 nginx"
+    exit 1
+fi
+
+# ====================== 批量导入配置 ======================
+# 1. 容器名称（所有镜像都导入到这个容器）
+CONTAINER_NAME="$1"
+
+# 2. 镜像列表（一行一个，支持带 tag，直接在这里增删）
+IMAGE_LIST=(
+    "rancher/shell:v0.7.0"
+    "rancher/kube-api-auth:v0.2.6"
+    "rancher/kubectl:v1.35.2"
+    # 继续添加更多镜像...
+)
+
+# 3. 单个镜像处理脚本的路径（和本脚本同目录就不用改）
+SINGLE_SCRIPT="./k8s_container"
+# ==========================================================
+
+# 检查单个脚本是否存在
+if [ ! -f "$SINGLE_SCRIPT" ]; then
+    echo -e "\033[31m错误：找不到单个镜像处理脚本 $SINGLE_SCRIPT\033[0m"
+    exit 1
+fi
+
+# 检查容器名称是否配置
+if [ -z "$CONTAINER_NAME" ]; then
+    echo -e "\033[31m错误：请先配置 CONTAINER_NAME 容器名称\033[0m"
+    exit 1
+fi
+
+echo -e "\033[32m==================================================\033[0m"
+echo -e "\033[32m          批量镜像导入任务开始\033[0m"
+echo -e "\033[32m==================================================\033[0m"
+echo "目标容器：$CONTAINER_NAME"
+echo "待导入镜像总数：${#IMAGE_LIST[@]}"
+echo -e "\033[32m==================================================\033[0m"
+
+# 循环导入每个镜像
+SUCCESS_COUNT=0
+FAIL_COUNT=0
+
+for IMAGE in "${IMAGE_LIST[@]}"; do
+    # 跳过空行
+    if [ -z "$IMAGE" ]; then
+        continue
+    fi
+
+    echo -e "\n\033[34m====== 正在处理镜像：$IMAGE ======\033[0m"
+
+    # 执行单个导入脚本
+    $SINGLE_SCRIPT "$IMAGE" "$CONTAINER_NAME"
+
+    # 获取执行结果
+    if [ $? -eq 0 ]; then
+        echo -e "\033[32m✅ 镜像 $IMAGE 处理成功\033[0m"
+        SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+    else
+        echo -e "\033[31m❌ 镜像 $IMAGE 处理失败\033[0m"
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+    fi
+done
+
+# 最终统计
+echo -e "\n\033[32m==================================================\033[0m"
+echo -e "\033[32m                    任务结束\033[0m"
+echo -e "\033[32m==================================================\033[0m"
+echo "成功：$SUCCESS_COUNT 个"
+echo "失败：$FAIL_COUNT 个"
+echo -e "\033[32m==================================================\033[0m"
+
+# 有失败则退出码为1
+if [ $FAIL_COUNT -gt 0 ]; then
+    exit 1
+else
+    exit 0
+fi
