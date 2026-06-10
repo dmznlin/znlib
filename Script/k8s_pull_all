@@ -9,11 +9,24 @@ if [ $# -ge 1 ]; then
     K8S_import="$1"
 fi
 
-# 2. 镜像列表（一行一个，支持带 tag，直接在这里增删）
+# 2. 镜像列表（一行一个，支持别名：别名=实际镜像名）
 IMAGE_LIST=(
-    "rancher/shell:v0.7.0"
-    "rancher/kube-api-auth:v0.2.6"
-    "rancher/kubectl:v1.35.2"
+	"easzlab.io.local:5000/rancher/local-path-provisioner:v0.0.36=docker.runsoft.online:5000/docker.io/local-path-provisioner:v0.0.36"
+	"easzlab.io.local:5000/easzlab/nfs-subdir-external-provisioner:v4.0.2=docker.runsoft.online:5000/easzlab/nfs-subdir-external-provisioner:v4.0.2"
+	"easzlab.io.local:5000/kubernetesui/dashboard-api:1.14.0=docker.runsoft.online:5000/easzlab/dashboard-api:1.14.0"
+	"easzlab.io.local:5000/kubernetesui/dashboard-auth:1.4.0=docker.runsoft.online:5000/easzlab/dashboard-auth:1.4.0"
+	"easzlab.io.local:5000/kubernetesui/dashboard-metrics-scraper:1.2.2=docker.runsoft.online:5000/easzlab/dashboard-metrics-scraper:1.2.2"
+	"easzlab.io.local:5000/kubernetesui/dashboard-web:1.7.0=docker.runsoft.online:5000/easzlab/dashboard-web:1.7.0"
+	"easzlab.io.local:5000/kubernetesui/kong:3.9=docker.runsoft.online:5000/docker.io/kong:3.9.1"
+	"easzlab.io.local:5000/easzlab/kube-state-metrics:v2.16.0=docker.runsoft.online:5000/easzlab/kube-state-metrics:v2.16.0"
+	"easzlab.io.local:5000/easzlab/kube-webhook-certgen:v1.6.0=docker.runsoft.online:5000/easzlab/kube-webhook-certgen:v1.6.0"
+	"easzlab.io.local:5000/prometheus/grafana:12.0.2"
+	"easzlab.io.local:5000/prometheus/k8s-sidecar:1.30.5"
+	"easzlab.io.local:5000/prometheus/prometheus-config-reloader:v0.83.0"
+	"easzlab.io.local:5000/prometheus/prometheus-operator:v0.83.0"
+	"easzlab.io.local:5000/prometheus/alertmanager:v0.28.1"
+	"easzlab.io.local:5000/prometheus/node-exporter:v1.9.1"
+	"easzlab.io.local:5000/prometheus/prometheus:v3.4.2"
     # 继续添加更多镜像...
 )
 
